@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { 
   Home, Briefcase, Calendar, CheckSquare, AlertCircle, 
   HardHat, Plus, Save, Clock, AlertTriangle, CheckCircle2,
-  User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, Copy, CheckCheck, Bell, Send
+  User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, Copy, CheckCheck, Bell, Send, CalendarPlus
 } from 'lucide-react';
 
 export default function App() {
@@ -52,6 +52,39 @@ export default function App() {
   const mostrarAviso = (mensagem: string, tipo: string = 'sucesso') => {
     const id = Date.now(); setToasts(prev => [...prev, { id, mensagem, tipo }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  };
+
+  // CORREÇÃO: Função blindada com URLSearchParams para a Microsoft não se confundir
+  const agendarNoOutlookWeb = (tarefa: any) => {
+    if (!tarefa.data_vencimento) {
+      mostrarAviso("Esta tarefa não tem prazo definido para ser agendada.", "erro");
+      return;
+    }
+
+    const emailResponsavel = listaUsuarios.find((u: any) => u.id === tarefa.id_responsavel)?.email || '';
+    const nomeObra = tarefa.obras?.nome || 'Geral';
+    const codigoObra = tarefa.obras?.codigo_externo || '';
+    
+    const dataVenc = tarefa.data_vencimento; // YYYY-MM-DD
+    
+    // Formato ISO estrito que o Outlook exige (Z = UTC)
+    // 11:00Z (UTC) equivale às 08:00 no Horário de Brasília
+    const dataInicial = `${dataVenc}T11:00:00Z`; 
+    const dataFinal = `${dataVenc}T12:00:00Z`;   
+
+    // URLSearchParams traduz e codifica todos os símbolos perfeitamente para a internet
+    const params = new URLSearchParams({
+      path: '/calendar/action/compose',
+      rru: 'addevent',
+      startdt: dataInicial,
+      enddt: dataFinal,
+      subject: `Kalter: ${tarefa.titulo}`,
+      body: `Obra: ${codigoObra} - ${nomeObra}\n\nGerado pelo Sistema Kalter Gestão de Obras`,
+      to: emailResponsavel
+    });
+
+    const url = `https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`;
+    window.open(url, '_blank');
   };
 
   useEffect(() => {
@@ -302,7 +335,18 @@ export default function App() {
           <div className="bg-white w-full max-w-sm h-full shadow-2xl flex flex-col"><div className="p-6 border-b border-gray-100 flex justify-between items-center"><h2 className="text-xl font-bold flex items-center gap-2"><Bell className="text-[#2A6377]"/> Tarefas</h2><button onClick={() => setPainelNotificacaoAberto(false)}><X size={24}/></button></div>
             <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
               {minhasNotificacoes.length === 0 ? (<div className="text-center mt-10 text-slate-500"><CheckCircle2 size={48} className="mx-auto mb-3 text-slate-300"/> Tudo em dia!</div>) : (
-                <div className="space-y-4">{minhasNotificacoes.map(notif => (<div key={notif.id} className="bg-white p-4 rounded-xl border border-l-4 border-l-[#2A6377]"><span className="text-[10px] font-bold text-[#2A6377] uppercase bg-[#2A6377]/10 px-2 py-1 rounded inline-block mb-2">{notif.obras?.codigo_externo || 'Obra'}</span><p className="font-semibold text-sm mb-3">{notif.titulo}</p><div className="flex justify-between items-center text-xs"><span className={`flex items-center gap-1 ${isAtrasada(notif.data_vencimento, 'pendente') ? 'text-red-600 font-bold' : 'text-slate-500'}`}><Clock size={12}/> {formatarDataSegura(notif.data_vencimento)}</span><button onClick={() => { setTelaAtiva('tarefas'); setPainelNotificacaoAberto(false); }} className="text-[#2A6377] font-medium">Ver</button></div></div>))}</div>
+                <div className="space-y-4">{minhasNotificacoes.map(notif => (
+                  <div key={notif.id} className="bg-white p-4 rounded-xl border border-l-4 border-l-[#2A6377]">
+                    <span className="text-[10px] font-bold text-[#2A6377] uppercase bg-[#2A6377]/10 px-2 py-1 rounded inline-block mb-2">{notif.obras?.codigo_externo || 'Obra'}</span>
+                    <p className="font-semibold text-sm mb-3">{notif.titulo}</p>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className={`flex items-center gap-1 ${isAtrasada(notif.data_vencimento, 'pendente') ? 'text-red-600 font-bold' : 'text-slate-500'}`}><Clock size={12}/> {formatarDataSegura(notif.data_vencimento)}</span>
+                      <div className="flex gap-3">
+                        <button onClick={() => agendarNoOutlookWeb(notif)} className="text-[#2A6377] hover:underline font-medium flex items-center gap-1"><CalendarPlus size={14}/> Enviar Convite</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}</div>
               )}
             </div>
           </div>
@@ -342,10 +386,7 @@ export default function App() {
         {telaAtiva === 'dashboard' && (
           <div className="animate-in fade-in">
             <h2 className="text-3xl font-bold mb-8">Visão Geral {isAdmin ? '(Todas)' : '(Minhas)'}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-white p-6 rounded-xl shadow-sm flex items-center gap-4"><div className="p-4 bg-[#2A6377]/10 text-[#2A6377] rounded-lg"><Briefcase size={24} /></div><div><p className="text-sm text-gray-500 font-medium">Obras Ativas</p><p className="text-3xl font-bold text-[#2A6377]">{resumoReal.obrasAtivas}</p></div></div>
-              <div className="bg-white p-6 rounded-xl shadow-sm flex items-center gap-4"><div className="p-4 bg-red-100 text-red-600 rounded-lg"><AlertCircle size={24} /></div><div><p className="text-sm text-gray-500 font-medium">Tarefas Atrasadas</p><p className="text-3xl font-bold text-red-600">{resumoReal.tarefasAtrasadas}</p></div></div>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8"><div className="bg-white p-6 rounded-xl shadow-sm flex items-center gap-4"><div className="p-4 bg-[#2A6377]/10 text-[#2A6377] rounded-lg"><Briefcase size={24} /></div><div><p className="text-sm text-gray-500 font-medium">Obras Ativas</p><p className="text-3xl font-bold text-[#2A6377]">{resumoReal.obrasAtivas}</p></div></div><div className="bg-white p-6 rounded-xl shadow-sm flex items-center gap-4"><div className="p-4 bg-red-100 text-red-600 rounded-lg"><AlertCircle size={24} /></div><div><p className="text-sm text-gray-500 font-medium">Tarefas Atrasadas</p><p className="text-3xl font-bold text-red-600">{resumoReal.tarefasAtrasadas}</p></div></div></div>
             <div className="bg-white p-6 rounded-xl shadow-sm">
               <h3 className="text-lg font-bold mb-6">Status Real das Tarefas por Obra</h3>
               <div className="h-80 w-full">
@@ -559,7 +600,10 @@ export default function App() {
                        <div className="flex justify-between items-start mb-2"><span className="text-xs font-semibold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1"><User size={10}/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
                        <p className="font-medium text-sm my-3">{tarefa?.titulo || 'Sem Título'}</p>
                        <div className="flex justify-between items-center border-t pt-3 mt-3">
-                         <div className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}><Clock size={12} /> {formatarDataSegura(tarefa?.data_vencimento)}</div>
+                         <div className="flex items-center gap-2">
+                           <div className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}><Clock size={12} /> {formatarDataSegura(tarefa?.data_vencimento)}</div>
+                           {tarefa?.data_vencimento && (<button onClick={() => agendarNoOutlookWeb(tarefa)} className="text-slate-400 hover:text-[#2A6377] transition" title="Enviar Convite no Outlook"><CalendarPlus size={14} /></button>)}
+                         </div>
                          <button onClick={() => atualizarStatusTarefa(tarefa?.id, 'em_andamento')} className="bg-[#2A6377]/10 text-[#2A6377] hover:bg-[#2A6377] hover:text-white px-2 py-1.5 rounded transition flex items-center gap-1"><Play size={14} /> <span className="text-xs font-bold">Iniciar</span></button>
                        </div>
                      </div>
@@ -576,7 +620,10 @@ export default function App() {
                        <div className="flex justify-between items-start mb-2"><span className="text-xs font-semibold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1"><User size={10}/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
                        <p className="font-medium text-sm my-3">{tarefa?.titulo || 'Sem Título'}</p>
                        <div className="flex justify-between items-center border-t pt-3 mt-3">
-                         <div className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}><Clock size={12} /> {formatarDataSegura(tarefa?.data_vencimento)}</div>
+                         <div className="flex items-center gap-2">
+                           <div className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}><Clock size={12} /> {formatarDataSegura(tarefa?.data_vencimento)}</div>
+                           {tarefa?.data_vencimento && (<button onClick={() => agendarNoOutlookWeb(tarefa)} className="text-slate-400 hover:text-[#2A6377] transition" title="Enviar Convite no Outlook"><CalendarPlus size={14} /></button>)}
+                         </div>
                          <button onClick={() => atualizarStatusTarefa(tarefa?.id, 'concluida')} className="bg-green-100 text-green-700 hover:bg-green-600 hover:text-white px-2 py-1.5 rounded transition flex items-center gap-1 shadow-sm"><Check size={16} strokeWidth={3} /> <span className="text-xs font-bold">Concluir</span></button>
                        </div>
                      </div>
