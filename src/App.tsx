@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { 
   Home, Briefcase, Calendar, CheckSquare, AlertCircle, 
   HardHat, Plus, Save, Clock, AlertTriangle, CheckCircle2,
-  User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, CheckCheck, Bell, Send, CalendarPlus, Menu, MessageSquare, BookOpen, ChevronRight, FolderOpen, FileText
+  User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, Copy, CheckCheck, Bell, Send, CalendarPlus, Menu, MessageSquare, BookOpen, ChevronRight, FolderOpen, FileText
 } from 'lucide-react';
 
 export default function App() {
@@ -112,8 +112,6 @@ export default function App() {
             th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 13px; }
             th { background: #f1f5f9; color: #334155; font-weight: bold; }
             .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; page-break-inside: avoid; }
-            .assinatura { margin-top: 80px; display: flex; justify-content: space-around; page-break-inside: avoid; }
-            .linha-assinatura { width: 40%; border-top: 1px solid #333; text-align: center; padding-top: 5px; font-weight: bold; font-size: 14px; }
           </style>
         </head>
         <body>
@@ -156,10 +154,6 @@ export default function App() {
     });
 
     html += `
-          <div class="assinatura">
-            <div class="linha-assinatura">Responsável Kalter</div>
-            <div class="linha-assinatura">De Acordo (Cliente)</div>
-          </div>
           <div class="footer">Gerado via Kalter Sistema de Gestão de Obras</div>
           <script>
             window.onload = function() { setTimeout(function(){ window.print(); }, 300); }
@@ -398,7 +392,6 @@ export default function App() {
     setCarregando(true);
     try {
       const obraSelecionada = obrasLista.find(o => o.id === reuniaoForm.id_obra);
-      const responsavel = listaUsuarios.find(u => u.id === obraSelecionada.id_responsavel);
       
       const { data: reuniaoSalva, error: errReuniao } = await supabase.from('reunioes').insert([{ id_obra: reuniaoForm.id_obra, data_reuniao: reuniaoForm.data_reuniao, clima_semana: reuniaoForm.clima_semana, resumo_geral: reuniaoForm.resumo_geral }]).select().single();
       if (errReuniao) throw errReuniao;
@@ -406,7 +399,7 @@ export default function App() {
       if (listaOcorrencias.length > 0) await supabase.from('ocorrencias').insert(listaOcorrencias.map(o => ({ id_reuniao: reuniaoSalva.id, tipo: o.tipo, descricao: o.descricao })));
       if (listaTarefas.length > 0) await supabase.from('tarefas').insert(listaTarefas.map(t => ({ id_obra: reuniaoForm.id_obra, id_reuniao_origem: reuniaoSalva.id, titulo: t.titulo, data_vencimento: t.data_vencimento || null, id_responsavel: t.id_responsavel, status: 'pendente' })));
       
-      const registroObraAta = { nome_obra: obraSelecionada ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}` : 'Obra Não Identificada', email_responsavel: responsavel?.email || '', clima: reuniaoForm.clima_semana, resumo: reuniaoForm.resumo_geral, ocorrencias: [...listaOcorrencias], tarefas: [...listaTarefas] };
+      const registroObraAta = { nome_obra: obraSelecionada ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}` : 'Obra Não Identificada', clima: reuniaoForm.clima_semana, resumo: reuniaoForm.resumo_geral, ocorrencias: [...listaOcorrencias], tarefas: [...listaTarefas] };
       setObrasNaAtaAtual((prev: any) => [...prev, registroObraAta]);
 
       mostrarAviso(`${obraSelecionada?.nome || 'Obra'} salva! Vá para a próxima.`);
@@ -427,11 +420,9 @@ export default function App() {
     }); setAtaGerada(textoAta); setModalAtaAberto(true);
   };
 
-  // NOVO: Função do Email restaurada para funcionar com os novos imports
   const enviarPorEmailAplicativo = () => {
     const emailsAdmins = listaUsuarios.filter(u => u.perfil === 'admin').map(u => u.email);
-    const emailsResponsaveis = obrasNaAtaAtual.map(ob => ob.email_responsavel).filter(Boolean);
-    const destinatarios = [...new Set([...emailsAdmins, ...emailsResponsaveis])].join(',');
+    const destinatarios = [...new Set([...emailsAdmins])].join(',');
     const assunto = encodeURIComponent(`Ata de Reunião de Obras - ${formatarDataSegura(new Date().toISOString())}`);
     window.location.href = `mailto:${destinatarios}?subject=${assunto}&body=${encodeURIComponent(ataGerada)}`;
     setModalAtaAberto(false); setObrasNaAtaAtual([]);
