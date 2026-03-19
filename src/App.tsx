@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { 
   Home, Briefcase, Calendar, CheckSquare, AlertCircle, 
   HardHat, Plus, Save, Clock, AlertTriangle, CheckCircle2,
-  User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, Copy, CheckCheck, Bell, Send, CalendarPlus, Menu, MessageSquare, BookOpen, ChevronRight, FolderOpen
+  User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, Copy, CheckCheck, Bell, Send, CalendarPlus, Menu, MessageSquare, BookOpen, ChevronRight, FolderOpen, FileText
 } from 'lucide-react';
 
 export default function App() {
@@ -52,7 +52,6 @@ export default function App() {
   
   const [tarefaSelecionada, setTarefaSelecionada] = useState<any>(null);
   
-  // NOVOS ESTADOS: Ecossistema da Obra e Comentários
   const [obraEcoSelecionada, setObraEcoSelecionada] = useState<any>(null);
   const [novoDiarioTexto, setNovoDiarioTexto] = useState<string>('');
   const [comentariosTarefaAtual, setComentariosTarefaAtual] = useState<any[]>([]);
@@ -70,6 +69,11 @@ export default function App() {
     } catch (e) { return ''; }
   };
 
+  const labelOcorrencia = (tipo: string) => {
+    const mapas: any = { avanco: 'Avanço', atraso: 'Atraso', financeiro: 'Financeiro' };
+    return mapas[tipo] || tipo;
+  };
+
   const mostrarAviso = (mensagem: string, tipo: string = 'sucesso') => {
     const id = Date.now(); setToasts(prev => [...prev, { id, mensagem, tipo }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
@@ -80,9 +84,112 @@ export default function App() {
     const emailResponsavel = listaUsuarios.find((u: any) => u.id === tarefa.id_responsavel)?.email || '';
     const nomeObra = tarefa.obras?.nome || 'Geral';
     const codigoObra = tarefa.obras?.codigo_externo || '';
-    const dataVenc = tarefa.data_vencimento; 
+    const dataVenc = tarefa.data_vencimento.split('T')[0]; 
     const params = new URLSearchParams({ path: '/calendar/action/compose', rru: 'addevent', startdt: `${dataVenc}T11:00:00Z`, enddt: `${dataVenc}T12:00:00Z`, subject: `Kalter: ${tarefa.titulo}`, body: `Obra: ${codigoObra} - ${nomeObra}\n\nGerado pelo Sistema Kalter`, to: emailResponsavel });
     window.open(`https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`, '_blank');
+  };
+
+  // NOVO: Motor Nativo de PDF (Zero Custos e Design Corporativo)
+  const gerarVisualPDF = (listaObrasParaPDF: any[], dataAta: string) => {
+    const janela = window.open('', '', 'width=900,height=900');
+    if (!janela) return mostrarAviso('Seu navegador bloqueou o PDF. Permita os pop-ups!', 'erro');
+
+    let html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Ata de Reunião Kalter - ${dataAta}</title>
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
+            .header { text-align: center; border-bottom: 2px solid #2A6377; padding-bottom: 20px; margin-bottom: 30px; }
+            .header h1 { color: #2A6377; margin: 0 0 10px 0; font-size: 24px; letter-spacing: 1px; }
+            .data { font-size: 14px; color: #64748b; font-weight: bold; text-transform: uppercase; }
+            .obra-section { margin-bottom: 40px; page-break-inside: avoid; }
+            .obra-title { background: #2A6377; color: white; padding: 12px 15px; font-size: 16px; font-weight: bold; margin-bottom: 15px; border-radius: 4px; }
+            .info-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+            .info-box p { margin: 5px 0; }
+            h4 { color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px; margin-bottom: 10px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; font-size: 13px; }
+            th { background: #f1f5f9; color: #334155; font-weight: bold; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; page-break-inside: avoid; }
+            .assinatura { margin-top: 80px; display: flex; justify-content: space-around; page-break-inside: avoid; }
+            .linha-assinatura { width: 40%; border-top: 1px solid #333; text-align: center; padding-top: 5px; font-weight: bold; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+             <h1>KALTER - REFRIGERAÇÃO INDUSTRIAL</h1>
+             <div class="data">Gestão de Obras • Ata de Reunião • ${dataAta}</div>
+          </div>
+    `;
+
+    listaObrasParaPDF.forEach(obra => {
+      html += `
+        <div class="obra-section">
+          <div class="obra-title">OBRA: ${obra.nome_obra.toUpperCase()}</div>
+          <div class="info-box">
+            <p><strong>Clima na Semana:</strong> ${obra.clima.charAt(0).toUpperCase() + obra.clima.slice(1)}</p>
+            <p><strong>Resumo da Reunião:</strong><br/>${obra.resumo ? obra.resumo.replace(/\n/g, '<br/>') : 'Nenhum resumo registrado.'}</p>
+          </div>
+      `;
+
+      if (obra.ocorrencias && obra.ocorrencias.length > 0) {
+        html += `
+          <h4>Ocorrências Registradas</h4>
+          <table>
+            <tr><th width="20%">Tipo</th><th>Descrição</th></tr>
+            ${obra.ocorrencias.map((o:any) => `<tr><td><strong>${labelOcorrencia(o.tipo).toUpperCase()}</strong></td><td>${o.descricao}</td></tr>`).join('')}
+          </table>
+        `;
+      }
+
+      if (obra.tarefas && obra.tarefas.length > 0) {
+        html += `
+          <h4>Tarefas e Prazos Definidos</h4>
+          <table>
+            <tr><th width="45%">Tarefa</th><th width="30%">Responsável</th><th width="25%">Prazo</th></tr>
+            ${obra.tarefas.map((t:any) => `<tr><td>${t.titulo}</td><td>${t.nome_responsavel || t.usuarios?.nome || 'Geral'}</td><td>${formatarDataSegura(t.data_vencimento)}</td></tr>`).join('')}
+          </table>
+        `;
+      }
+      html += `</div>`;
+    });
+
+    html += `
+          <div class="assinatura">
+            <div class="linha-assinatura">Responsável Kalter</div>
+            <div class="linha-assinatura">De Acordo (Cliente)</div>
+          </div>
+          <div class="footer">Gerado via Kalter Sistema de Gestão de Obras</div>
+          <script>
+            window.onload = function() { setTimeout(function(){ window.print(); }, 300); }
+          </script>
+        </body>
+      </html>
+    `;
+
+    janela.document.write(html);
+    janela.document.close();
+  };
+
+  // NOVO: Re-gerar Ata do Histórico
+  const baixarPDFHistorico = () => {
+    if (!detalhesHistorico) return;
+    const idObraAtual = reuniaoForm.id_obra || obraEcoSelecionada?.id;
+    const obraInfo = obrasLista.find(o => o.id === idObraAtual);
+    const nomeObra = obraInfo ? `${obraInfo.codigo_externo} - ${obraInfo.nome}` : 'Obra Não Identificada';
+    const clima = detalhesHistorico.resumos[0]?.clima || 'N/A';
+    const resumoText = detalhesHistorico.resumos.map((r:any) => r.texto).join('\n\n') || 'Sem resumo registrado.';
+
+    const fakeObraParaAta = {
+        nome_obra: nomeObra,
+        clima: clima,
+        resumo: resumoText,
+        ocorrencias: detalhesHistorico.ocorrencias || [],
+        tarefas: detalhesHistorico.tarefas || []
+    };
+    gerarVisualPDF([fakeObraParaAta], detalhesHistorico.dataFormatada);
   };
 
   useEffect(() => {
@@ -171,16 +278,12 @@ export default function App() {
     } buscarDadosDashboard();
   }, [telaAtiva, usuarioAtual]);
 
-  // NOVO: Busca do Histórico Unificado (Reuniões + Diário)
   const buscarHistoricoUnificado = async (idDaObra: any) => {
     if (!idDaObra) return;
     try {
-      // 1. Busca Reuniões
       const { data: reunioesData } = await supabase.from('reunioes').select(`id, data_reuniao, clima_semana, resumo_geral, ocorrencias(tipo, descricao), tarefas(titulo, data_vencimento, id_responsavel, usuarios(nome))`).eq('id_obra', idDaObra);
-      
-      // 2. Busca Diário de Obra (tenta buscar, se falhar é porque a tabela não existe ainda, ignoramos o erro silenciosamente)
       let diariosData: any[] = [];
-      try { const { data } = await supabase.from('diario_obra').select('id, data_registro, texto, created_at, usuarios(nome)').eq('id_obra', idDaObra); if (data) diariosData = data; } catch (e) { console.log('Tabela diario_obra ainda não criada.'); }
+      try { const { data } = await supabase.from('diario_obra').select('id, data_registro, texto, created_at, usuarios(nome)').eq('id_obra', idDaObra); if (data) diariosData = data; } catch (e) { console.log('Tabela diario_obra ausente.'); }
 
       const historicoAgrupado = (reunioesData || []).reduce((acc: any, curr: any) => {
         const dataFormatada = formatarDataSegura(curr.data_reuniao);
@@ -222,14 +325,13 @@ export default function App() {
   
   useEffect(() => { if (telaAtiva === 'tarefas' || telaAtiva === 'painel_obra') buscarTarefasKanban(); }, [telaAtiva, usuarioAtual]);
 
-  // NOVO: Busca e Salva Comentários
   useEffect(() => {
     const buscarComentarios = async () => {
       if (!tarefaSelecionada) return;
       try {
         const { data } = await supabase.from('comentarios_tarefa').select('id, texto, created_at, usuarios(nome)').eq('id_tarefa', tarefaSelecionada.id).order('created_at', { ascending: true });
         setComentariosTarefaAtual(data || []);
-      } catch (error) { console.log('Tabela de comentários ainda não criada.'); }
+      } catch (error) { console.log('Tabela de comentários ausente.'); }
     };
     buscarComentarios();
   }, [tarefaSelecionada]);
@@ -240,13 +342,11 @@ export default function App() {
       const { error } = await supabase.from('comentarios_tarefa').insert([{ id_tarefa: tarefaSelecionada.id, id_usuario: usuarioAtual.id, texto: novoComentarioTexto }]);
       if (error) throw error;
       setNovoComentarioTexto('');
-      // Atualiza a lista na hora
       const { data } = await supabase.from('comentarios_tarefa').select('id, texto, created_at, usuarios(nome)').eq('id_tarefa', tarefaSelecionada.id).order('created_at', { ascending: true });
       setComentariosTarefaAtual(data || []);
     } catch (error: any) { mostrarAviso(error.message, 'erro'); }
   };
 
-  // NOVO: Adiciona Diário de Obra
   const adicionarDiarioObra = async () => {
     if (!novoDiarioTexto.trim() || !obraEcoSelecionada) return;
     setCarregando(true);
@@ -283,6 +383,15 @@ export default function App() {
 
   const atualizarStatusTarefa = async (idTarefa: any, novoStatus: any) => { try { await supabase.from('tarefas').update({ status: novoStatus }).eq('id', idTarefa); buscarTarefasKanban(); mostrarAviso('Status atualizado!'); } catch (error: any) { mostrarAviso(error.message, 'erro'); } };
 
+  const atualizarDataTarefa = async (idTarefa: any, novaData: any) => {
+    try {
+      await supabase.from('tarefas').update({ data_vencimento: novaData || null }).eq('id', idTarefa);
+      setTarefaSelecionada({ ...tarefaSelecionada, data_vencimento: novaData });
+      buscarTarefasKanban(); 
+      mostrarAviso('Prazo atualizado!');
+    } catch (error: any) { mostrarAviso(error.message, 'erro'); }
+  };
+
   const adicionarOcorrencia = () => { if (!novaOcorrencia.descricao) return; setListaOcorrencias([...listaOcorrencias, novaOcorrencia]); setNovaOcorrencia({ tipo: 'avanco', descricao: '' }); };
   const adicionarTarefa = () => { if (!novaTarefa.titulo || !novaTarefa.id_responsavel) return mostrarAviso("Preencha título e responsável.", "erro"); const nomeResp = listaUsuarios.find(u => u.id === novaTarefa.id_responsavel)?.nome || ''; setListaTarefas([...listaTarefas, { ...novaTarefa, nome_responsavel: nomeResp }]); setNovaTarefa({ titulo: '', data_vencimento: '', id_responsavel: '' }); };
 
@@ -314,19 +423,10 @@ export default function App() {
     obrasNaAtaAtual.forEach(obra => {
       textoAta += `==========================================\nOBRA: ${obra.nome_obra.toUpperCase()}\n==========================================\nClima: ${obra.clima.charAt(0).toUpperCase() + obra.clima.slice(1)}\n`;
       if (obra.resumo) textoAta += `Resumo: ${obra.resumo}\n\n`;
-      if (obra.ocorrencias.length > 0) { textoAta += `[ Ocorrências ]\n`; obra.ocorrencias.forEach((oc: any) => textoAta += `- (${oc.tipo.toUpperCase()}): ${oc.descricao}\n`); textoAta += `\n`; }
+      if (obra.ocorrencias.length > 0) { textoAta += `[ Ocorrências ]\n`; obra.ocorrencias.forEach((oc: any) => textoAta += `- (${labelOcorrencia(oc.tipo).toUpperCase()}): ${oc.descricao}\n`); textoAta += `\n`; }
       if (obra.tarefas.length > 0) { textoAta += `[ Tarefas ]\n`; obra.tarefas.forEach((t: any) => textoAta += `- ${t.titulo} (Resp: ${t.nome_responsavel} | Prazo: ${formatarDataSegura(t.data_vencimento)})\n`); textoAta += `\n`; }
       textoAta += `\n`;
     }); setAtaGerada(textoAta); setModalAtaAberto(true);
-  };
-
-  const enviarPorEmailAplicativo = () => {
-    const emailsAdmins = listaUsuarios.filter(u => u.perfil === 'admin').map(u => u.email);
-    const emailsResponsaveis = obrasNaAtaAtual.map(ob => ob.email_responsavel).filter(Boolean);
-    const destinatarios = [...new Set([...emailsAdmins, ...emailsResponsaveis])].join(',');
-    const assunto = encodeURIComponent(`Ata de Reunião de Obras - ${formatarDataSegura(new Date().toISOString())}`);
-    window.location.href = `mailto:${destinatarios}?subject=${assunto}&body=${encodeURIComponent(ataGerada)}`;
-    setModalAtaAberto(false); setObrasNaAtaAtual([]);
   };
 
   const isAtrasada = (dataVencimento: any, status: any) => { if (!dataVencimento || status === 'concluida') return false; return dataVencimento < new Date().toISOString().split('T')[0]; };
@@ -388,7 +488,6 @@ export default function App() {
             </div>
             
             <div className="p-4 md:p-6 flex-1 overflow-y-auto flex flex-col md:flex-row gap-6">
-              {/* Esquerda: Detalhes */}
               <div className="w-full md:w-1/3 space-y-4">
                  <div className="flex items-center gap-3 text-sm text-slate-600 bg-slate-50 p-4 rounded-lg border">
                     <div className="p-2 bg-white rounded-full shadow-sm border"><User className="text-[#2A6377]" size={18}/></div>
@@ -398,13 +497,13 @@ export default function App() {
                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1"><Calendar size={12}/> Criada em</p>
                    <p className="font-bold text-slate-700">{formatarDataSegura(tarefaSelecionada.created_at)}</p>
                  </div>
+                 
                  <div className={`flex flex-col gap-1 text-sm p-4 rounded-lg border ${isAtrasada(tarefaSelecionada.data_vencimento, tarefaSelecionada.status) ? 'bg-red-50 border-red-100 text-red-600' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
-                   <p className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"><Clock size={12}/> Prazo</p>
-                   <p className="font-bold">{formatarDataSegura(tarefaSelecionada.data_vencimento)}</p>
+                   <p className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 mb-1"><Clock size={12}/> Prazo da Tarefa</p>
+                   <input type="date" value={tarefaSelecionada.data_vencimento ? tarefaSelecionada.data_vencimento.split('T')[0] : ''} onChange={(e) => atualizarDataTarefa(tarefaSelecionada.id, e.target.value)} className="font-bold bg-transparent outline-none cursor-pointer w-full text-slate-700 p-0 m-0"/>
                  </div>
               </div>
 
-              {/* Direita: Comentários */}
               <div className="w-full md:w-2/3 flex flex-col">
                 <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4"><MessageSquare size={18} className="text-[#2A6377]"/> Atualizações</h3>
                 <div className="flex-1 bg-slate-50 rounded-lg border p-4 space-y-4 mb-4 min-h-[200px]">
@@ -439,15 +538,65 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL DETALHES DO HISTÓRICO */}
       {modalHistoricoAberto && detalhesHistorico && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]">
-            <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center"><h2 className="text-xl font-bold flex items-center gap-2"><Clock className="text-[#2A6377]"/> Dia {detalhesHistorico.dataFormatada}</h2><button onClick={() => setModalHistoricoAberto(false)} className="text-slate-400 hover:text-red-500"><X size={24}/></button></div>
+            <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center">
+               <h2 className="text-xl font-bold flex items-center gap-2"><Clock className="text-[#2A6377]"/> Dia {detalhesHistorico.dataFormatada}</h2>
+               <div className="flex gap-2">
+                  {/* BOTAO PARA GERAR O PDF DO HISTÓRICO */}
+                  <button onClick={baixarPDFHistorico} className="text-[#2A6377] hover:text-white border border-[#2A6377] hover:bg-[#2A6377] bg-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition"><FileText size={16}/> Gerar PDF</button>
+                  <button onClick={() => setModalHistoricoAberto(false)} className="text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-lg"><X size={20}/></button>
+               </div>
+            </div>
             <div className="p-4 md:p-6 flex-1 overflow-y-auto space-y-6">
               {detalhesHistorico.diarios && detalhesHistorico.diarios.length > 0 && (<div><h4 className="font-bold mb-3 border-b border-[#2A6377] pb-1 text-[#2A6377] flex items-center gap-2"><BookOpen size={16}/> Diário de Obra</h4><div className="space-y-3">{detalhesHistorico.diarios.map((d: any, i: number) => (<div key={i} className="bg-blue-50 p-4 rounded-lg border border-blue-100"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">{d.usuarios?.nome}</span><span className="text-[10px] text-blue-500">{formatarDataHora(d.created_at)}</span></div><p className="text-sm whitespace-pre-wrap text-blue-900">{d.texto}</p></div>))}</div></div>)}
               {detalhesHistorico.resumos.length > 0 && (<div><h4 className="font-bold mb-3 border-b pb-1 flex items-center gap-2">Resumos de Reunião</h4><div className="space-y-3">{detalhesHistorico.resumos.map((res: any, i: number) => (<div key={i} className="bg-slate-50 p-4 rounded-lg border"><p className="text-xs font-bold text-slate-400 uppercase mb-2">Clima: {res.clima}</p><p className="text-sm whitespace-pre-wrap">{res.texto}</p></div>))}</div></div>)}
-              {detalhesHistorico.ocorrencias.length > 0 && (<div><h4 className="font-bold mb-3 border-b pb-1">Ocorrências</h4><div className="space-y-2">{detalhesHistorico.ocorrencias.map((oc: any, i: number) => (<div key={i} className="bg-slate-50 p-3 rounded border text-sm"><span className="font-bold text-[#2A6377] uppercase mr-2">{oc.tipo}:</span> {oc.descricao}</div>))}</div></div>)}
+              {detalhesHistorico.ocorrencias.length > 0 && (<div><h4 className="font-bold mb-3 border-b pb-1">Ocorrências</h4><div className="space-y-2">{detalhesHistorico.ocorrencias.map((oc: any, i: number) => (<div key={i} className="bg-slate-50 p-3 rounded border text-sm"><span className="font-bold text-[#2A6377] uppercase mr-2">{labelOcorrencia(oc.tipo)}:</span> {oc.descricao}</div>))}</div></div>)}
               {detalhesHistorico.tarefas.length > 0 && (<div><h4 className="font-bold mb-3 border-b pb-1">Tarefas Geradas</h4><div className="space-y-2">{detalhesHistorico.tarefas.map((tar: any, i: number) => (<div key={i} className="bg-slate-50 p-3 rounded border text-sm flex justify-between items-center"><span className="font-medium">{tar.titulo}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded"><User size={12} className="inline"/> {tar.usuarios?.nome || 'Geral'}</span><span className="bg-white px-2 py-1 rounded"><Clock size={12} className="inline"/> {formatarDataSegura(tar.data_vencimento)}</span></div></div>))}</div></div>)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {painelNotificacaoAberto && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[75] flex justify-end">
+          <div className="bg-white w-full max-w-sm h-full shadow-2xl flex flex-col"><div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center"><h2 className="text-xl font-bold flex items-center gap-2"><Bell className="text-[#2A6377]"/> Tarefas</h2><button onClick={() => setPainelNotificacaoAberto(false)}><X size={24}/></button></div>
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
+              {minhasNotificacoes.length === 0 ? (<div className="text-center mt-10 text-slate-500"><CheckCircle2 size={48} className="mx-auto mb-3 text-slate-300"/> Tudo em dia!</div>) : (
+                <div className="space-y-4">{minhasNotificacoes.map(notif => (
+                  <div key={notif.id} className="bg-white p-4 rounded-xl border border-l-4 border-l-[#2A6377]">
+                    <span className="text-[10px] font-bold text-[#2A6377] uppercase bg-[#2A6377]/10 px-2 py-1 rounded inline-block mb-2">{notif.obras?.codigo_externo || 'Obra'}</span>
+                    <p className="font-semibold text-sm mb-3">{notif.titulo}</p>
+                    <div className="flex flex-col gap-3 text-xs border-t pt-3 mt-2">
+                      <span className={`flex items-center gap-1 ${isAtrasada(notif.data_vencimento, 'pendente') ? 'text-red-600 font-bold' : 'text-slate-500'}`}><Clock size={12}/> Prazo: {formatarDataSegura(notif.data_vencimento)}</span>
+                      <div className="flex gap-3 justify-end mt-1">
+                        {notif.data_vencimento && <button onClick={() => agendarNoOutlookWeb(notif)} className="text-[#2A6377] bg-[#2A6377]/10 px-3 py-1.5 rounded hover:bg-[#2A6377]/20 font-medium flex items-center gap-1 transition"><CalendarPlus size={14}/> Agendar</button>}
+                        <button onClick={() => { setTelaAtiva('tarefas'); setPainelNotificacaoAberto(false); }} className="text-white bg-[#2A6377] px-3 py-1.5 rounded hover:bg-[#1e4857] font-medium transition">Acessar</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE ENVIO DE ATA ATUAL */}
+      {modalAtaAberto && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+            <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center"><h2 className="text-xl md:text-2xl font-bold flex items-center gap-2"><Mail className="text-[#2A6377]"/> Enviar Ata de Reunião</h2><button onClick={() => setModalAtaAberto(false)}><X size={24}/></button></div>
+            <div className="p-4 md:p-6 flex-1 overflow-y-auto bg-slate-50"><pre className="text-sm font-mono whitespace-pre-wrap">{ataGerada}</pre></div>
+            <div className="p-4 md:p-6 border-t border-gray-100 flex flex-wrap justify-end gap-3">
+              <button onClick={() => setModalAtaAberto(false)} className="px-6 py-2 rounded-lg font-medium bg-slate-100 flex-1 md:flex-none hover:bg-slate-200">Fechar</button>
+              
+              {/* NOVO: BOTÃO DE BAIXAR PDF */}
+              <button onClick={() => gerarVisualPDF(obrasNaAtaAtual, formatarDataSegura(new Date().toISOString()))} className="bg-white border border-[#2A6377] text-[#2A6377] hover:bg-[#2A6377] hover:text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none transition"><FileText size={18}/> Baixar PDF</button>
+              
+              <button onClick={enviarPorEmailAplicativo} className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none w-full md:w-auto hover:bg-[#1e4857] transition"><Send size={18}/> Enviar por E-mail</button>
             </div>
           </div>
         </div>
@@ -468,6 +617,7 @@ export default function App() {
             <button onClick={() => { setTelaAtiva('obras'); setMenuMobileAberto(false); }} className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === 'obras' || telaAtiva === 'painel_obra' ? 'bg-white/20 text-white font-bold' : 'text-white/80 hover:bg-white/10 hover:text-white'}`}><HardHat size={20} /> Obras</button>
             <button onClick={() => { setTelaAtiva('reunioes'); setMenuMobileAberto(false); }} className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === 'reunioes' ? 'bg-white/20 text-white font-bold' : 'text-white/80 hover:bg-white/10 hover:text-white'}`}><Calendar size={20} /> Reuniões</button>
             <button onClick={() => { setTelaAtiva('tarefas'); setMenuMobileAberto(false); }} className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === 'tarefas' ? 'bg-white/20 text-white font-bold' : 'text-white/80 hover:bg-white/10 hover:text-white'}`}><CheckSquare size={20} /> Tarefas</button>
+            <div className="pt-4 mt-2 border-t border-white/10"><button onClick={() => { setPainelNotificacaoAberto(true); setMenuMobileAberto(false); }} className="w-full flex items-center justify-between p-3 rounded-lg transition hover:bg-white/10 text-white/80 hover:text-white"><div className="flex items-center gap-3"><Bell size={20} className={minhasNotificacoes.length > 0 ? "text-amber-300" : ""} /> Tarefas</div>{minhasNotificacoes.length > 0 && <span className="bg-red-500 text-white text-xs font-bold px-2 rounded-full animate-pulse">{minhasNotificacoes.length}</span>}</button></div>
           </nav>
         </div>
         <div className="p-4 border-t border-white/10"><div className="flex items-center gap-3 mb-4 px-2"><div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold"><User size={16}/></div><div className="overflow-hidden"><p className="text-sm font-medium truncate">{usuarioAtual?.nome}</p><p className="text-xs text-white/60 uppercase">{usuarioAtual?.perfil}</p></div></div><button onClick={fazerLogout} className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition"><LogOut size={18} /> Sair</button></div>
@@ -487,7 +637,6 @@ export default function App() {
             </header>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 items-start">
-              {/* Esquerda: Diário e Histórico */}
               <div className="lg:col-span-1 space-y-6">
                 <div className="bg-white p-5 rounded-xl shadow-sm border border-blue-200">
                   <h3 className="font-bold text-blue-900 flex items-center gap-2 mb-3"><BookOpen size={18} /> Registrar no Diário</h3>
@@ -514,11 +663,9 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Direita: Kanban da Obra */}
               <div className="lg:col-span-2 flex flex-col bg-white p-5 rounded-xl shadow-sm border h-full min-h-[600px]">
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2"><CheckSquare size={20} className="text-[#2A6377]"/> Tarefas da Obra</h3>
                 <div className="flex gap-4 overflow-x-auto pb-2 items-start flex-1">
-                  {/* Fazer */}
                   <div className="flex-1 min-w-[260px] bg-gray-50 rounded-xl p-3 border">
                     <div className="flex justify-between items-center mb-3"><h4 className="font-bold text-sm">A Fazer</h4><span className="bg-gray-200 text-[10px] px-2 py-0.5 rounded-full font-bold">{tarefasFiltradas.filter(t => t?.status === 'pendente').length}</span></div>
                     <div className="space-y-2">
@@ -530,7 +677,6 @@ export default function App() {
                       ))}
                     </div>
                   </div>
-                  {/* Em Andamento */}
                   <div className="flex-1 min-w-[260px] bg-[#2A6377]/5 rounded-xl p-3 border border-[#2A6377]/20">
                     <div className="flex justify-between items-center mb-3"><h4 className="font-bold text-sm text-[#2A6377]">Em Andamento</h4><span className="bg-[#2A6377]/20 text-[#2A6377] text-[10px] px-2 py-0.5 rounded-full font-bold">{tarefasFiltradas.filter(t => t?.status === 'em_andamento').length}</span></div>
                     <div className="space-y-2">
@@ -542,7 +688,6 @@ export default function App() {
                       ))}
                     </div>
                   </div>
-                  {/* Concluídas */}
                   <div className="flex-1 min-w-[260px] bg-green-50/50 rounded-xl p-3 border border-green-100">
                     <div className="flex justify-between items-center mb-3"><h4 className="font-bold text-sm text-green-700">Concluídas</h4></div>
                     <div className="space-y-2">
@@ -559,15 +704,13 @@ export default function App() {
           </div>
         )}
 
-        {/* RESTO DAS TELAS (Dashboard, Equipe, Obras, Reuniões, Tarefas/Kanban) permanem iguais mas omitidas no snippet pra focar nas alterações... Mentira, eu nunca corto código! Estão todas aqui em baixo: */}
-        
         {telaAtiva === 'dashboard' && (
-          <div className="animate-in fade-in">
+          <div className="animate-in fade-in dash-main-wrapper">
             <h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Visão Geral {isAdmin ? '(Todas)' : '(Minhas)'}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8"><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm flex items-center gap-4"><div className="p-4 bg-[#2A6377]/10 text-[#2A6377] rounded-lg"><Briefcase size={24} /></div><div><p className="text-sm text-gray-500 font-medium">Obras Ativas</p><p className="text-2xl md:text-3xl font-bold text-[#2A6377]">{resumoReal.obrasAtivas}</p></div></div><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm flex items-center gap-4"><div className="p-4 bg-red-100 text-red-600 rounded-lg"><AlertCircle size={24} /></div><div><p className="text-sm text-gray-500 font-medium">Tarefas Atrasadas</p><p className="text-2xl md:text-3xl font-bold text-red-600">{resumoReal.tarefasAtrasadas}</p></div></div></div>
-            <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8 max-w-full"><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm flex items-center gap-4 max-w-full"><div className="p-4 bg-[#2A6377]/10 text-[#2A6377] rounded-lg"><Briefcase size={24} /></div><div><p className="text-sm text-gray-500 font-medium max-w-full truncate">Obras Ativas</p><p className="text-2xl md:text-3xl font-bold text-[#2A6377]">{resumoReal.obrasAtivas}</p></div></div><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm flex items-center gap-4 max-w-full"><div className="p-4 bg-red-100 text-red-600 rounded-lg"><AlertCircle size={24} /></div><div><p className="text-sm text-gray-500 font-medium max-w-full truncate">Tarefas Atrasadas</p><p className="text-2xl md:text-3xl font-bold text-red-600">{resumoReal.tarefasAtrasadas}</p></div></div></div>
+            <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border max-w-full">
               <h3 className="text-lg font-bold mb-6">Status Real das Tarefas por Obra</h3>
-              <div className="h-64 md:h-80 w-full">
+              <div className="h-64 md:h-80 w-full max-w-full overflow-hidden">
                 {dadosGrafico.length === 0 ? (<div className="h-full flex items-center justify-center text-gray-400">Nenhuma tarefa.</div>) : (<ResponsiveContainer width="100%" height="100%"><BarChart data={dadosGrafico}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" /><XAxis dataKey="nome" axisLine={false} tickLine={false} /><YAxis allowDecimals={false} axisLine={false} tickLine={false} /><Tooltip cursor={{fill: '#f3f4f6'}} /><Bar dataKey="tarefas_concluidas" name="Concluídas" fill="#22c55e" radius={[4, 4, 0, 0]} /><Bar dataKey="tarefas_pendentes" name="Pendentes" fill="#f87171" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>)}
               </div>
             </div>
@@ -575,17 +718,17 @@ export default function App() {
         )}
 
         {telaAtiva === 'equipe' && isAdmin && (
-          <div className="animate-in fade-in max-w-4xl"><h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Equipe</h2><div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8"><form onSubmit={salvarUsuario} className="bg-white p-4 md:p-6 rounded-xl shadow-sm border h-fit"><h3 className="text-lg font-bold mb-4 border-b pb-2">Novo Colaborador</h3><div className="space-y-4"><div><label className="block text-sm mb-1">Nome</label><input required type="text" value={novoUsuario.nome} onChange={(e) => setNovoUsuario({...novoUsuario, nome: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]" /></div><div><label className="block text-sm mb-1">E-mail</label><input required type="email" value={novoUsuario.email} onChange={(e) => setNovoUsuario({...novoUsuario, email: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]" /></div><div><label className="block text-sm mb-1">Perfil</label><select value={novoUsuario.perfil} onChange={(e) => setNovoUsuario({...novoUsuario, perfil: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"><option value="engenheiro">Engenheiro/Gestor</option><option value="admin">Administrador</option></select></div></div><div className="flex justify-end pt-6"><button type="submit" className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-medium w-full sm:w-auto"><Plus size={18} className="inline mr-2"/> Adicionar</button></div></form><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border"><h3 className="text-lg font-bold mb-4 border-b pb-2">Registados</h3><div className="space-y-3">{listaUsuarios.map(user => (<div key={user.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-lg"><div className={`p-2 rounded-full text-white ${user.perfil === 'admin' ? 'bg-[#2A6377]' : 'bg-[#2A6377]/60'}`}><User size={16} /></div><div className="overflow-hidden"><p className="font-bold text-sm truncate">{user.nome} <span className="text-[10px] ml-2 px-2 py-0.5 bg-gray-200 rounded uppercase inline-block">{user.perfil}</span></p><p className="text-xs text-slate-500 truncate">{user.email}</p></div></div>))}</div></div></div></div>
+          <div className="animate-in fade-in dash-main-wrapper max-w-4xl"><h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Equipe</h2><div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8"><form onSubmit={salvarUsuario} className="bg-white p-4 md:p-6 rounded-xl shadow-sm border h-fit max-w-full"><h3 className="text-lg font-bold mb-4 border-b pb-2">Novo Colaborador</h3><div className="space-y-4 max-w-full"><div><label className="block text-sm mb-1 max-w-full">Nome</label><input required type="text" value={novoUsuario.nome} onChange={(e) => setNovoUsuario({...novoUsuario, nome: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full" /></div><div><label className="block text-sm mb-1 max-w-full">E-mail</label><input required type="email" value={novoUsuario.email} onChange={(e) => setNovoUsuario({...novoUsuario, email: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full" /></div><div><label className="block text-sm mb-1 max-w-full">Perfil</label><select value={novoUsuario.perfil} onChange={(e) => setNovoUsuario({...novoUsuario, perfil: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full"><option value="engenheiro">Engenheiro/Gestor</option><option value="admin">Administrador</option></select></div></div><div className="flex justify-end pt-6"><button type="submit" className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-medium w-full sm:w-auto"><Plus size={18} className="inline mr-2"/> Adicionar</button></div></form><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border max-w-full"><h3 className="text-lg font-bold mb-4 border-b pb-2">Registados</h3><div className="space-y-3 max-w-full">{listaUsuarios.map(user => (<div key={user.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-lg max-w-full"><div className={`p-2 rounded-full text-white ${user.perfil === 'admin' ? 'bg-[#2A6377]' : 'bg-[#2A6377]/60'}`}><User size={16} /></div><div className="overflow-hidden"><p className="font-bold text-sm truncate max-w-full">{user.nome} <span className="text-[10px] ml-2 px-2 py-0.5 bg-gray-200 rounded uppercase inline-block">{user.perfil}</span></p><p className="text-xs text-slate-500 truncate max-w-full">{user.email}</p></div></div>))}</div></div></div></div>
         )}
 
         {telaAtiva === 'obras' && (
-          <div className="animate-in fade-in max-w-5xl"><h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Obras</h2>
-            {isAdmin && (<form onSubmit={salvarObra} className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 mb-6 md:mb-8"><div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="text-xl font-bold">{novaObra.id ? 'Editar Obra' : 'Nova Obra'}</h3>{novaObra.id && (<button type="button" onClick={cancelarEdicaoObra} className="text-gray-500 flex items-center gap-1 text-sm"><X size={16} /> Cancelar</button>)}</div>{erroObra && (<div className="mb-6 bg-red-50 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3"><AlertTriangle size={20} /> <span className="text-sm">{erroObra}</span></div>)}<div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6"><div><label className="block text-sm mb-1">Código *</label><input type="text" value={novaObra.codigo_externo} onChange={(e) => setNovaObra({...novaObra, codigo_externo: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377]" /></div><div><label className="block text-sm mb-1">Nome *</label><input type="text" value={novaObra.nome} onChange={(e) => setNovaObra({...novaObra, nome: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377]" /></div><div><label className="block text-sm mb-1">Início *</label><input type="date" value={novaObra.data_inicio} onChange={(e) => setNovaObra({...novaObra, data_inicio: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377]" /></div><div><label className="block text-sm mb-1">Fim *</label><input type="date" value={novaObra.data_previsao_fim} onChange={(e) => setNovaObra({...novaObra, data_previsao_fim: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377]" /></div><div className="md:col-span-2"><label className="block text-sm mb-1">Responsável *</label><select value={novaObra.id_responsavel} onChange={(e) => setNovaObra({...novaObra, id_responsavel: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377]"><option value="">Selecione...</option>{listaUsuarios.map(user => (<option key={user.id} value={user.id}>{user.nome}</option>))}</select></div></div><div className="flex justify-end pt-4 border-t"><button type="submit" disabled={carregando} className="bg-[#2A6377] text-white px-6 py-3 rounded-lg font-medium w-full sm:w-auto"><Save size={20} className="inline mr-2"/> Salvar</button></div></form>)}
-            <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200">
-              <h3 className="text-lg font-bold mb-4 border-b pb-2">{isAdmin ? 'Todas as Obras' : 'Minhas Obras'}</h3>
-              {obrasLista.length === 0 ? (<p className="text-gray-500 text-sm">Nenhuma obra.</p>) : (
-                <div className="overflow-x-auto pb-2">
-                  <table className="w-full text-left border-collapse min-w-[700px]"><thead><tr className="bg-slate-50 text-slate-600 text-sm border-y"><th className="p-3">Código</th><th className="p-3">Nome</th><th className="p-3">Responsável</th><th className="p-3">Fim</th><th className="p-3 text-right">Ação</th></tr></thead><tbody className="text-sm">{obrasLista.map(obra => (<tr key={obra.id} className="border-b hover:bg-slate-50"><td className="p-3 text-slate-700">{obra.codigo_externo}</td><td className="p-3 font-bold text-[#2A6377]">{obra.nome}</td><td className="p-3 text-slate-600">{obra.usuarios?.nome}</td><td className="p-3 text-slate-600">{formatarDataSegura(obra.data_previsao_fim)}</td><td className="p-3 text-right flex justify-end gap-2"><button onClick={() => abrirPainelObra(obra)} className="text-[#2A6377] bg-[#2A6377]/10 hover:bg-[#2A6377] hover:text-white px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1"><FolderOpen size={14}/> Painel</button>{isAdmin && (<button onClick={() => editarObra(obra)} className="text-slate-400 hover:text-[#2A6377] p-1.5 bg-slate-100 rounded transition"><Edit2 size={14} /></button>)}</td></tr>))}</tbody></table>
+          <div className="animate-in fade-in dash-main-wrapper max-w-5xl"><h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Obras</h2>
+            {isAdmin && (<form onSubmit={salvarObra} className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 mb-6 md:mb-8 max-w-full"><div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="text-xl font-bold">{novaObra.id ? 'Editar Obra' : 'Nova Obra'}</h3>{novaObra.id && (<button type="button" onClick={cancelarEdicaoObra} className="text-gray-500 flex items-center gap-1 text-sm"><X size={16} /> Cancelar</button>)}</div>{erroObra && (<div className="mb-6 bg-red-50 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3"><AlertTriangle size={20} /> <span className="text-sm">{erroObra}</span></div>)}<div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 max-w-full"><div><label className="block text-sm mb-1 max-w-full">Código *</label><input type="text" value={novaObra.codigo_externo} onChange={(e) => setNovaObra({...novaObra, codigo_externo: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full" /></div><div><label className="block text-sm mb-1 max-w-full">Nome *</label><input type="text" value={novaObra.nome} onChange={(e) => setNovaObra({...novaObra, nome: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full" /></div><div><label className="block text-sm mb-1 max-w-full">Início *</label><input type="date" value={novaObra.data_inicio} onChange={(e) => setNovaObra({...novaObra, data_inicio: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full" /></div><div><label className="block text-sm mb-1 max-w-full">Fim *</label><input type="date" value={novaObra.data_previsao_fim} onChange={(e) => setNovaObra({...novaObra, data_previsao_fim: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full" /></div><div className="md:col-span-2"><label className="block text-sm mb-1 max-w-full">Responsável *</label><select value={novaObra.id_responsavel} onChange={(e) => setNovaObra({...novaObra, id_responsavel: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full"><option value="">Selecione...</option>{listaUsuarios.map(user => (<option key={user.id} value={user.id}>{user.nome}</option>))}</select></div></div><div className="flex justify-end pt-4 border-t max-w-full"><button type="submit" disabled={carregando} className="bg-[#2A6377] text-white px-6 py-3 rounded-lg font-medium w-full sm:w-auto"><Save size={20} className="inline mr-2"/> Salvar</button></div></form>)}
+            <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 max-w-full">
+              <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full">{isAdmin ? 'Todas as Obras' : 'Minhas Obras'}</h3>
+              {obrasLista.length === 0 ? (<p className="text-gray-500 text-sm max-w-full truncate">Nenhuma obra.</p>) : (
+                <div className="overflow-x-auto pb-2 max-w-full">
+                  <table className="w-full text-left border-collapse min-w-[700px] max-w-full"><thead><tr className="bg-slate-50 text-slate-600 text-sm border-y max-w-full"><th className="p-3 max-w-full truncate">Código</th><th className="p-3 max-w-full truncate">Nome</th><th className="p-3 max-w-full truncate">Responsável</th><th className="p-3 max-w-full truncate">Prazo Entrega</th>{isAdmin && <th className="p-3 text-right">Ação</th>}</tr></thead><tbody className="text-sm max-w-full">{obrasLista.map(obra => (<tr key={obra.id} className="border-b hover:bg-slate-50 max-w-full"><td className="p-3 text-slate-700 max-w-full truncate">{obra.codigo_externo}</td><td className="p-3 font-bold text-[#2A6377] max-w-full truncate">{obra.nome}</td><td className="p-3 text-slate-600 max-w-full truncate">{obra.usuarios?.nome}</td><td className="p-3 text-slate-600 max-w-full truncate">{formatarDataSegura(obra.data_previsao_fim)}</td><td className="p-3 text-right flex justify-end gap-2"><button onClick={() => abrirPainelObra(obra)} className="text-[#2A6377] bg-[#2A6377]/10 hover:bg-[#2A6377] hover:text-white px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1"><FolderOpen size={14}/> Painel</button>{isAdmin && (<button onClick={() => editarObra(obra)} className="text-slate-400 hover:text-[#2A6377] p-1.5 bg-slate-100 rounded transition"><Edit2 size={14} /></button>)}</td></tr>))}</tbody></table>
                 </div>
               )}
             </div>
@@ -593,57 +736,63 @@ export default function App() {
         )}
 
         {telaAtiva === 'reunioes' && (
-           <div className="animate-in fade-in"><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border mb-6 border-l-4 border-l-[#2A6377]"><div className="flex flex-col md:flex-row md:items-end justify-between gap-4"><div className="flex-1"><label className="block text-sm font-medium mb-2">1. Selecione a Obra para a Reunião</label><select className="w-full max-w-lg border rounded-lg p-3 outline-none font-bold bg-gray-50" value={reuniaoForm.id_obra} onChange={(e) => setReuniaoForm({...reuniaoForm, id_obra: e.target.value})}><option value="">A carregar...</option>{obrasLista.map(obra => (<option key={obra.id} value={obra.id}>{obra.codigo_externo} - {obra.nome}</option>))}</select></div><div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto"><button onClick={salvarReuniaoObra} disabled={carregando || !reuniaoForm.id_obra} className="bg-[#2A6377]/10 text-[#2A6377] px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 disabled:opacity-50 flex-1 w-full sm:w-auto"><Loader2 className={`animate-spin shrink-0 ${carregando ? 'block' : 'hidden'}`} size={18} /><Save size={18} className={`shrink-0 ${carregando ? 'hidden' : 'block'}`} /> Salvar</button><button onClick={gerarAtaFinal} disabled={obrasNaAtaAtual.length === 0} className="bg-[#2A6377] text-white px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 shadow-md disabled:opacity-50 flex-1 w-full sm:w-auto"><Mail size={18} className="shrink-0" /> Gerar Ata</button></div></div>{obrasNaAtaAtual.length > 0 && (<div className="mt-6 pt-4 border-t flex flex-wrap items-center gap-2"><span className="text-sm font-medium text-gray-500 mr-2">Salvas hoje:</span>{obrasNaAtaAtual.map((ob, idx) => (<span key={idx} className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 truncate"><CheckCheck size={12}/> {ob.nome_obra}</span>))}</div>)}</div>
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start"><div className="lg:col-span-2 flex flex-col items-start gap-6 w-full">
-                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full"><h3 className="text-lg font-bold mb-4 border-b pb-2">2. Resumo</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4"><div><label className="block text-sm mb-1">Data</label><input type="date" className="w-full border rounded-lg p-2 outline-none" value={reuniaoForm.data_reuniao} onChange={(e) => setReuniaoForm({...reuniaoForm, data_reuniao: e.target.value})}/></div><div><label className="block text-sm mb-1">Clima</label><select className="w-full border rounded-lg p-2 outline-none" value={reuniaoForm.clima_semana} onChange={(e) => setReuniaoForm({...reuniaoForm, clima_semana: e.target.value})}><option value="chuvoso">Chuvoso</option><option value="ensolarado">Ensolarado</option><option value="misto">Misto</option></select></div></div><div className="w-full"><label className="block text-sm mb-1">Resumo Geral</label><textarea rows={3} className="w-full border rounded-lg p-3 outline-none" value={reuniaoForm.resumo_geral} onChange={(e) => setReuniaoForm({...reuniaoForm, resumo_geral: e.target.value})}></textarea></div></div>
-                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full"><h3 className="text-lg font-bold mb-4 border-b pb-2">3. Ocorrências</h3><div className="flex flex-col sm:flex-row gap-3 mb-4"><select className="border rounded-lg p-2 w-full outline-none sm:w-[130px] shrink-0" value={novaOcorrencia.tipo} onChange={e => setNovaOcorrencia({...novaOcorrencia, tipo: e.target.value})}><option value="avanco">Avanço</option><option value="atraso">Atraso</option><option value="financeiro">Financeiro</option></select><input type="text" className="border rounded-lg p-2 flex-1 outline-none w-full" placeholder="Ex: Chegou o material..." value={novaOcorrencia.descricao} onChange={e => setNovaOcorrencia({...novaOcorrencia, descricao: e.target.value})} onKeyPress={e => e.key === 'Enter' && adicionarOcorrencia()}/><button onClick={adicionarOcorrencia} className="bg-slate-100 px-6 py-2 rounded-lg font-medium w-full sm:w-auto">Add</button></div>{listaOcorrencias.map((oc, idx) => (<div key={idx} className="flex justify-between items-center bg-slate-50 p-2 mt-2 rounded border text-sm w-full"><div><span className="font-semibold text-[#2A6377] capitalize truncate">{oc.tipo}:</span> {oc.descricao}</div><button onClick={() => setListaOcorrencias(listaOcorrencias.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2 shrink-0"><Trash2 size={16} /></button></div>))}</div>
-                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full"><h3 className="text-lg font-bold mb-4 border-b pb-2">4. Gerar Tarefas</h3><div className="flex flex-col sm:flex-row gap-3 mb-3"><input type="text" className="border rounded-lg p-2 flex-1 outline-none w-full" placeholder="O que precisa ser feito..." value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} /><input type="date" className="border rounded-lg p-2 outline-none w-full sm:w-[150px] shrink-0" value={novaTarefa.data_vencimento} onChange={e => setNovaTarefa({...novaTarefa, data_vencimento: e.target.value})} /></div><div className="flex flex-col sm:flex-row gap-3 mb-4"><select className="border rounded-lg p-2 flex-1 outline-none w-full" value={novaTarefa.id_responsavel} onChange={e => setNovaTarefa({...novaTarefa, id_responsavel: e.target.value})}><option value="">Atribuir a...</option>{listaUsuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}</select><button onClick={adicionarTarefa} className="bg-slate-100 px-6 py-2 rounded-lg font-medium w-full sm:w-auto">Adicionar</button></div>{listaTarefas.map((tar, idx) => (<div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50 p-3 mt-2 rounded border text-sm gap-2 w-full"><div><span className="font-semibold block truncate">{tar.titulo}</span><div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1"><span className="flex items-center gap-1 truncate"><User size={12} className="shrink-0"/> {tar.nome_responsavel}</span>{tar.data_vencimento && <span className="flex items-center gap-1 truncate"><Clock size={12} className="shrink-0"/> Prazo: {formatarDataSegura(tar.data_vencimento)}</span>}</div></div><button onClick={() => setListaTarefas(listaTarefas.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 bg-white p-2 rounded shadow-sm border self-end sm:self-auto shrink-0"><Trash2 size={16} /></button></div>))}</div>
+           <div className="animate-in fade-in dash-main-wrapper max-w-full flex flex-col items-start gap-6"><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border mb-6 border-l-4 border-l-[#2A6377] w-full max-w-full"><div className="flex flex-col md:flex-row md:items-end justify-between gap-4 max-w-full"><div className="flex-1 max-w-full"><label className="block text-sm font-medium mb-2 max-w-full">1. Selecione a Obra para a Reunião</label><select className="w-full max-w-lg border rounded-lg p-3 outline-none font-bold bg-gray-50 max-w-full" value={reuniaoForm.id_obra} onChange={(e) => setReuniaoForm({...reuniaoForm, id_obra: e.target.value})}><option value="">A carregar...</option>{obrasLista.map(obra => (<option key={obra.id} value={obra.id}>{obra.codigo_externo} - {obra.nome}</option>))}</select></div><div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto max-w-full"><button onClick={salvarReuniaoObra} disabled={carregando || !reuniaoForm.id_obra} className="bg-[#2A6377]/10 text-[#2A6377] px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 disabled:opacity-50 flex-1 w-full sm:w-auto max-w-full"><Loader2 className={`animate-spin shrink-0 ${carregando ? 'block' : 'hidden'}`} size={18} /><Save size={18} className={`shrink-0 ${carregando ? 'hidden' : 'block'}`} /> Salvar</button><button onClick={gerarAtaFinal} disabled={obrasNaAtaAtual.length === 0} className="bg-[#2A6377] text-white px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 shadow-md disabled:opacity-50 flex-1 w-full sm:w-auto max-w-full"><Mail size={18} className="shrink-0" /> Gerar Ata</button></div></div>{obrasNaAtaAtual.length > 0 && (<div className="mt-6 pt-4 border-t flex flex-wrap items-center gap-2 max-w-full"><span className="text-sm font-medium text-gray-500 mr-2 max-w-full">Salvas hoje:</span>{obrasNaAtaAtual.map((ob, idx) => (<span key={idx} className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 max-w-full truncate"><CheckCheck size={12}/> {ob.nome_obra}</span>))}</div>)}</div>
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full max-w-full items-start"><div className="lg:col-span-2 max-w-full flex flex-col items-start gap-6 w-full">
+                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">2. Resumo</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 max-w-full w-full items-start"><div><label className="block text-sm mb-1 max-w-full">Data</label><input type="date" className="w-full border rounded-lg p-2 outline-none max-w-full" value={reuniaoForm.data_reuniao} onChange={(e) => setReuniaoForm({...reuniaoForm, data_reuniao: e.target.value})}/></div><div><label className="block text-sm mb-1 max-w-full">Clima</label><select className="w-full border rounded-lg p-2 outline-none max-w-full" value={reuniaoForm.clima_semana} onChange={(e) => setReuniaoForm({...reuniaoForm, clima_semana: e.target.value})}><option value="chuvoso">Chuvoso</option><option value="ensolarado">Ensolarado</option><option value="misto">Misto</option></select></div></div><div className="w-full max-w-full flex flex-col items-start"><label className="block text-sm mb-1 max-w-full">Resumo Geral</label><textarea rows={3} className="w-full border rounded-lg p-3 outline-none max-w-full" value={reuniaoForm.resumo_geral} onChange={(e) => setReuniaoForm({...reuniaoForm, resumo_geral: e.target.value})}></textarea></div></div>
+                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">3. Ocorrências</h3><div className="grid grid-cols-1 sm:grid-cols-[1fr,auto] gap-3 mb-4 w-full max-w-full items-start flex-wrap sm:flex-nowrap"><select className="border rounded-lg p-2 w-full outline-none max-w-full sm:w-[130px] shrink-0" value={novaOcorrencia.tipo} onChange={e => setNovaOcorrencia({...novaOcorrencia, tipo: e.target.value})}><option value="avanco">Avanço</option><option value="atraso">Atraso</option><option value="financeiro">Financeiro</option></select><input type="text" className="border rounded-lg p-2 flex-1 outline-none w-full max-w-full" placeholder="Ex: Chegou o material..." value={novaOcorrencia.descricao} onChange={e => setNovaOcorrencia({...novaOcorrencia, descricao: e.target.value})} onKeyPress={e => e.key === 'Enter' && adicionarOcorrencia()}/><button onClick={adicionarOcorrencia} className="bg-slate-100 px-6 py-2 rounded-lg font-medium w-full sm:w-auto max-w-full sm:ml-auto">Add</button></div>{listaOcorrencias.map((oc, idx) => (<div key={idx} className="flex justify-between items-center bg-slate-50 p-2 mt-2 rounded border text-sm max-w-full w-full"><div><span className="font-semibold text-[#2A6377] capitalize max-w-full truncate">{labelOcorrencia(oc.tipo)}:</span> {oc.descricao}</div><button onClick={() => setListaOcorrencias(listaOcorrencias.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2 shrink-0"><Trash2 size={16} className="shrink-0" /></button></div>))}</div>
+                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">4. Gerar Tarefas</h3><div className="grid grid-cols-1 sm:grid-cols-[1fr,auto] gap-3 mb-3 w-full max-w-full items-start flex-wrap sm:flex-nowrap"><input type="text" className="border rounded-lg p-2 flex-1 outline-none w-full max-w-full" placeholder="O que precisa ser feito..." value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} /><input type="date" className="border rounded-lg p-2 outline-none w-full sm:w-[150px] shrinking-0 max-w-full" value={novaTarefa.data_vencimento} onChange={e => setNovaTarefa({...novaTarefa, data_vencimento: e.target.value})} /></div><div className="grid grid-cols-1 sm:grid-cols-[1fr,auto] gap-3 mb-4 w-full max-w-full items-start flex-wrap sm:flex-nowrap"><select className="border rounded-lg p-2 flex-1 outline-none w-full max-w-full" value={novaTarefa.id_responsavel} onChange={e => setNovaTarefa({...novaTarefa, id_responsavel: e.target.value})}><option value="">Atribuir a...</option>{listaUsuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}</select><button onClick={adicionarTarefa} className="bg-slate-100 px-6 py-2 rounded-lg font-medium w-full sm:w-auto max-w-full sm:ml-auto">Adicionar</button></div>{listaTarefas.map((tar, idx) => (<div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50 p-3 mt-2 rounded border text-sm gap-2 max-w-full w-full"><div><span className="font-semibold block max-w-full truncate">{tar.titulo}</span><div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1 max-w-full"><span className="flex items-center gap-1 max-w-full truncate"><User size={12} className="shrink-0"/> {tar.nome_responsavel}</span>{tar.data_vencimento && <span className="flex items-center gap-1 max-w-full truncate"><Clock size={12} className="shrink-0"/> Prazo: {formatarDataSegura(tar.data_vencimento)}</span>}</div></div><button onClick={() => setListaTarefas(listaTarefas.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 bg-white p-2 rounded shadow-sm border self-end sm:self-auto shrink-0 ml-auto sm:ml-0"><Trash2 size={16} className="shrink-0" /></button></div>))}</div>
                </div>
-               <div className="bg-slate-50 p-4 md:p-6 rounded-xl border w-full"><h3 className="text-lg font-bold mb-6 flex items-center gap-2 truncate"><Clock size={20} className="text-slate-500 shrink-0" /> Histórico Unificado</h3>{historicoObra.length === 0 ? (<p className="text-sm text-gray-500 truncate">Sem histórico.</p>) : (<div className="space-y-4 w-full">{historicoObra.map((hist, idx) => (<button key={idx} onClick={() => { setDetalhesHistorico(hist); setModalHistoricoAberto(true); }} className="w-full text-left bg-white p-4 rounded-lg border shadow-sm hover:border-[#2A6377] transition group w-full"><div className="flex justify-between items-center mb-2"><span className="font-bold text-[#2A6377] flex items-center gap-2 truncate"><Calendar size={16} className="shrink-0"/> {hist.dataFormatada}</span><span className="text-xs bg-slate-100 px-2 py-1 rounded-full group-hover:bg-[#2A6377]/10 group-hover:text-[#2A6377] shrink-0">Detalhes</span></div><div className="flex flex-wrap gap-2 text-[10px] sm:text-xs text-slate-500 mt-2 border-t pt-2"><span>{hist.resumos.length} Resumo(s)</span><span>•</span><span>{hist.ocorrencias.length} Ocorrência(s)</span><span>•</span><span>{hist.tarefas.length} Tarefa(s)</span></div></button>))}</div>)}</div>
+               <div className="bg-slate-50 p-4 md:p-6 rounded-xl border max-w-full w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-6 flex items-center gap-2 max-w-full truncate"><Clock size={20} className="text-slate-500 shrink-0" /> Histórico Unificado</h3>{historicoObra.length === 0 ? (<p className="text-sm text-gray-500 max-w-full truncate">Sem histórico.</p>) : (<div className="space-y-4 max-w-full w-full">{historicoObra.map((hist, idx) => (<button key={idx} onClick={() => { setDetalhesHistorico(hist); setModalHistoricoAberto(true); }} className="w-full text-left bg-white p-4 rounded-lg border shadow-sm hover:border-[#2A6377] transition group max-w-full w-full"><div className="flex justify-between items-center mb-2 max-w-full"><span className="font-bold text-[#2A6377] flex items-center gap-2 max-w-full truncate"><Calendar size={16} className="shrink-0"/> {hist.dataFormatada}</span><span className="text-xs bg-slate-100 px-2 py-1 rounded-full group-hover:bg-[#2A6377]/10 group-hover:text-[#2A6377] shrink-0">Detalhes</span></div><div className="flex flex-wrap gap-2 text-[10px] sm:text-xs text-slate-500 mt-2 border-t pt-2 max-w-full"><span>{hist.resumos.length} Resumo(s)</span><span>•</span><span>{hist.ocorrencias.length} Ocorrência(s)</span><span>•</span><span>{hist.tarefas.length} Tarefa(s)</span></div></button>))}</div>)}</div>
              </div>
            </div>
         )}
 
         {telaAtiva === 'tarefas' && (
-           <div className="animate-in fade-in h-full flex flex-col">
-             <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4"><div><h2 className="text-2xl md:text-3xl font-bold text-gray-800 truncate">Kanban Geral</h2></div><div className="flex items-center gap-2 shrink-0"><label className="text-sm font-medium text-gray-500 shrink-0">Filtrar:</label><select className="border rounded-lg p-2 outline-none font-medium bg-white shadow-sm w-full sm:w-auto" value={filtroObraKanban} onChange={(e) => setFiltroObraKanban(e.target.value)}><option value="todas">Todas as Obras</option>{obrasLista.map(o => <option key={o.id} value={o.id}>{o.codigo_externo} - {o.nome}</option>)}</select></div></header>
-             <div className="flex gap-6 overflow-x-auto pb-4 items-start flex-1">
-               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-gray-100/50 rounded-xl p-4 border flex flex-col">
-                 <div className="flex justify-between items-center mb-4"><h3 className="font-bold truncate">A Fazer</h3><span className="bg-gray-200 text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'pendente').length}</span></div>
-                 <div className="space-y-3">
+           <div className="animate-in fade-in h-full flex flex-col dash-main-wrapper max-w-full">
+             <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 max-w-full"><div className="max-w-full"><h2 className="text-2xl md:text-3xl font-bold text-gray-800 max-w-full truncate">Kanban Geral</h2></div><div className="flex items-center gap-2 shrink-0"><label className="text-sm font-medium text-gray-500 shrink-0">Filtrar:</label><select className="border rounded-lg p-2 outline-none font-medium bg-white shadow-sm w-full sm:w-auto shrinking-0 max-w-full" value={filtroObraKanban} onChange={(e) => setFiltroObraKanban(e.target.value)}><option value="todas">Todas as Obras</option>{obrasLista.map(o => <option key={o.id} value={o.id}>{o.codigo_externo} - {o.nome}</option>)}</select></div></header>
+             <div className="flex gap-6 overflow-x-auto pb-4 items-start flex-1 max-w-full">
+               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-gray-100/50 rounded-xl p-4 border flex flex-col max-w-full">
+                 <div className="flex justify-between items-center mb-4 max-w-full"><h3 className="font-bold max-w-full truncate">A Fazer</h3><span className="bg-gray-200 text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'pendente').length}</span></div>
+                 <div className="space-y-3 max-w-full">
                    {tarefasFiltradas.filter(t => t?.status === 'pendente').map(tarefa => (
-                     <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className="bg-white p-4 rounded-lg shadow-sm border hover:border-[#2A6377] transition group cursor-pointer">
-                       <div className="flex justify-between items-start mb-2"><span className="text-xs font-semibold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
-                       <p className="font-medium text-sm my-3 truncate">{tarefa?.titulo || 'Sem Título'}</p>
-                       <div className="flex justify-between items-center border-t pt-3 mt-3 flex-wrap gap-2">
-                         <div className="flex items-center gap-2 shrink-0 flex-wrap"><div className={`text-xs px-2 py-1 rounded flex items-center gap-1 shrink-0 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}><Clock size={12} className="shrink-0" /> Prazo: {formatarDataSegura(tarefa?.data_vencimento)}</div></div>
+                     <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className="bg-white p-4 rounded-lg shadow-sm border hover:border-[#2A6377] transition group max-w-full cursor-pointer relative">
+                       <div className="flex justify-between items-start mb-2 max-w-full"><span className="text-xs font-semibold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded max-w-full truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
+                       <p className="font-medium text-sm my-3 max-w-full truncate">{tarefa?.titulo || 'Sem Título'}</p>
+                       <div className="flex justify-between items-center border-t pt-3 mt-3 max-w-full flex-wrap gap-2">
+                         <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                           <div className={`text-xs px-2 py-1 rounded flex items-center gap-1 shrink-0 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}><Clock size={12} className="shrink-0" /> Prazo: {formatarDataSegura(tarefa?.data_vencimento)}</div>
+                         </div>
                        </div>
                      </div>
                    ))}
                  </div>
                </div>
-               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-[#2A6377]/5 rounded-xl p-4 border border-[#2A6377]/20 flex flex-col">
-                 <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700 truncate">Em Andamento</h3><span className="bg-[#2A6377]/20 text-[#2A6377] text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'em_andamento').length}</span></div>
-                 <div className="space-y-3">
+
+               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-[#2A6377]/5 rounded-xl p-4 border border-[#2A6377]/20 flex flex-col max-w-full">
+                 <div className="flex justify-between items-center mb-4 max-w-full"><h3 className="font-bold text-gray-700 max-w-full truncate">Em Andamento</h3><span className="bg-[#2A6377]/20 text-[#2A6377] text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'em_andamento').length}</span></div>
+                 <div className="space-y-3 max-w-full">
                    {tarefasFiltradas.filter(t => t?.status === 'em_andamento').map(tarefa => (
-                     <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className={`bg-white p-4 rounded-lg shadow-sm border cursor-pointer ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'border-red-300' : 'border-gray-200 hover:border-[#2A6377]'}`}>
-                       <div className="flex justify-between items-start mb-2"><span className="text-xs font-semibold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
-                       <p className="font-medium text-sm my-3 truncate">{tarefa?.titulo || 'Sem Título'}</p>
-                       <div className="flex justify-between items-center border-t pt-3 mt-3 flex-wrap gap-2">
-                         <div className="flex items-center gap-2 shrink-0 flex-wrap"><div className={`text-xs px-2 py-1 rounded flex items-center gap-1 shrink-0 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}><Clock size={12} className="shrink-0" /> Prazo: {formatarDataSegura(tarefa?.data_vencimento)}</div></div>
+                     <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className={`bg-white p-4 rounded-lg shadow-sm border max-w-full cursor-pointer relative ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'border-red-300' : 'border-gray-200 hover:border-[#2A6377]'}`}>
+                       <div className="flex justify-between items-start mb-2 max-w-full"><span className="text-xs font-semibold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded max-w-full truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
+                       <p className="font-medium text-sm my-3 max-w-full truncate">{tarefa?.titulo || 'Sem Título'}</p>
+                       <div className="flex justify-between items-center border-t pt-3 mt-3 max-w-full flex-wrap gap-2">
+                         <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                           <div className={`text-xs px-2 py-1 rounded flex items-center gap-1 shrink-0 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}><Clock size={12} className="shrink-0" /> Prazo: {formatarDataSegura(tarefa?.data_vencimento)}</div>
+                         </div>
                        </div>
                      </div>
                    ))}
                  </div>
                </div>
-               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-green-50/30 rounded-xl p-4 border border-green-100 flex flex-col">
-                 <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700 truncate">Concluídas</h3><span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'concluida').length}</span></div>
-                 <div className="space-y-3">
+
+               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-green-50/30 rounded-xl p-4 border border-green-100 flex flex-col max-w-full">
+                 <div className="flex justify-between items-center mb-4 max-w-full"><h3 className="font-bold text-gray-700 max-w-full truncate">Concluídas</h3><span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'concluida').length}</span></div>
+                 <div className="space-y-3 max-w-full">
                    {tarefasFiltradas.filter(t => t?.status === 'concluida').map(tarefa => (
-                      <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 opacity-70 cursor-pointer hover:border-[#2A6377]">
-                       <div className="flex justify-between items-start mb-2"><span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
-                       <p className="font-medium text-gray-500 line-through text-sm my-3 truncate">{tarefa?.titulo || 'Sem Título'}</p>
-                       <div className="flex justify-end border-t pt-3 mt-3"><div className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded bg-green-50 text-green-600 shrink-0 ml-auto"><CheckCircle2 size={12} className="shrink-0" /> Feito</div></div>
+                      <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 opacity-70 max-w-full cursor-pointer relative hover:border-[#2A6377]">
+                       <div className="flex justify-between items-start mb-2 max-w-full"><span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded max-w-full truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
+                       <p className="font-medium text-gray-500 line-through text-sm my-3 max-w-full truncate">{tarefa?.titulo || 'Sem Título'}</p>
+                       <div className="flex justify-end border-t pt-3 mt-3 max-w-full"><div className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded bg-green-50 text-green-600 shrink-0 ml-auto"><CheckCircle2 size={12} className="shrink-0" /> Feito</div></div>
                      </div>
                    ))}
                  </div>
