@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { 
   Home, Briefcase, Calendar, CheckSquare, AlertCircle, 
   HardHat, Plus, Save, Clock, AlertTriangle, CheckCircle2,
-  User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, Copy, CheckCheck, Bell, Send, CalendarPlus, Menu, MessageSquare, BookOpen, ChevronRight, FolderOpen, FileText
+  User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, CheckCheck, Bell, Send, CalendarPlus, Menu, MessageSquare, BookOpen, ChevronRight, FolderOpen, FileText
 } from 'lucide-react';
 
 export default function App() {
@@ -89,7 +89,6 @@ export default function App() {
     window.open(`https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`, '_blank');
   };
 
-  // NOVO: Motor Nativo de PDF (Zero Custos e Design Corporativo)
   const gerarVisualPDF = (listaObrasParaPDF: any[], dataAta: string) => {
     const janela = window.open('', '', 'width=900,height=900');
     if (!janela) return mostrarAviso('Seu navegador bloqueou o PDF. Permita os pop-ups!', 'erro');
@@ -173,7 +172,6 @@ export default function App() {
     janela.document.close();
   };
 
-  // NOVO: Re-gerar Ata do Histórico
   const baixarPDFHistorico = () => {
     if (!detalhesHistorico) return;
     const idObraAtual = reuniaoForm.id_obra || obraEcoSelecionada?.id;
@@ -429,6 +427,16 @@ export default function App() {
     }); setAtaGerada(textoAta); setModalAtaAberto(true);
   };
 
+  // NOVO: Função do Email restaurada para funcionar com os novos imports
+  const enviarPorEmailAplicativo = () => {
+    const emailsAdmins = listaUsuarios.filter(u => u.perfil === 'admin').map(u => u.email);
+    const emailsResponsaveis = obrasNaAtaAtual.map(ob => ob.email_responsavel).filter(Boolean);
+    const destinatarios = [...new Set([...emailsAdmins, ...emailsResponsaveis])].join(',');
+    const assunto = encodeURIComponent(`Ata de Reunião de Obras - ${formatarDataSegura(new Date().toISOString())}`);
+    window.location.href = `mailto:${destinatarios}?subject=${assunto}&body=${encodeURIComponent(ataGerada)}`;
+    setModalAtaAberto(false); setObrasNaAtaAtual([]);
+  };
+
   const isAtrasada = (dataVencimento: any, status: any) => { if (!dataVencimento || status === 'concluida') return false; return dataVencimento < new Date().toISOString().split('T')[0]; };
   const tarefasFiltradas = filtroObraKanban === 'todas' ? (tarefasKanban || []) : (tarefasKanban || []).filter(t => t?.id_obra === filtroObraKanban);
 
@@ -545,7 +553,6 @@ export default function App() {
             <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center">
                <h2 className="text-xl font-bold flex items-center gap-2"><Clock className="text-[#2A6377]"/> Dia {detalhesHistorico.dataFormatada}</h2>
                <div className="flex gap-2">
-                  {/* BOTAO PARA GERAR O PDF DO HISTÓRICO */}
                   <button onClick={baixarPDFHistorico} className="text-[#2A6377] hover:text-white border border-[#2A6377] hover:bg-[#2A6377] bg-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition"><FileText size={16}/> Gerar PDF</button>
                   <button onClick={() => setModalHistoricoAberto(false)} className="text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-lg"><X size={20}/></button>
                </div>
@@ -592,10 +599,7 @@ export default function App() {
             <div className="p-4 md:p-6 flex-1 overflow-y-auto bg-slate-50"><pre className="text-sm font-mono whitespace-pre-wrap">{ataGerada}</pre></div>
             <div className="p-4 md:p-6 border-t border-gray-100 flex flex-wrap justify-end gap-3">
               <button onClick={() => setModalAtaAberto(false)} className="px-6 py-2 rounded-lg font-medium bg-slate-100 flex-1 md:flex-none hover:bg-slate-200">Fechar</button>
-              
-              {/* NOVO: BOTÃO DE BAIXAR PDF */}
               <button onClick={() => gerarVisualPDF(obrasNaAtaAtual, formatarDataSegura(new Date().toISOString()))} className="bg-white border border-[#2A6377] text-[#2A6377] hover:bg-[#2A6377] hover:text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none transition"><FileText size={18}/> Baixar PDF</button>
-              
               <button onClick={enviarPorEmailAplicativo} className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none w-full md:w-auto hover:bg-[#1e4857] transition"><Send size={18}/> Enviar por E-mail</button>
             </div>
           </div>
