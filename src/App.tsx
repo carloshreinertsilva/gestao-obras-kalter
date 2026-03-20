@@ -37,8 +37,6 @@ export default function App() {
   const [listaTarefas, setListaTarefas] = useState<any[]>([]);
   
   const [historicoObra, setHistoricoObra] = useState<any[]>([]);
-  const [modalHistoricoAberto, setModalHistoricoAberto] = useState<boolean>(false);
-  const [detalhesHistorico, setDetalhesHistorico] = useState<any>(null);
   
   const [ataGerada, setAtaGerada] = useState<string>(''); 
   const [modalAtaAberto, setModalAtaAberto] = useState<boolean>(false);
@@ -164,24 +162,6 @@ export default function App() {
 
     janela.document.write(html);
     janela.document.close();
-  };
-
-  const baixarPDFHistorico = () => {
-    if (!detalhesHistorico) return;
-    const idObraAtual = reuniaoForm.id_obra || obraEcoSelecionada?.id;
-    const obraInfo = obrasLista.find(o => o.id === idObraAtual);
-    const nomeObra = obraInfo ? `${obraInfo.codigo_externo} - ${obraInfo.nome}` : 'Obra Não Identificada';
-    const clima = detalhesHistorico.resumos[0]?.clima || 'N/A';
-    const resumoText = detalhesHistorico.resumos.map((r:any) => r.texto).join('\n\n') || 'Sem resumo registrado.';
-
-    const fakeObraParaAta = {
-        nome_obra: nomeObra,
-        clima: clima,
-        resumo: resumoText,
-        ocorrencias: detalhesHistorico.ocorrencias || [],
-        tarefas: detalhesHistorico.tarefas || []
-    };
-    gerarVisualPDF([fakeObraParaAta], detalhesHistorico.dataFormatada);
   };
 
   const baixarPDFDiaEspecifico = (historicoDia: any) => {
@@ -425,7 +405,6 @@ export default function App() {
     } catch (error: any) { mostrarAviso('Erro: ' + error.message, 'erro'); } finally { setCarregando(false); }
   }
 
-  // NOVO: Função Mágica de Edição (Illusion of Edit)
   const editarRegistroAta = async (registro: any, index: number) => {
     if (!window.confirm(`Deseja reabrir ${registro.nome_obra} para edição? O registo atual será temporariamente removido até que você salve novamente.`)) return;
     setCarregando(true);
@@ -465,6 +444,14 @@ export default function App() {
       if (obra.tarefas.length > 0) { textoAta += `[ Tarefas ]\n`; obra.tarefas.forEach((t: any) => textoAta += `- ${t.titulo} (Resp: ${t.nome_responsavel} | Prazo: ${formatarDataSegura(t.data_vencimento)})\n`); textoAta += `\n`; }
       textoAta += `\n`;
     }); setAtaGerada(textoAta); setModalAtaAberto(true);
+  };
+
+  const enviarPorEmailAplicativo = () => {
+    const emailsAdmins = listaUsuarios.filter(u => u.perfil === 'admin').map(u => u.email);
+    const destinatarios = [...new Set([...emailsAdmins])].join(',');
+    const assunto = encodeURIComponent(`Ata de Reunião de Obras - ${formatarDataSegura(new Date().toISOString())}`);
+    window.location.href = `mailto:${destinatarios}?subject=${assunto}&body=${encodeURIComponent(ataGerada)}`;
+    setModalAtaAberto(false); setObrasNaAtaAtual([]);
   };
 
   const isAtrasada = (dataVencimento: any, status: any) => { if (!dataVencimento || status === 'concluida') return false; return dataVencimento < new Date().toISOString().split('T')[0]; };
@@ -522,7 +509,7 @@ export default function App() {
                 <span className="text-xs font-bold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded uppercase mb-2 inline-block">{tarefaSelecionada.obras?.codigo_externo} - {tarefaSelecionada.obras?.nome}</span>
                 <h2 className="text-xl md:text-2xl font-bold text-gray-800 break-words leading-tight">{tarefaSelecionada.titulo}</h2>
               </div>
-              <button onClick={() => setTarefaSelecionada(null)} className="text-slate-400 hover:text-red-500 shrink-0 bg-slate-100 p-2 rounded-full"><X size={20}/></button>
+              <button onClick={() => setTarefaSelecionada(null)} className="text-slate-400 hover:text-red-50 shrink-0 bg-slate-100 p-2 rounded-full"><X size={20}/></button>
             </div>
             
             <div className="p-4 md:p-6 flex-1 overflow-y-auto flex flex-col md:flex-row gap-6">
@@ -576,27 +563,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL DETALHES DO HISTÓRICO */}
-      {modalHistoricoAberto && detalhesHistorico && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]">
-            <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center">
-               <h2 className="text-xl font-bold flex items-center gap-2"><Clock className="text-[#2A6377]"/> Dia {detalhesHistorico.dataFormatada}</h2>
-               <div className="flex gap-2">
-                  <button onClick={baixarPDFHistorico} className="text-[#2A6377] hover:text-white border border-[#2A6377] hover:bg-[#2A6377] bg-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition"><FileText size={16}/> Gerar PDF</button>
-                  <button onClick={() => setModalHistoricoAberto(false)} className="text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-lg"><X size={20}/></button>
-               </div>
-            </div>
-            <div className="p-4 md:p-6 flex-1 overflow-y-auto space-y-6">
-              {detalhesHistorico.diarios && detalhesHistorico.diarios.length > 0 && (<div><h4 className="font-bold mb-3 border-b border-[#2A6377] pb-1 text-[#2A6377] flex items-center gap-2"><BookOpen size={16}/> Diário de Obra</h4><div className="space-y-3">{detalhesHistorico.diarios.map((d: any, i: number) => (<div key={i} className="bg-blue-50 p-4 rounded-lg border border-blue-100"><div className="flex justify-between items-center mb-2"><span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">{d.usuarios?.nome}</span><span className="text-[10px] text-blue-500">{formatarDataHora(d.created_at)}</span></div><p className="text-sm whitespace-pre-wrap text-blue-900">{d.texto}</p></div>))}</div></div>)}
-              {detalhesHistorico.resumos.length > 0 && (<div><h4 className="font-bold mb-3 border-b pb-1 flex items-center gap-2">Resumos de Reunião</h4><div className="space-y-3">{detalhesHistorico.resumos.map((res: any, i: number) => (<div key={i} className="bg-slate-50 p-4 rounded-lg border"><p className="text-xs font-bold text-slate-400 uppercase mb-2">Clima: {res.clima}</p><p className="text-sm whitespace-pre-wrap">{res.texto}</p></div>))}</div></div>)}
-              {detalhesHistorico.ocorrencias.length > 0 && (<div><h4 className="font-bold mb-3 border-b pb-1">Ocorrências</h4><div className="space-y-2">{detalhesHistorico.ocorrencias.map((oc: any, i: number) => (<div key={i} className="bg-slate-50 p-3 rounded border text-sm"><span className="font-bold text-[#2A6377] uppercase mr-2">{labelOcorrencia(oc.tipo)}:</span> {oc.descricao}</div>))}</div></div>)}
-              {detalhesHistorico.tarefas.length > 0 && (<div><h4 className="font-bold mb-3 border-b pb-1">Tarefas Geradas</h4><div className="space-y-2">{detalhesHistorico.tarefas.map((tar: any, i: number) => (<div key={i} className="bg-slate-50 p-3 rounded border text-sm flex justify-between items-center"><span className="font-medium">{tar.titulo}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded"><User size={12} className="inline"/> {tar.usuarios?.nome || 'Geral'}</span><span className="bg-white px-2 py-1 rounded"><Clock size={12} className="inline"/> {formatarDataSegura(tar.data_vencimento)}</span></div></div>))}</div></div>)}
-            </div>
-          </div>
-        </div>
-      )}
-
       {painelNotificacaoAberto && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[75] flex justify-end">
           <div className="bg-white w-full max-w-sm h-full shadow-2xl flex flex-col"><div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center"><h2 className="text-xl font-bold flex items-center gap-2"><Bell className="text-[#2A6377]"/> Tarefas</h2><button onClick={() => setPainelNotificacaoAberto(false)}><X size={24}/></button></div>
@@ -630,6 +596,7 @@ export default function App() {
             <div className="p-4 md:p-6 border-t border-gray-100 flex flex-wrap justify-end gap-3">
               <button onClick={() => setModalAtaAberto(false)} className="px-6 py-2 rounded-lg font-medium bg-slate-100 flex-1 md:flex-none hover:bg-slate-200">Fechar</button>
               <button onClick={() => gerarVisualPDF(obrasNaAtaAtual, formatarDataSegura(new Date().toISOString()))} className="bg-white border border-[#2A6377] text-[#2A6377] hover:bg-[#2A6377] hover:text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none transition"><FileText size={18}/> Baixar PDF</button>
+              <button onClick={enviarPorEmailAplicativo} className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none w-full md:w-auto hover:bg-[#1e4857] transition"><Send size={18}/> Enviar por E-mail</button>
             </div>
           </div>
         </div>
@@ -849,7 +816,7 @@ export default function App() {
                <div className="lg:col-span-2 max-w-full flex flex-col items-start gap-6 w-full">
                  <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">2. Resumo</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 max-w-full w-full items-start"><div><label className="block text-sm mb-1 max-w-full">Data</label><input type="date" className="w-full border rounded-lg p-2 outline-none max-w-full" value={reuniaoForm.data_reuniao} onChange={(e) => setReuniaoForm({...reuniaoForm, data_reuniao: e.target.value})}/></div><div><label className="block text-sm mb-1 max-w-full">Clima</label><select className="w-full border rounded-lg p-2 outline-none max-w-full" value={reuniaoForm.clima_semana} onChange={(e) => setReuniaoForm({...reuniaoForm, clima_semana: e.target.value})}><option value="chuvoso">Chuvoso</option><option value="ensolarado">Ensolarado</option><option value="misto">Misto</option></select></div></div><div className="w-full max-w-full flex flex-col items-start"><label className="block text-sm mb-1 max-w-full">Resumo Geral</label><textarea rows={3} className="w-full border rounded-lg p-3 outline-none max-w-full" value={reuniaoForm.resumo_geral} onChange={(e) => setReuniaoForm({...reuniaoForm, resumo_geral: e.target.value})}></textarea></div></div>
                  <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">3. Ocorrências</h3><div className="flex flex-col sm:flex-row gap-3 mb-4 w-full items-start"><select className="border rounded-lg p-2 w-full outline-none max-w-full sm:w-[150px] shrink-0" value={novaOcorrencia.tipo} onChange={e => setNovaOcorrencia({...novaOcorrencia, tipo: e.target.value})}><option value="avanco">Avanço</option><option value="atraso">Atraso</option><option value="financeiro">Financeiro</option></select><input type="text" className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full" placeholder="Ex: Chegou o material..." value={novaOcorrencia.descricao} onChange={e => setNovaOcorrencia({...novaOcorrencia, descricao: e.target.value})} onKeyPress={e => e.key === 'Enter' && adicionarOcorrencia()}/><button onClick={adicionarOcorrencia} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold w-full sm:w-auto max-w-full sm:ml-auto">Add</button></div>{listaOcorrencias.map((oc, idx) => (<div key={idx} className="flex justify-between items-center bg-slate-50 p-2 mt-2 rounded border text-sm max-w-full w-full"><div><span className="font-semibold text-[#2A6377] capitalize max-w-full truncate">{labelOcorrencia(oc.tipo)}:</span> {oc.descricao}</div><button onClick={() => setListaOcorrencias(listaOcorrencias.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2 shrink-0"><Trash2 size={16} className="shrink-0" /></button></div>))}</div>
-                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">4. Gerar Tarefas</h3><div className="flex flex-col sm:flex-row gap-3 mb-3 w-full items-start"><input type="text" className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full" placeholder="O que precisa ser feito..." value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} /><input type="date" className="border rounded-lg p-2 outline-none w-full sm:w-[160px] shrinking-0 max-w-full" value={novaTarefa.data_vencimento} onChange={e => setNovaTarefa({...novaTarefa, data_vencimento: e.target.value})} /></div><div className="flex flex-col sm:flex-row gap-3 mb-4 w-full items-start"><select className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full" value={novaTarefa.id_responsavel} onChange={e => setNovaTarefa({...novaTarefa, id_responsavel: e.target.value})}><option value="">Atribuir a...</option>{listaUsuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}</select><button onClick={adicionarTarefa} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold w-full sm:w-auto max-w-full sm:ml-auto">Adicionar</button></div>{listaTarefas.map((tar, idx) => (<div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50 p-3 mt-2 rounded border text-sm gap-2 max-w-full w-full"><div><span className="font-semibold block max-w-full truncate">{tar.titulo}</span><div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1 max-w-full"><span className="flex items-center gap-1 max-w-full truncate"><User size={12} className="shrink-0"/> {tar.nome_responsavel}</span>{tar.data_vencimento && <span className="flex items-center gap-1 max-w-full truncate"><Clock size={12} className="shrink-0"/> Prazo: {formatarDataSegura(tar.data_vencimento)}</span>}</div></div><button onClick={() => setListaTarefas(listaTarefas.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 bg-white p-2 rounded shadow-sm border self-end sm:self-auto shrink-0 ml-auto sm:ml-0"><Trash2 size={16} className="shrink-0" /></button></div>))}</div>
+                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">4. Gerar Tarefas</h3><div className="flex flex-col sm:flex-row gap-3 mb-3 w-full max-w-full items-start"><input type="text" className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full" placeholder="O que precisa ser feito..." value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} /><input type="date" className="border rounded-lg p-2 outline-none w-full sm:w-[160px] shrinking-0 max-w-full" value={novaTarefa.data_vencimento} onChange={e => setNovaTarefa({...novaTarefa, data_vencimento: e.target.value})} /></div><div className="flex flex-col sm:flex-row gap-3 mb-4 w-full max-w-full items-start"><select className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full" value={novaTarefa.id_responsavel} onChange={e => setNovaTarefa({...novaTarefa, id_responsavel: e.target.value})}><option value="">Atribuir a...</option>{listaUsuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}</select><button onClick={adicionarTarefa} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold w-full sm:w-auto max-w-full sm:ml-auto">Adicionar</button></div>{listaTarefas.map((tar, idx) => (<div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50 p-3 mt-2 rounded border text-sm gap-2 max-w-full w-full"><div><span className="font-semibold block max-w-full truncate">{tar.titulo}</span><div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1 max-w-full"><span className="flex items-center gap-1 max-w-full truncate"><User size={12} className="shrink-0"/> {tar.nome_responsavel}</span>{tar.data_vencimento && <span className="flex items-center gap-1 max-w-full truncate"><Clock size={12} className="shrink-0"/> Prazo: {formatarDataSegura(tar.data_vencimento)}</span>}</div></div><button onClick={() => setListaTarefas(listaTarefas.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 bg-white p-2 rounded shadow-sm border self-end sm:self-auto shrink-0 ml-auto sm:ml-0"><Trash2 size={16} className="shrink-0" /></button></div>))}</div>
                </div>
                
                <div className="bg-slate-50 p-4 md:p-6 rounded-xl border w-full flex flex-col items-start h-[600px]">
