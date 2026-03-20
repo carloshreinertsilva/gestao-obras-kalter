@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { 
   Home, Briefcase, Calendar, CheckSquare, AlertCircle, 
   HardHat, Plus, Save, Clock, AlertTriangle, CheckCircle2,
-  User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, Copy, CheckCheck, Bell, Send, CalendarPlus, Menu, MessageSquare, BookOpen, ChevronRight, FolderOpen, FileText
+  User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, CheckCheck, Bell, Send, CalendarPlus, Menu, MessageSquare, BookOpen, ChevronRight, FolderOpen, FileText
 } from 'lucide-react';
 
 export default function App() {
@@ -182,6 +182,23 @@ export default function App() {
         tarefas: detalhesHistorico.tarefas || []
     };
     gerarVisualPDF([fakeObraParaAta], detalhesHistorico.dataFormatada);
+  };
+
+  const baixarPDFDiaEspecifico = (historicoDia: any) => {
+    const idObraAtual = reuniaoForm.id_obra || obraEcoSelecionada?.id;
+    const obraInfo = obrasLista.find(o => o.id === idObraAtual);
+    const nomeObra = obraInfo ? `${obraInfo.codigo_externo} - ${obraInfo.nome}` : 'Obra Não Identificada';
+    const clima = historicoDia.resumos[0]?.clima || 'N/A';
+    const resumoText = historicoDia.resumos.map((r:any) => r.texto).join('\n\n') || 'Sem resumo registrado.';
+
+    const fakeObraParaAta = {
+        nome_obra: nomeObra,
+        clima: clima,
+        resumo: resumoText,
+        ocorrencias: historicoDia.ocorrencias || [],
+        tarefas: historicoDia.tarefas || []
+    };
+    gerarVisualPDF([fakeObraParaAta], historicoDia.dataFormatada);
   };
 
   useEffect(() => {
@@ -399,7 +416,7 @@ export default function App() {
       if (listaOcorrencias.length > 0) await supabase.from('ocorrencias').insert(listaOcorrencias.map(o => ({ id_reuniao: reuniaoSalva.id, tipo: o.tipo, descricao: o.descricao })));
       if (listaTarefas.length > 0) await supabase.from('tarefas').insert(listaTarefas.map(t => ({ id_obra: reuniaoForm.id_obra, id_reuniao_origem: reuniaoSalva.id, titulo: t.titulo, data_vencimento: t.data_vencimento || null, id_responsavel: t.id_responsavel, status: 'pendente' })));
       
-      const registroObraAta = { nome_obra: obraSelecionada ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}` : 'Obra Não Identificada', clima: reuniaoForm.clima_semana, resumo: reuniaoForm.resumo_geral, ocorrencias: [...listaOcorrencias], tarefas: [...listaTarefas] };
+      const registroObraAta = { id_reuniao: reuniaoSalva.id, id_obra: obraSelecionada.id, data_reuniao: reuniaoForm.data_reuniao, nome_obra: obraSelecionada ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}` : 'Obra Não Identificada', clima: reuniaoForm.clima_semana, resumo: reuniaoForm.resumo_geral, ocorrencias: [...listaOcorrencias], tarefas: [...listaTarefas] };
       setObrasNaAtaAtual((prev: any) => [...prev, registroObraAta]);
 
       mostrarAviso(`${obraSelecionada?.nome || 'Obra'} salva! Vá para a próxima.`);
@@ -407,6 +424,36 @@ export default function App() {
       setTelaAtiva('dashboard'); setTimeout(() => setTelaAtiva('reunioes'), 50);
     } catch (error: any) { mostrarAviso('Erro: ' + error.message, 'erro'); } finally { setCarregando(false); }
   }
+
+  // NOVO: Função Mágica de Edição (Illusion of Edit)
+  const editarRegistroAta = async (registro: any, index: number) => {
+    if (!window.confirm(`Deseja reabrir ${registro.nome_obra} para edição? O registo atual será temporariamente removido até que você salve novamente.`)) return;
+    setCarregando(true);
+    try {
+      await supabase.from('ocorrencias').delete().eq('id_reuniao', registro.id_reuniao);
+      await supabase.from('tarefas').delete().eq('id_reuniao_origem', registro.id_reuniao);
+      await supabase.from('reunioes').delete().eq('id', registro.id_reuniao);
+      
+      setObrasNaAtaAtual((prev: any) => prev.filter((_: any, i: number) => i !== index));
+      
+      setReuniaoForm({
+        id_obra: registro.id_obra,
+        data_reuniao: registro.data_reuniao || new Date().toISOString().split('T')[0],
+        clima_semana: registro.clima,
+        resumo_geral: registro.resumo
+      });
+      
+      setListaOcorrencias(registro.ocorrencias || []);
+      setListaTarefas(registro.tarefas || []);
+      
+      mostrarAviso('Rascunho recuperado! Faça as alterações e salve novamente.');
+    } catch (error: any) {
+      mostrarAviso('Erro ao recuperar rascunho: ' + error.message, 'erro');
+    } finally {
+      setCarregando(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const gerarAtaFinal = () => {
     if (obrasNaAtaAtual.length === 0) return mostrarAviso("Você não salvou obras.", "erro");
@@ -418,14 +465,6 @@ export default function App() {
       if (obra.tarefas.length > 0) { textoAta += `[ Tarefas ]\n`; obra.tarefas.forEach((t: any) => textoAta += `- ${t.titulo} (Resp: ${t.nome_responsavel} | Prazo: ${formatarDataSegura(t.data_vencimento)})\n`); textoAta += `\n`; }
       textoAta += `\n`;
     }); setAtaGerada(textoAta); setModalAtaAberto(true);
-  };
-
-  const enviarPorEmailAplicativo = () => {
-    const emailsAdmins = listaUsuarios.filter(u => u.perfil === 'admin').map(u => u.email);
-    const destinatarios = [...new Set([...emailsAdmins])].join(',');
-    const assunto = encodeURIComponent(`Ata de Reunião de Obras - ${formatarDataSegura(new Date().toISOString())}`);
-    window.location.href = `mailto:${destinatarios}?subject=${assunto}&body=${encodeURIComponent(ataGerada)}`;
-    setModalAtaAberto(false); setObrasNaAtaAtual([]);
   };
 
   const isAtrasada = (dataVencimento: any, status: any) => { if (!dataVencimento || status === 'concluida') return false; return dataVencimento < new Date().toISOString().split('T')[0]; };
@@ -591,7 +630,6 @@ export default function App() {
             <div className="p-4 md:p-6 border-t border-gray-100 flex flex-wrap justify-end gap-3">
               <button onClick={() => setModalAtaAberto(false)} className="px-6 py-2 rounded-lg font-medium bg-slate-100 flex-1 md:flex-none hover:bg-slate-200">Fechar</button>
               <button onClick={() => gerarVisualPDF(obrasNaAtaAtual, formatarDataSegura(new Date().toISOString()))} className="bg-white border border-[#2A6377] text-[#2A6377] hover:bg-[#2A6377] hover:text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none transition"><FileText size={18}/> Baixar PDF</button>
-              <button onClick={enviarPorEmailAplicativo} className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none w-full md:w-auto hover:bg-[#1e4857] transition"><Send size={18}/> Enviar por E-mail</button>
             </div>
           </div>
         </div>
@@ -639,19 +677,59 @@ export default function App() {
                   <button onClick={adicionarDiarioObra} disabled={!novoDiarioTexto.trim() || carregando} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-bold transition flex justify-center items-center gap-2 disabled:opacity-50">{carregando ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Salvar no Diário</button>
                 </div>
 
-                <div className="bg-slate-50 p-5 rounded-xl border">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Clock size={20} className="text-slate-500" /> Linha do Tempo</h3>
-                  {historicoObra.length === 0 ? (<p className="text-sm text-gray-500">Nenhum registro encontrado.</p>) : (
-                    <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                <div className="bg-slate-50 p-4 md:p-6 rounded-xl border w-full flex flex-col items-start h-[600px]">
+                  <h3 className="text-lg font-bold mb-6 flex items-center gap-2 truncate"><Clock size={20} className="text-slate-500 shrink-0" /> Histórico da Obra</h3>
+                  {historicoObra.length === 0 ? (
+                    <p className="text-sm text-gray-500 truncate">Sem histórico.</p>
+                  ) : (
+                    <div className="space-y-0 max-h-full overflow-y-auto w-full pr-2">
                       {historicoObra.map((hist, idx) => (
-                        <button key={idx} onClick={() => { setDetalhesHistorico(hist); setModalHistoricoAberto(true); }} className="w-full text-left bg-white p-4 rounded-lg border shadow-sm hover:border-[#2A6377] transition group">
-                          <div className="flex justify-between items-center mb-2"><span className="font-bold text-[#2A6377] flex items-center gap-2"><Calendar size={16} /> {hist.dataFormatada}</span></div>
-                          <div className="flex flex-wrap gap-2 text-[10px] text-slate-500 mt-2 border-t pt-2">
-                            {hist.diarios?.length > 0 && <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded">{hist.diarios.length} Diário(s)</span>}
-                            {hist.resumos?.length > 0 && <span className="bg-slate-100 px-2 py-0.5 rounded">{hist.resumos.length} Resumo(s)</span>}
-                            {hist.ocorrencias?.length > 0 && <span className="bg-slate-100 px-2 py-0.5 rounded">{hist.ocorrencias.length} Ocorrência(s)</span>}
+                        <div key={idx} className="relative pl-6 border-l-2 border-slate-200 last:border-transparent pb-6 ml-3">
+                          <div className="absolute w-3 h-3 bg-[#2A6377] rounded-full -left-[7px] top-1.5 shadow-[0_0_0_3px_white]"></div>
+                          
+                          <div className="flex justify-between items-start mb-4">
+                            <h4 className="font-bold text-[#2A6377] flex items-center gap-2"><Calendar size={16} /> {hist.dataFormatada}</h4>
+                            <button onClick={() => baixarPDFDiaEspecifico(hist)} className="text-slate-400 hover:text-[#2A6377] transition bg-white border shadow-sm px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1" title="Gerar PDF deste dia"><FileText size={12}/> PDF</button>
                           </div>
-                        </button>
+                          
+                          <div className="space-y-3">
+                            {hist.diarios?.map((d: any, i: number) => (
+                              <div key={`d-${i}`} className="bg-blue-50 p-3 rounded-lg border border-blue-100 shadow-sm text-sm">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1"><BookOpen size={12}/> Diário • {d.usuarios?.nome}</span>
+                                  <span className="text-[10px] text-blue-500 font-medium">{formatarDataHora(d.created_at)}</span>
+                                </div>
+                                <p className="text-blue-900 whitespace-pre-wrap">{d.texto}</p>
+                              </div>
+                            ))}
+                            
+                            {hist.resumos?.map((res: any, i: number) => (
+                              <div key={`r-${i}`} className="bg-white p-3 rounded-lg border shadow-sm text-sm border-l-4 border-l-[#2A6377]">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Resumo da Reunião • Clima: {res.clima}</p>
+                                <p className="text-slate-700 whitespace-pre-wrap">{res.texto}</p>
+                              </div>
+                            ))}
+
+                            {hist.ocorrencias?.map((oc: any, i: number) => (
+                              <div key={`oc-${i}`} className="bg-white p-3 rounded-lg border text-sm shadow-sm flex flex-col sm:flex-row sm:items-center gap-2">
+                                <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase shrink-0 ${oc.tipo === 'avanco' ? 'bg-green-100 text-green-700' : oc.tipo === 'atraso' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {labelOcorrencia(oc.tipo)}
+                                </span>
+                                <span className="text-slate-700 font-medium">{oc.descricao}</span>
+                              </div>
+                            ))}
+
+                            {hist.tarefas?.map((tar: any, i: number) => (
+                              <div key={`t-${i}`} className="bg-white p-3 rounded-lg border text-sm shadow-sm flex flex-col gap-1 border-l-4 border-l-slate-400">
+                                <span className="font-bold text-slate-800">{tar.titulo}</span>
+                                <div className="flex flex-wrap gap-3 text-[10px] text-slate-500 font-medium">
+                                  <span className="flex items-center gap-1"><User size={12}/> {tar.usuarios?.nome || 'Geral'}</span>
+                                  {tar.data_vencimento && <span className="flex items-center gap-1"><Clock size={12}/> Prazo: {formatarDataSegura(tar.data_vencimento)}</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -700,12 +778,12 @@ export default function App() {
         )}
 
         {telaAtiva === 'dashboard' && (
-          <div className="animate-in fade-in">
+          <div className="animate-in fade-in dash-main-wrapper">
             <h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Visão Geral {isAdmin ? '(Todas)' : '(Minhas)'}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8"><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm flex items-center gap-4"><div className="p-4 bg-[#2A6377]/10 text-[#2A6377] rounded-lg"><Briefcase size={24} /></div><div><p className="text-sm text-gray-500 font-medium">Obras Ativas</p><p className="text-2xl md:text-3xl font-bold text-[#2A6377]">{resumoReal.obrasAtivas}</p></div></div><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm flex items-center gap-4"><div className="p-4 bg-red-100 text-red-600 rounded-lg"><AlertCircle size={24} /></div><div><p className="text-sm text-gray-500 font-medium">Tarefas Atrasadas</p><p className="text-2xl md:text-3xl font-bold text-red-600">{resumoReal.tarefasAtrasadas}</p></div></div></div>
-            <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8 max-w-full"><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm flex items-center gap-4 max-w-full"><div className="p-4 bg-[#2A6377]/10 text-[#2A6377] rounded-lg"><Briefcase size={24} /></div><div><p className="text-sm text-gray-500 font-medium max-w-full truncate">Obras Ativas</p><p className="text-2xl md:text-3xl font-bold text-[#2A6377]">{resumoReal.obrasAtivas}</p></div></div><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm flex items-center gap-4 max-w-full"><div className="p-4 bg-red-100 text-red-600 rounded-lg"><AlertCircle size={24} /></div><div><p className="text-sm text-gray-500 font-medium max-w-full truncate">Tarefas Atrasadas</p><p className="text-2xl md:text-3xl font-bold text-red-600">{resumoReal.tarefasAtrasadas}</p></div></div></div>
+            <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border max-w-full">
               <h3 className="text-lg font-bold mb-6">Status Real das Tarefas por Obra</h3>
-              <div className="h-64 md:h-80 w-full">
+              <div className="h-64 md:h-80 w-full max-w-full overflow-hidden">
                 {dadosGrafico.length === 0 ? (<div className="h-full flex items-center justify-center text-gray-400">Nenhuma tarefa.</div>) : (<ResponsiveContainer width="100%" height="100%"><BarChart data={dadosGrafico}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" /><XAxis dataKey="nome" axisLine={false} tickLine={false} /><YAxis allowDecimals={false} axisLine={false} tickLine={false} /><Tooltip cursor={{fill: '#f3f4f6'}} /><Bar dataKey="tarefas_concluidas" name="Concluídas" fill="#22c55e" radius={[4, 4, 0, 0]} /><Bar dataKey="tarefas_pendentes" name="Pendentes" fill="#f87171" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>)}
               </div>
             </div>
@@ -713,17 +791,17 @@ export default function App() {
         )}
 
         {telaAtiva === 'equipe' && isAdmin && (
-          <div className="animate-in fade-in max-w-4xl"><h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Equipe</h2><div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8"><form onSubmit={salvarUsuario} className="bg-white p-4 md:p-6 rounded-xl shadow-sm border h-fit"><h3 className="text-lg font-bold mb-4 border-b pb-2">Novo Colaborador</h3><div className="space-y-4"><div><label className="block text-sm mb-1">Nome</label><input required type="text" value={novoUsuario.nome} onChange={(e) => setNovoUsuario({...novoUsuario, nome: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]" /></div><div><label className="block text-sm mb-1">E-mail</label><input required type="email" value={novoUsuario.email} onChange={(e) => setNovoUsuario({...novoUsuario, email: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]" /></div><div><label className="block text-sm mb-1">Perfil</label><select value={novoUsuario.perfil} onChange={(e) => setNovoUsuario({...novoUsuario, perfil: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"><option value="engenheiro">Engenheiro/Gestor</option><option value="admin">Administrador</option></select></div></div><div className="flex justify-end pt-6"><button type="submit" className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-medium w-full sm:w-auto"><Plus size={18} className="inline mr-2"/> Adicionar</button></div></form><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border"><h3 className="text-lg font-bold mb-4 border-b pb-2">Registados</h3><div className="space-y-3">{listaUsuarios.map(user => (<div key={user.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-lg"><div className={`p-2 rounded-full text-white ${user.perfil === 'admin' ? 'bg-[#2A6377]' : 'bg-[#2A6377]/60'}`}><User size={16} /></div><div className="overflow-hidden"><p className="font-bold text-sm truncate">{user.nome} <span className="text-[10px] ml-2 px-2 py-0.5 bg-gray-200 rounded uppercase inline-block">{user.perfil}</span></p><p className="text-xs text-slate-500 truncate">{user.email}</p></div></div>))}</div></div></div></div>
+          <div className="animate-in fade-in dash-main-wrapper max-w-4xl"><h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Equipe</h2><div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8"><form onSubmit={salvarUsuario} className="bg-white p-4 md:p-6 rounded-xl shadow-sm border h-fit max-w-full"><h3 className="text-lg font-bold mb-4 border-b pb-2">Novo Colaborador</h3><div className="space-y-4 max-w-full"><div><label className="block text-sm mb-1 max-w-full">Nome</label><input required type="text" value={novoUsuario.nome} onChange={(e) => setNovoUsuario({...novoUsuario, nome: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full" /></div><div><label className="block text-sm mb-1 max-w-full">E-mail</label><input required type="email" value={novoUsuario.email} onChange={(e) => setNovoUsuario({...novoUsuario, email: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full" /></div><div><label className="block text-sm mb-1 max-w-full">Perfil</label><select value={novoUsuario.perfil} onChange={(e) => setNovoUsuario({...novoUsuario, perfil: e.target.value})} className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full"><option value="engenheiro">Engenheiro/Gestor</option><option value="admin">Administrador</option></select></div></div><div className="flex justify-end pt-6"><button type="submit" className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-medium w-full sm:w-auto"><Plus size={18} className="inline mr-2"/> Adicionar</button></div></form><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border max-w-full"><h3 className="text-lg font-bold mb-4 border-b pb-2">Registados</h3><div className="space-y-3 max-w-full">{listaUsuarios.map(user => (<div key={user.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-lg max-w-full"><div className={`p-2 rounded-full text-white ${user.perfil === 'admin' ? 'bg-[#2A6377]' : 'bg-[#2A6377]/60'}`}><User size={16} /></div><div className="overflow-hidden"><p className="font-bold text-sm truncate max-w-full">{user.nome} <span className="text-[10px] ml-2 px-2 py-0.5 bg-gray-200 rounded uppercase inline-block">{user.perfil}</span></p><p className="text-xs text-slate-500 truncate max-w-full">{user.email}</p></div></div>))}</div></div></div></div>
         )}
 
         {telaAtiva === 'obras' && (
-          <div className="animate-in fade-in max-w-5xl"><h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Obras</h2>
-            {isAdmin && (<form onSubmit={salvarObra} className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 mb-6 md:mb-8"><div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="text-xl font-bold">{novaObra.id ? 'Editar Obra' : 'Nova Obra'}</h3>{novaObra.id && (<button type="button" onClick={cancelarEdicaoObra} className="text-gray-500 flex items-center gap-1 text-sm"><X size={16} /> Cancelar</button>)}</div>{erroObra && (<div className="mb-6 bg-red-50 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3"><AlertTriangle size={20} /> <span className="text-sm">{erroObra}</span></div>)}<div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6"><div><label className="block text-sm mb-1">Código *</label><input type="text" value={novaObra.codigo_externo} onChange={(e) => setNovaObra({...novaObra, codigo_externo: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377]" /></div><div><label className="block text-sm mb-1">Nome *</label><input type="text" value={novaObra.nome} onChange={(e) => setNovaObra({...novaObra, nome: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377]" /></div><div><label className="block text-sm mb-1">Início *</label><input type="date" value={novaObra.data_inicio} onChange={(e) => setNovaObra({...novaObra, data_inicio: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377]" /></div><div><label className="block text-sm mb-1">Fim *</label><input type="date" value={novaObra.data_previsao_fim} onChange={(e) => setNovaObra({...novaObra, data_previsao_fim: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377]" /></div><div className="md:col-span-2"><label className="block text-sm mb-1">Responsável *</label><select value={novaObra.id_responsavel} onChange={(e) => setNovaObra({...novaObra, id_responsavel: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377]"><option value="">Selecione...</option>{listaUsuarios.map(user => (<option key={user.id} value={user.id}>{user.nome}</option>))}</select></div></div><div className="flex justify-end pt-4 border-t"><button type="submit" disabled={carregando} className="bg-[#2A6377] text-white px-6 py-3 rounded-lg font-medium w-full sm:w-auto"><Save size={20} className="inline mr-2"/> Salvar</button></div></form>)}
-            <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200">
-              <h3 className="text-lg font-bold mb-4 border-b pb-2">{isAdmin ? 'Todas as Obras' : 'Minhas Obras'}</h3>
-              {obrasLista.length === 0 ? (<p className="text-gray-500 text-sm">Nenhuma obra.</p>) : (
-                <div className="overflow-x-auto pb-2">
-                  <table className="w-full text-left border-collapse min-w-[700px]"><thead><tr className="bg-slate-50 text-slate-600 text-sm border-y"><th className="p-3">Código</th><th className="p-3">Nome</th><th className="p-3">Responsável</th><th className="p-3">Prazo Entrega</th>{isAdmin && <th className="p-3 text-right">Ação</th>}</tr></thead><tbody className="text-sm">{obrasLista.map(obra => (<tr key={obra.id} className="border-b hover:bg-slate-50"><td className="p-3 text-slate-700">{obra.codigo_externo}</td><td className="p-3 font-bold text-[#2A6377]">{obra.nome}</td><td className="p-3 text-slate-600">{obra.usuarios?.nome}</td><td className="p-3 text-slate-600">{formatarDataSegura(obra.data_previsao_fim)}</td><td className="p-3 text-right flex justify-end gap-2"><button onClick={() => abrirPainelObra(obra)} className="text-[#2A6377] bg-[#2A6377]/10 hover:bg-[#2A6377] hover:text-white px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1"><FolderOpen size={14}/> Painel</button>{isAdmin && (<button onClick={() => editarObra(obra)} className="text-slate-400 hover:text-[#2A6377] p-1.5 bg-slate-100 rounded transition"><Edit2 size={14} /></button>)}</td></tr>))}</tbody></table>
+          <div className="animate-in fade-in dash-main-wrapper max-w-5xl"><h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8">Obras</h2>
+            {isAdmin && (<form onSubmit={salvarObra} className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 mb-6 md:mb-8 max-w-full"><div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="text-xl font-bold">{novaObra.id ? 'Editar Obra' : 'Nova Obra'}</h3>{novaObra.id && (<button type="button" onClick={cancelarEdicaoObra} className="text-gray-500 flex items-center gap-1 text-sm"><X size={16} /> Cancelar</button>)}</div>{erroObra && (<div className="mb-6 bg-red-50 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3"><AlertTriangle size={20} /> <span className="text-sm">{erroObra}</span></div>)}<div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 max-w-full"><div><label className="block text-sm mb-1 max-w-full">Código *</label><input type="text" value={novaObra.codigo_externo} onChange={(e) => setNovaObra({...novaObra, codigo_externo: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full" /></div><div><label className="block text-sm mb-1 max-w-full">Nome *</label><input type="text" value={novaObra.nome} onChange={(e) => setNovaObra({...novaObra, nome: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full" /></div><div><label className="block text-sm mb-1 max-w-full">Início *</label><input type="date" value={novaObra.data_inicio} onChange={(e) => setNovaObra({...novaObra, data_inicio: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full" /></div><div><label className="block text-sm mb-1 max-w-full">Fim *</label><input type="date" value={novaObra.data_previsao_fim} onChange={(e) => setNovaObra({...novaObra, data_previsao_fim: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full" /></div><div className="md:col-span-2"><label className="block text-sm mb-1 max-w-full">Responsável *</label><select value={novaObra.id_responsavel} onChange={(e) => setNovaObra({...novaObra, id_responsavel: e.target.value})} className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full"><option value="">Selecione...</option>{listaUsuarios.map(user => (<option key={user.id} value={user.id}>{user.nome}</option>))}</select></div></div><div className="flex justify-end pt-4 border-t max-w-full"><button type="submit" disabled={carregando} className="bg-[#2A6377] text-white px-6 py-3 rounded-lg font-medium w-full sm:w-auto"><Save size={20} className="inline mr-2"/> Salvar</button></div></form>)}
+            <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 max-w-full">
+              <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full">{isAdmin ? 'Todas as Obras' : 'Minhas Obras'}</h3>
+              {obrasLista.length === 0 ? (<p className="text-gray-500 text-sm max-w-full truncate">Nenhuma obra.</p>) : (
+                <div className="overflow-x-auto pb-2 max-w-full">
+                  <table className="w-full text-left border-collapse min-w-[700px] max-w-full"><thead><tr className="bg-slate-50 text-slate-600 text-sm border-y max-w-full"><th className="p-3 max-w-full truncate">Código</th><th className="p-3 max-w-full truncate">Nome</th><th className="p-3 max-w-full truncate">Responsável</th><th className="p-3 max-w-full truncate">Prazo Entrega</th>{isAdmin && <th className="p-3 text-right">Ação</th>}</tr></thead><tbody className="text-sm max-w-full">{obrasLista.map(obra => (<tr key={obra.id} className="border-b hover:bg-slate-50 max-w-full"><td className="p-3 text-slate-700 max-w-full truncate">{obra.codigo_externo}</td><td className="p-3 font-bold text-[#2A6377] max-w-full truncate">{obra.nome}</td><td className="p-3 text-slate-600 max-w-full truncate">{obra.usuarios?.nome}</td><td className="p-3 text-slate-600 max-w-full truncate">{formatarDataSegura(obra.data_previsao_fim)}</td><td className="p-3 text-right flex justify-end gap-2"><button onClick={() => abrirPainelObra(obra)} className="text-[#2A6377] bg-[#2A6377]/10 hover:bg-[#2A6377] hover:text-white px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1"><FolderOpen size={14}/> Painel</button>{isAdmin && (<button onClick={() => editarObra(obra)} className="text-slate-400 hover:text-[#2A6377] p-1.5 bg-slate-100 rounded transition"><Edit2 size={14} /></button>)}</td></tr>))}</tbody></table>
                 </div>
               )}
             </div>
@@ -731,56 +809,122 @@ export default function App() {
         )}
 
         {telaAtiva === 'reunioes' && (
-           <div className="animate-in fade-in flex flex-col items-start gap-6"><div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border mb-6 border-l-4 border-l-[#2A6377] w-full"><div className="flex flex-col md:flex-row md:items-end justify-between gap-4"><div className="flex-1"><label className="block text-sm font-medium mb-2">1. Selecione a Obra para a Reunião</label><select className="w-full max-w-lg border rounded-lg p-3 outline-none font-bold bg-gray-50" value={reuniaoForm.id_obra} onChange={(e) => setReuniaoForm({...reuniaoForm, id_obra: e.target.value})}><option value="">A carregar...</option>{obrasLista.map(obra => (<option key={obra.id} value={obra.id}>{obra.codigo_externo} - {obra.nome}</option>))}</select></div><div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto"><button onClick={salvarReuniaoObra} disabled={carregando || !reuniaoForm.id_obra} className="bg-[#2A6377]/10 text-[#2A6377] px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 disabled:opacity-50 flex-1 w-full sm:w-auto"><Loader2 className={`animate-spin shrink-0 ${carregando ? 'block' : 'hidden'}`} size={18} /><Save size={18} className={`shrink-0 ${carregando ? 'hidden' : 'block'}`} /> Salvar</button><button onClick={gerarAtaFinal} disabled={obrasNaAtaAtual.length === 0} className="bg-[#2A6377] text-white px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 shadow-md disabled:opacity-50 flex-1 w-full sm:w-auto"><Mail size={18} className="shrink-0" /> Gerar Ata</button></div></div>{obrasNaAtaAtual.length > 0 && (<div className="mt-6 pt-4 border-t flex flex-wrap items-center gap-2"><span className="text-sm font-medium text-gray-500 mr-2">Salvas hoje:</span>{obrasNaAtaAtual.map((ob, idx) => (<span key={idx} className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 truncate"><CheckCheck size={12}/> {ob.nome_obra}</span>))}</div>)}</div>
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full items-start"><div className="lg:col-span-2 flex flex-col items-start gap-6 w-full">
-                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 w-full">2. Resumo</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 w-full items-start"><div><label className="block text-sm mb-1">Data</label><input type="date" className="w-full border rounded-lg p-2 outline-none" value={reuniaoForm.data_reuniao} onChange={(e) => setReuniaoForm({...reuniaoForm, data_reuniao: e.target.value})}/></div><div><label className="block text-sm mb-1">Clima</label><select className="w-full border rounded-lg p-2 outline-none" value={reuniaoForm.clima_semana} onChange={(e) => setReuniaoForm({...reuniaoForm, clima_semana: e.target.value})}><option value="chuvoso">Chuvoso</option><option value="ensolarado">Ensolarado</option><option value="misto">Misto</option></select></div></div><div className="w-full flex flex-col items-start"><label className="block text-sm mb-1">Resumo Geral</label><textarea rows={3} className="w-full border rounded-lg p-3 outline-none" value={reuniaoForm.resumo_geral} onChange={(e) => setReuniaoForm({...reuniaoForm, resumo_geral: e.target.value})}></textarea></div></div>
-                 
-                 {/* CORREÇÃO DO LAYOUT DE OCORRÊNCIAS (FLEXBOX) */}
-                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full flex flex-col items-start">
-                   <h3 className="text-lg font-bold mb-4 border-b pb-2 w-full">3. Ocorrências</h3>
-                   <div className="flex flex-col sm:flex-row gap-3 mb-4 w-full items-start">
-                     <select className="border rounded-lg p-2 w-full sm:w-[150px] shrink-0 outline-none" value={novaOcorrencia.tipo} onChange={e => setNovaOcorrencia({...novaOcorrencia, tipo: e.target.value})}>
-                       <option value="avanco">Avanço</option><option value="atraso">Atraso</option><option value="financeiro">Financeiro</option>
-                     </select>
-                     <input type="text" className="border rounded-lg p-2 flex-1 w-full outline-none" placeholder="Ex: Chegou o material..." value={novaOcorrencia.descricao} onChange={e => setNovaOcorrencia({...novaOcorrencia, descricao: e.target.value})} onKeyPress={e => e.key === 'Enter' && adicionarOcorrencia()}/>
-                     <button onClick={adicionarOcorrencia} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold w-full sm:w-auto shrink-0 transition">Adicionar</button>
-                   </div>
-                   {listaOcorrencias.map((oc, idx) => (<div key={idx} className="flex justify-between items-center bg-slate-50 p-2 mt-2 rounded border text-sm w-full"><div><span className="font-semibold text-[#2A6377] capitalize truncate">{labelOcorrencia(oc.tipo)}:</span> {oc.descricao}</div><button onClick={() => setListaOcorrencias(listaOcorrencias.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2 shrink-0"><Trash2 size={16} className="shrink-0" /></button></div>))}
+           <div className="animate-in fade-in dash-main-wrapper max-w-full flex flex-col items-start gap-6">
+             <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border mb-6 border-l-4 border-l-[#2A6377] w-full max-w-full">
+               <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 max-w-full">
+                 <div className="flex-1 max-w-full">
+                   <label className="block text-sm font-medium mb-2 max-w-full">1. Selecione a Obra para a Reunião</label>
+                   <select className="w-full max-w-lg border rounded-lg p-3 outline-none font-bold bg-gray-50 max-w-full" value={reuniaoForm.id_obra} onChange={(e) => setReuniaoForm({...reuniaoForm, id_obra: e.target.value})}>
+                     <option value="">A carregar...</option>
+                     {obrasLista.map(obra => {
+                       const jaSalva = obrasNaAtaAtual.some((ob: any) => ob.id_obra === obra.id);
+                       return (
+                         <option key={obra.id} value={obra.id}>
+                           {jaSalva ? '✅ [SALVA] ' : ''}{obra.codigo_externo} - {obra.nome}
+                         </option>
+                       );
+                     })}
+                   </select>
+                   {obrasNaAtaAtual.some((ob: any) => ob.id_obra === reuniaoForm.id_obra) && <p className="text-amber-600 text-[10px] sm:text-xs mt-1 font-bold w-full">⚠️ Esta obra já foi registrada. Para alterar, clique no botão de edição na tag abaixo.</p>}
                  </div>
-                 
-                 {/* CORREÇÃO DO LAYOUT DE TAREFAS (FLEXBOX) */}
-                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full flex flex-col items-start">
-                   <h3 className="text-lg font-bold mb-4 border-b pb-2 w-full">4. Gerar Tarefas</h3>
-                   <div className="flex flex-col sm:flex-row gap-3 mb-3 w-full items-start">
-                     <input type="text" className="border rounded-lg p-2 flex-1 w-full outline-none" placeholder="O que precisa ser feito..." value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} />
-                     <input type="date" className="border rounded-lg p-2 w-full sm:w-[160px] shrink-0 outline-none" value={novaTarefa.data_vencimento} onChange={e => setNovaTarefa({...novaTarefa, data_vencimento: e.target.value})} />
-                   </div>
-                   <div className="flex flex-col sm:flex-row gap-3 mb-4 w-full items-start">
-                     <select className="border rounded-lg p-2 flex-1 w-full outline-none" value={novaTarefa.id_responsavel} onChange={e => setNovaTarefa({...novaTarefa, id_responsavel: e.target.value})}>
-                       <option value="">Atribuir a...</option>{listaUsuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-                     </select>
-                     <button onClick={adicionarTarefa} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold w-full sm:w-auto shrink-0 transition">Adicionar</button>
-                   </div>
-                   {listaTarefas.map((tar, idx) => (<div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50 p-3 mt-2 rounded border text-sm gap-2 w-full"><div><span className="font-semibold block truncate">{tar.titulo}</span><div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1"><span className="flex items-center gap-1 truncate"><User size={12} className="shrink-0"/> {tar.nome_responsavel}</span>{tar.data_vencimento && <span className="flex items-center gap-1 truncate"><Clock size={12} className="shrink-0"/> Prazo: {formatarDataSegura(tar.data_vencimento)}</span>}</div></div><button onClick={() => setListaTarefas(listaTarefas.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 bg-white p-2 rounded shadow-sm border self-end sm:self-auto shrink-0"><Trash2 size={16} className="shrink-0" /></button></div>))}
+                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto max-w-full">
+                   <button onClick={salvarReuniaoObra} disabled={carregando || !reuniaoForm.id_obra || obrasNaAtaAtual.some((ob: any) => ob.id_obra === reuniaoForm.id_obra)} className="bg-[#2A6377]/10 text-[#2A6377] px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 disabled:opacity-50 flex-1 w-full sm:w-auto max-w-full"><Loader2 className={`animate-spin shrink-0 ${carregando ? 'block' : 'hidden'}`} size={18} /><Save size={18} className={`shrink-0 ${carregando ? 'hidden' : 'block'}`} /> Salvar</button>
+                   <button onClick={gerarAtaFinal} disabled={obrasNaAtaAtual.length === 0} className="bg-[#2A6377] text-white px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 shadow-md disabled:opacity-50 flex-1 w-full sm:w-auto max-w-full"><Mail size={18} className="shrink-0" /> Gerar Ata</button>
                  </div>
                </div>
-               <div className="bg-slate-50 p-4 md:p-6 rounded-xl border w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-6 flex items-center gap-2 truncate"><Clock size={20} className="text-slate-500 shrink-0" /> Histórico Unificado</h3>{historicoObra.length === 0 ? (<p className="text-sm text-gray-500 truncate">Sem histórico.</p>) : (<div className="space-y-4 w-full">{historicoObra.map((hist, idx) => (<button key={idx} onClick={() => { setDetalhesHistorico(hist); setModalHistoricoAberto(true); }} className="w-full text-left bg-white p-4 rounded-lg border shadow-sm hover:border-[#2A6377] transition group w-full"><div className="flex justify-between items-center mb-2"><span className="font-bold text-[#2A6377] flex items-center gap-2 truncate"><Calendar size={16} className="shrink-0"/> {hist.dataFormatada}</span><span className="text-xs bg-slate-100 px-2 py-1 rounded-full group-hover:bg-[#2A6377]/10 group-hover:text-[#2A6377] shrink-0">Detalhes</span></div><div className="flex flex-wrap gap-2 text-[10px] sm:text-xs text-slate-500 mt-2 border-t pt-2"><span>{hist.resumos.length} Resumo(s)</span><span>•</span><span>{hist.ocorrencias.length} Ocorrência(s)</span><span>•</span><span>{hist.tarefas.length} Tarefa(s)</span></div></button>))}</div>)}</div>
+               {obrasNaAtaAtual.length > 0 && (
+                 <div className="mt-6 pt-4 border-t flex flex-wrap items-center gap-2 max-w-full">
+                   <span className="text-sm font-medium text-gray-500 mr-2 max-w-full">Salvas hoje:</span>
+                   {obrasNaAtaAtual.map((ob, idx) => (
+                     <span key={idx} className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 max-w-full truncate shadow-sm border border-green-200">
+                       <CheckCheck size={14}/> {ob.nome_obra}
+                       <button onClick={() => editarRegistroAta(ob, idx)} className="ml-2 hover:bg-green-200 hover:text-green-900 bg-green-100 rounded-full p-1 transition-colors" title="Reabrir para Edição"><Edit2 size={12}/></button>
+                     </span>
+                   ))}
+                 </div>
+               )}
+             </div>
+             
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full max-w-full items-start">
+               <div className="lg:col-span-2 max-w-full flex flex-col items-start gap-6 w-full">
+                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">2. Resumo</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 max-w-full w-full items-start"><div><label className="block text-sm mb-1 max-w-full">Data</label><input type="date" className="w-full border rounded-lg p-2 outline-none max-w-full" value={reuniaoForm.data_reuniao} onChange={(e) => setReuniaoForm({...reuniaoForm, data_reuniao: e.target.value})}/></div><div><label className="block text-sm mb-1 max-w-full">Clima</label><select className="w-full border rounded-lg p-2 outline-none max-w-full" value={reuniaoForm.clima_semana} onChange={(e) => setReuniaoForm({...reuniaoForm, clima_semana: e.target.value})}><option value="chuvoso">Chuvoso</option><option value="ensolarado">Ensolarado</option><option value="misto">Misto</option></select></div></div><div className="w-full max-w-full flex flex-col items-start"><label className="block text-sm mb-1 max-w-full">Resumo Geral</label><textarea rows={3} className="w-full border rounded-lg p-3 outline-none max-w-full" value={reuniaoForm.resumo_geral} onChange={(e) => setReuniaoForm({...reuniaoForm, resumo_geral: e.target.value})}></textarea></div></div>
+                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">3. Ocorrências</h3><div className="flex flex-col sm:flex-row gap-3 mb-4 w-full items-start"><select className="border rounded-lg p-2 w-full outline-none max-w-full sm:w-[150px] shrink-0" value={novaOcorrencia.tipo} onChange={e => setNovaOcorrencia({...novaOcorrencia, tipo: e.target.value})}><option value="avanco">Avanço</option><option value="atraso">Atraso</option><option value="financeiro">Financeiro</option></select><input type="text" className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full" placeholder="Ex: Chegou o material..." value={novaOcorrencia.descricao} onChange={e => setNovaOcorrencia({...novaOcorrencia, descricao: e.target.value})} onKeyPress={e => e.key === 'Enter' && adicionarOcorrencia()}/><button onClick={adicionarOcorrencia} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold w-full sm:w-auto max-w-full sm:ml-auto">Add</button></div>{listaOcorrencias.map((oc, idx) => (<div key={idx} className="flex justify-between items-center bg-slate-50 p-2 mt-2 rounded border text-sm max-w-full w-full"><div><span className="font-semibold text-[#2A6377] capitalize max-w-full truncate">{labelOcorrencia(oc.tipo)}:</span> {oc.descricao}</div><button onClick={() => setListaOcorrencias(listaOcorrencias.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2 shrink-0"><Trash2 size={16} className="shrink-0" /></button></div>))}</div>
+                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start"><h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">4. Gerar Tarefas</h3><div className="flex flex-col sm:flex-row gap-3 mb-3 w-full items-start"><input type="text" className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full" placeholder="O que precisa ser feito..." value={novaTarefa.titulo} onChange={e => setNovaTarefa({...novaTarefa, titulo: e.target.value})} /><input type="date" className="border rounded-lg p-2 outline-none w-full sm:w-[160px] shrinking-0 max-w-full" value={novaTarefa.data_vencimento} onChange={e => setNovaTarefa({...novaTarefa, data_vencimento: e.target.value})} /></div><div className="flex flex-col sm:flex-row gap-3 mb-4 w-full items-start"><select className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full" value={novaTarefa.id_responsavel} onChange={e => setNovaTarefa({...novaTarefa, id_responsavel: e.target.value})}><option value="">Atribuir a...</option>{listaUsuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}</select><button onClick={adicionarTarefa} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold w-full sm:w-auto max-w-full sm:ml-auto">Adicionar</button></div>{listaTarefas.map((tar, idx) => (<div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50 p-3 mt-2 rounded border text-sm gap-2 max-w-full w-full"><div><span className="font-semibold block max-w-full truncate">{tar.titulo}</span><div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1 max-w-full"><span className="flex items-center gap-1 max-w-full truncate"><User size={12} className="shrink-0"/> {tar.nome_responsavel}</span>{tar.data_vencimento && <span className="flex items-center gap-1 max-w-full truncate"><Clock size={12} className="shrink-0"/> Prazo: {formatarDataSegura(tar.data_vencimento)}</span>}</div></div><button onClick={() => setListaTarefas(listaTarefas.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 bg-white p-2 rounded shadow-sm border self-end sm:self-auto shrink-0 ml-auto sm:ml-0"><Trash2 size={16} className="shrink-0" /></button></div>))}</div>
+               </div>
+               
+               <div className="bg-slate-50 p-4 md:p-6 rounded-xl border w-full flex flex-col items-start h-[600px]">
+                  <h3 className="text-lg font-bold mb-6 flex items-center gap-2 truncate"><Clock size={20} className="text-slate-500 shrink-0" /> Histórico da Obra</h3>
+                  {historicoObra.length === 0 ? (
+                    <p className="text-sm text-gray-500 truncate">Sem histórico.</p>
+                  ) : (
+                    <div className="space-y-0 max-h-full overflow-y-auto w-full pr-2">
+                      {historicoObra.map((hist, idx) => (
+                        <div key={idx} className="relative pl-6 border-l-2 border-slate-200 last:border-transparent pb-6 ml-3">
+                          <div className="absolute w-3 h-3 bg-[#2A6377] rounded-full -left-[7px] top-1.5 shadow-[0_0_0_3px_white]"></div>
+                          
+                          <div className="flex justify-between items-start mb-4">
+                            <h4 className="font-bold text-[#2A6377] flex items-center gap-2"><Calendar size={16} /> {hist.dataFormatada}</h4>
+                            <button onClick={() => baixarPDFDiaEspecifico(hist)} className="text-slate-400 hover:text-[#2A6377] transition bg-white border shadow-sm px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1" title="Gerar PDF deste dia"><FileText size={12}/> PDF</button>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            {hist.diarios?.map((d: any, i: number) => (
+                              <div key={`d-${i}`} className="bg-blue-50 p-3 rounded-lg border border-blue-100 shadow-sm text-sm">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1"><BookOpen size={12}/> Diário • {d.usuarios?.nome}</span>
+                                  <span className="text-[10px] text-blue-500 font-medium">{formatarDataHora(d.created_at)}</span>
+                                </div>
+                                <p className="text-blue-900 whitespace-pre-wrap">{d.texto}</p>
+                              </div>
+                            ))}
+                            
+                            {hist.resumos?.map((res: any, i: number) => (
+                              <div key={`r-${i}`} className="bg-white p-3 rounded-lg border shadow-sm text-sm border-l-4 border-l-[#2A6377]">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Resumo da Reunião • Clima: {res.clima}</p>
+                                <p className="text-slate-700 whitespace-pre-wrap">{res.texto}</p>
+                              </div>
+                            ))}
+
+                            {hist.ocorrencias?.map((oc: any, i: number) => (
+                              <div key={`oc-${i}`} className="bg-white p-3 rounded-lg border text-sm shadow-sm flex flex-col sm:flex-row sm:items-center gap-2">
+                                <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase shrink-0 ${oc.tipo === 'avanco' ? 'bg-green-100 text-green-700' : oc.tipo === 'atraso' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {labelOcorrencia(oc.tipo)}
+                                </span>
+                                <span className="text-slate-700 font-medium">{oc.descricao}</span>
+                              </div>
+                            ))}
+
+                            {hist.tarefas?.map((tar: any, i: number) => (
+                              <div key={`t-${i}`} className="bg-white p-3 rounded-lg border text-sm shadow-sm flex flex-col gap-1 border-l-4 border-l-slate-400">
+                                <span className="font-bold text-slate-800">{tar.titulo}</span>
+                                <div className="flex flex-wrap gap-3 text-[10px] text-slate-500 font-medium">
+                                  <span className="flex items-center gap-1"><User size={12}/> {tar.usuarios?.nome || 'Geral'}</span>
+                                  {tar.data_vencimento && <span className="flex items-center gap-1"><Clock size={12}/> Prazo: {formatarDataSegura(tar.data_vencimento)}</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
              </div>
            </div>
         )}
 
         {telaAtiva === 'tarefas' && (
-           <div className="animate-in fade-in h-full flex flex-col">
-             <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4"><div><h2 className="text-2xl md:text-3xl font-bold text-gray-800 truncate">Kanban Geral</h2></div><div className="flex items-center gap-2 shrink-0"><label className="text-sm font-medium text-gray-500 shrink-0">Filtrar:</label><select className="border rounded-lg p-2 outline-none font-medium bg-white shadow-sm w-full sm:w-auto shrink-0" value={filtroObraKanban} onChange={(e) => setFiltroObraKanban(e.target.value)}><option value="todas">Todas as Obras</option>{obrasLista.map(o => <option key={o.id} value={o.id}>{o.codigo_externo} - {o.nome}</option>)}</select></div></header>
-             <div className="flex gap-6 overflow-x-auto pb-4 items-start flex-1">
-               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-gray-100/50 rounded-xl p-4 border flex flex-col">
-                 <div className="flex justify-between items-center mb-4"><h3 className="font-bold truncate">A Fazer</h3><span className="bg-gray-200 text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'pendente').length}</span></div>
-                 <div className="space-y-3">
+           <div className="animate-in fade-in h-full flex flex-col dash-main-wrapper max-w-full">
+             <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 max-w-full"><div className="max-w-full"><h2 className="text-2xl md:text-3xl font-bold text-gray-800 max-w-full truncate">Kanban Geral</h2></div><div className="flex items-center gap-2 shrink-0"><label className="text-sm font-medium text-gray-500 shrink-0">Filtrar:</label><select className="border rounded-lg p-2 outline-none font-medium bg-white shadow-sm w-full sm:w-auto shrinking-0 max-w-full" value={filtroObraKanban} onChange={(e) => setFiltroObraKanban(e.target.value)}><option value="todas">Todas as Obras</option>{obrasLista.map(o => <option key={o.id} value={o.id}>{o.codigo_externo} - {o.nome}</option>)}</select></div></header>
+             <div className="flex gap-6 overflow-x-auto pb-4 items-start flex-1 max-w-full">
+               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-gray-100/50 rounded-xl p-4 border flex flex-col max-w-full">
+                 <div className="flex justify-between items-center mb-4 max-w-full"><h3 className="font-bold max-w-full truncate">A Fazer</h3><span className="bg-gray-200 text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'pendente').length}</span></div>
+                 <div className="space-y-3 max-w-full">
                    {tarefasFiltradas.filter(t => t?.status === 'pendente').map(tarefa => (
-                     <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className="bg-white p-4 rounded-lg shadow-sm border hover:border-[#2A6377] transition group cursor-pointer relative">
-                       <div className="flex justify-between items-start mb-2"><span className="text-xs font-semibold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
-                       <p className="font-medium text-sm my-3 truncate">{tarefa?.titulo || 'Sem Título'}</p>
-                       <div className="flex justify-between items-center border-t pt-3 mt-3 flex-wrap gap-2">
+                     <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className="bg-white p-4 rounded-lg shadow-sm border hover:border-[#2A6377] transition group max-w-full cursor-pointer relative">
+                       <div className="flex justify-between items-start mb-2 max-w-full"><span className="text-xs font-semibold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded max-w-full truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
+                       <p className="font-medium text-sm my-3 max-w-full truncate">{tarefa?.titulo || 'Sem Título'}</p>
+                       <div className="flex justify-between items-center border-t pt-3 mt-3 max-w-full flex-wrap gap-2">
                          <div className="flex items-center gap-2 shrink-0 flex-wrap">
                            <div className={`text-xs px-2 py-1 rounded flex items-center gap-1 shrink-0 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}><Clock size={12} className="shrink-0" /> Prazo: {formatarDataSegura(tarefa?.data_vencimento)}</div>
                          </div>
@@ -790,14 +934,14 @@ export default function App() {
                  </div>
                </div>
 
-               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-[#2A6377]/5 rounded-xl p-4 border border-[#2A6377]/20 flex flex-col">
-                 <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700 truncate">Em Andamento</h3><span className="bg-[#2A6377]/20 text-[#2A6377] text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'em_andamento').length}</span></div>
-                 <div className="space-y-3">
+               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-[#2A6377]/5 rounded-xl p-4 border border-[#2A6377]/20 flex flex-col max-w-full">
+                 <div className="flex justify-between items-center mb-4 max-w-full"><h3 className="font-bold text-gray-700 max-w-full truncate">Em Andamento</h3><span className="bg-[#2A6377]/20 text-[#2A6377] text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'em_andamento').length}</span></div>
+                 <div className="space-y-3 max-w-full">
                    {tarefasFiltradas.filter(t => t?.status === 'em_andamento').map(tarefa => (
-                     <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className={`bg-white p-4 rounded-lg shadow-sm border cursor-pointer relative ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'border-red-300' : 'border-gray-200 hover:border-[#2A6377]'}`}>
-                       <div className="flex justify-between items-start mb-2"><span className="text-xs font-semibold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
-                       <p className="font-medium text-sm my-3 truncate">{tarefa?.titulo || 'Sem Título'}</p>
-                       <div className="flex justify-between items-center border-t pt-3 mt-3 flex-wrap gap-2">
+                     <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className={`bg-white p-4 rounded-lg shadow-sm border max-w-full cursor-pointer relative ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'border-red-300' : 'border-gray-200 hover:border-[#2A6377]'}`}>
+                       <div className="flex justify-between items-start mb-2 max-w-full"><span className="text-xs font-semibold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded max-w-full truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
+                       <p className="font-medium text-sm my-3 max-w-full truncate">{tarefa?.titulo || 'Sem Título'}</p>
+                       <div className="flex justify-between items-center border-t pt-3 mt-3 max-w-full flex-wrap gap-2">
                          <div className="flex items-center gap-2 shrink-0 flex-wrap">
                            <div className={`text-xs px-2 py-1 rounded flex items-center gap-1 shrink-0 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-600'}`}><Clock size={12} className="shrink-0" /> Prazo: {formatarDataSegura(tarefa?.data_vencimento)}</div>
                          </div>
@@ -807,14 +951,14 @@ export default function App() {
                  </div>
                </div>
 
-               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-green-50/30 rounded-xl p-4 border border-green-100 flex flex-col">
-                 <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-gray-700 truncate">Concluídas</h3><span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'concluida').length}</span></div>
-                 <div className="space-y-3">
+               <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-green-50/30 rounded-xl p-4 border border-green-100 flex flex-col max-w-full">
+                 <div className="flex justify-between items-center mb-4 max-w-full"><h3 className="font-bold text-gray-700 max-w-full truncate">Concluídas</h3><span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'concluida').length}</span></div>
+                 <div className="space-y-3 max-w-full">
                    {tarefasFiltradas.filter(t => t?.status === 'concluida').map(tarefa => (
-                      <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 opacity-70 cursor-pointer relative hover:border-[#2A6377]">
-                       <div className="flex justify-between items-start mb-2"><span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
-                       <p className="font-medium text-gray-500 line-through text-sm my-3 truncate">{tarefa?.titulo || 'Sem Título'}</p>
-                       <div className="flex justify-end border-t pt-3 mt-3"><div className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded bg-green-50 text-green-600 shrink-0 ml-auto"><CheckCircle2 size={12} className="shrink-0" /> Feito</div></div>
+                      <div key={tarefa?.id} onClick={() => setTarefaSelecionada(tarefa)} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 opacity-70 max-w-full cursor-pointer relative hover:border-[#2A6377]">
+                       <div className="flex justify-between items-start mb-2 max-w-full"><span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded max-w-full truncate">{tarefa?.obras?.codigo_externo || 'Geral'}</span><span className="text-[10px] uppercase font-bold text-gray-400 flex items-center gap-1 truncate max-w-[120px] shrink-0 ml-1"><User size={10} className="shrink-0"/> {tarefa?.usuarios?.nome || 'Geral'}</span></div>
+                       <p className="font-medium text-gray-500 line-through text-sm my-3 max-w-full truncate">{tarefa?.titulo || 'Sem Título'}</p>
+                       <div className="flex justify-end border-t pt-3 mt-3 max-w-full"><div className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded bg-green-50 text-green-600 shrink-0 ml-auto"><CheckCircle2 size={12} className="shrink-0" /> Feito</div></div>
                      </div>
                    ))}
                  </div>
