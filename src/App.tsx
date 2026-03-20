@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { 
-  Home, Briefcase, Calendar, CheckSquare, AlertCircle, 
+  Briefcase, Calendar, CheckSquare, AlertCircle, 
   HardHat, Plus, Save, Clock, AlertTriangle, CheckCircle2,
   User, Loader2, Play, Check, Trash2, Users, Edit2, X, LogOut, Mail, KeyRound, CheckCheck, Bell, Send, CalendarPlus, Menu, MessageSquare, BookOpen, ChevronRight, FolderOpen, FileText, LayoutDashboard, Activity, Settings, ClipboardList
 } from 'lucide-react';
@@ -39,8 +39,6 @@ export default function App() {
   const [listaTarefas, setListaTarefas] = useState<any[]>([]);
   
   const [historicoObra, setHistoricoObra] = useState<any[]>([]);
-  const [modalHistoricoAberto, setModalHistoricoAberto] = useState<boolean>(false);
-  const [detalhesHistorico, setDetalhesHistorico] = useState<any>(null);
   
   const [ataGerada, setAtaGerada] = useState<string>(''); 
   const [modalAtaAberto, setModalAtaAberto] = useState<boolean>(false);
@@ -267,7 +265,6 @@ export default function App() {
         
         const [{ count: obrasCount }, { count: atrasadasCount }] = await Promise.all([queryObras, queryTarefas]);
         
-        // Puxa as tarefas do dia para o indicador
         const hoje = new Date().toISOString().split('T')[0];
         const { count: hojeCount } = await supabase.from('tarefas').select('*', { count: 'exact', head: true }).eq('id_responsavel', usuarioAtual.id).neq('status', 'concluida').eq('data_vencimento', hoje);
 
@@ -287,7 +284,6 @@ export default function App() {
           }); setDadosGrafico(Object.values(mapaGrafico));
         }
 
-        // NOVO: Busca o Feed Global (Diários Recentes)
         try {
           let queryFeed = supabase.from('diario_obra').select('id, texto, created_at, usuarios(nome), obras!inner(codigo_externo, nome)').order('created_at', { ascending: false }).limit(6);
           if (!isAdmin && idsMinhasObras.length > 0) queryFeed = queryFeed.in('id_obra', idsMinhasObras);
@@ -976,7 +972,7 @@ export default function App() {
         {/* TELA: KANBAN GERAL (PRINCIPAL -> TAREFAS) */}
         {telaAtiva === 'tarefas' && (
            <div className="animate-in fade-in h-full flex flex-col dash-main-wrapper max-w-full">
-             <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 max-w-full"><div className="max-w-full"><h2 className="text-2xl md:text-3xl font-bold text-gray-800 max-w-full truncate">Meu Kanban Geral</h2></div><div className="flex items-center gap-2 shrink-0"><label className="text-sm font-medium text-gray-500 shrink-0">Filtrar:</label><select className="border rounded-lg p-2 outline-none font-medium bg-white shadow-sm w-full sm:w-auto shrinking-0 max-w-full" value={filtroObraKanban} onChange={(e) => setFiltroObraKanban(e.target.value)}><option value="todas">Todas as Obras</option>{obrasLista.map(o => <option key={o.id} value={o.id}>{o.codigo_externo} - {o.nome}</option>)}</select></div></header>
+             <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 max-w-full"><div className="max-w-full"><h2 className="text-2xl md:text-3xl font-bold text-gray-800 max-w-full truncate">Tarefas</h2></div><div className="flex items-center gap-2 shrink-0"><label className="text-sm font-medium text-gray-500 shrink-0">Filtrar:</label><select className="border rounded-lg p-2 outline-none font-medium bg-white shadow-sm w-full sm:w-auto shrinking-0 max-w-full" value={filtroObraKanban} onChange={(e) => setFiltroObraKanban(e.target.value)}><option value="todas">Todas as Obras</option>{obrasLista.map(o => <option key={o.id} value={o.id}>{o.codigo_externo} - {o.nome}</option>)}</select></div></header>
              <div className="flex gap-6 overflow-x-auto pb-4 items-start flex-1 max-w-full">
                <div className="flex-1 min-w-[280px] md:min-w-[300px] bg-gray-100/50 rounded-xl p-4 border flex flex-col max-w-full">
                  <div className="flex justify-between items-center mb-4 max-w-full"><h3 className="font-bold max-w-full truncate">A Fazer</h3><span className="bg-gray-200 text-xs px-2 py-1 rounded-full shrink-0">{tarefasFiltradas.filter(t => t?.status === 'pendente').length}</span></div>
