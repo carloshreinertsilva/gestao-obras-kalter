@@ -71,9 +71,7 @@ export default function App() {
   const [parcelasCliente, setParcelasCliente] = useState<any[]>([]);
   const [documentosProjeto, setDocumentosProjeto] = useState<any[]>([]);
   const [cronogramaObra, setCronogramaObra] = useState<any[]>([]);
-  const [novaParcelaCliente, setNovaParcelaCliente] = useState<any>({ descricao: '', data_prevista: '', valor_previsto: '', observacao: '' });
-  const [parcelaParaLiquidar, setParcelaParaLiquidar] = useState<any>(null);
-  const [liquidacaoParcela, setLiquidacaoParcela] = useState<any>({ data_recebimento: '', valor_recebido: '' });
+  const [novaParcelaCliente, setNovaParcelaCliente] = useState<any>({ descricao: '', data_prevista: '', valor_previsto: '', data_realizada: '', valor_realizado: '', status: 'a_vencer', observacao: '' });
   const [novoDocumentoProjeto, setNovoDocumentoProjeto] = useState<any>({ item: '', detalhes: '', status: 'nao_elaborado', indicador: 'vermelho', data_prevista: '', data_conclusao: '', observacao: '' });
   const [arquivosDocumentos, setArquivosDocumentos] = useState<any>({});
   const [uploadDocumentoId, setUploadDocumentoId] = useState<string>('');
@@ -95,63 +93,6 @@ export default function App() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(valor) || 0);
   };
 
-  const dataHojeISO = () => new Date().toISOString().split('T')[0];
-
-  const isoParaDataBR = (dataStr: any) => {
-    if (!dataStr) return '';
-    const dataLimpa = String(dataStr).split('T')[0];
-    const partes = dataLimpa.split('-');
-    if (partes.length !== 3) return '';
-    return `${partes[2]}/${partes[1]}/${partes[0]}`;
-  };
-
-  const formatarEntradaDataBR = (valor: string) => {
-    const somenteNumeros = valor.replace(/\D/g, '').slice(0, 8);
-    const dia = somenteNumeros.slice(0, 2);
-    const mes = somenteNumeros.slice(2, 4);
-    const ano = somenteNumeros.slice(4, 8);
-    if (somenteNumeros.length <= 2) return dia;
-    if (somenteNumeros.length <= 4) return `${dia}/${mes}`;
-    return `${dia}/${mes}/${ano}`;
-  };
-
-  const dataBRParaISO = (valor: string) => {
-    const partes = valor.split('/');
-    if (partes.length !== 3) return null;
-    const [dia, mes, ano] = partes;
-    if (dia.length !== 2 || mes.length !== 2 || ano.length !== 4) return null;
-    const data = new Date(`${ano}-${mes}-${dia}T00:00:00`);
-    if (isNaN(data.getTime())) return null;
-    if (data.getFullYear() !== Number(ano) || data.getMonth() + 1 !== Number(mes) || data.getDate() !== Number(dia)) return null;
-    return `${ano}-${mes}-${dia}`;
-  };
-
-  const calcularStatusParcela = (parcela: any) => {
-    const previsto = Number(parcela?.valor_previsto || 0);
-    const realizado = Number(parcela?.valor_realizado || 0);
-    if (parcela?.status === 'cancelado') return 'cancelado';
-    if (realizado >= previsto && previsto > 0) return 'pago';
-    if (realizado > 0) return 'pago_parcial';
-    return 'pendente';
-  };
-
-  const labelStatusParcelaCalculado = (parcela: any) => {
-    const statusCalculado = calcularStatusParcela(parcela);
-    const estaVencida = statusCalculado === 'pendente' && parcela?.data_prevista && parcela.data_prevista < dataHojeISO();
-    const mapa: any = { pendente: estaVencida ? 'Pendente (vencido)' : 'Pendente', pago_parcial: 'Parcial', pago: 'Pago', cancelado: 'Cancelado' };
-    return mapa[statusCalculado] || 'Pendente';
-  };
-
-  const classeStatusParcela = (parcela: any) => {
-    const statusCalculado = calcularStatusParcela(parcela);
-    const estaVencida = statusCalculado === 'pendente' && parcela?.data_prevista && parcela.data_prevista < dataHojeISO();
-    if (statusCalculado === 'pago') return 'bg-green-100 text-green-700 border-green-200';
-    if (statusCalculado === 'pago_parcial') return 'bg-amber-100 text-amber-700 border-amber-200';
-    if (statusCalculado === 'cancelado') return 'bg-slate-100 text-slate-500 border-slate-200';
-    if (estaVencida) return 'bg-red-100 text-red-700 border-red-200';
-    return 'bg-blue-50 text-blue-700 border-blue-100';
-  };
-
   const fasesProjeto = [
     { valor: 'processo_inicial', label: 'Processo Inicial' },
     { valor: 'engenharia', label: 'Engenharia' },
@@ -166,7 +107,7 @@ export default function App() {
   const labelFase = (fase: string) => fasesProjeto.find(f => f.valor === fase)?.label || fase;
 
   const labelStatusParcela = (status: string) => {
-    const mapa: any = { a_vencer: 'Pendente', vencido: 'Pendente (vencido)', pago_parcial: 'Parcial', pago: 'Pago', cancelado: 'Cancelado' };
+    const mapa: any = { a_vencer: 'A Vencer', vencido: 'Vencido', pago_parcial: 'Pago Parcial', pago: 'Pago', cancelado: 'Cancelado' };
     return mapa[status] || status;
   };
 
@@ -178,52 +119,6 @@ export default function App() {
   const corIndicador = (indicador: string) => {
     const mapa: any = { verde: 'bg-green-500', amarelo: 'bg-yellow-400', vermelho: 'bg-red-500' };
     return mapa[indicador] || 'bg-slate-300';
-  };
-
-  const indicadorPorStatusDocumento = (status: string) => {
-    const mapa: any = {
-      concluido: 'verde',
-      em_andamento: 'amarelo',
-      nao_elaborado: 'vermelho',
-      nao_aplicavel: 'cinza'
-    };
-    return mapa[status] || 'vermelho';
-  };
-
-  const corIndicadorDocumento = (status: string) => {
-    const mapa: any = {
-      concluido: 'bg-green-500',
-      em_andamento: 'bg-yellow-400',
-      nao_elaborado: 'bg-red-500',
-      nao_aplicavel: 'bg-slate-300'
-    };
-    return mapa[status] || 'bg-red-500';
-  };
-
-  const classeStatusDocumento = (status: string) => {
-    const mapa: any = {
-      concluido: 'bg-green-100 text-green-700 border-green-200',
-      em_andamento: 'bg-amber-100 text-amber-700 border-amber-200',
-      nao_elaborado: 'bg-red-100 text-red-700 border-red-200',
-      nao_aplicavel: 'bg-slate-100 text-slate-500 border-slate-200'
-    };
-    return mapa[status] || 'bg-red-100 text-red-700 border-red-200';
-  };
-
-  const classeStatusCronograma = (status: string) => {
-    const mapa: any = {
-      concluido: 'bg-green-100 text-green-700 border-green-200',
-      em_andamento: 'bg-amber-100 text-amber-700 border-amber-200',
-      nao_iniciado: 'bg-blue-50 text-blue-700 border-blue-100',
-      atrasado: 'bg-red-100 text-red-700 border-red-200',
-      cancelado: 'bg-slate-100 text-slate-500 border-slate-200'
-    };
-    return mapa[status] || 'bg-blue-50 text-blue-700 border-blue-100';
-  };
-
-  const labelStatusCronograma = (status: string) => {
-    const mapa: any = { nao_iniciado: 'Não Iniciado', em_andamento: 'Em Andamento', concluido: 'Concluído', atrasado: 'Atrasado', cancelado: 'Cancelado' };
-    return mapa[status] || status;
   };
 
   const formatarTamanhoArquivo = (bytes: any) => {
@@ -641,114 +536,27 @@ export default function App() {
   };
 
   const salvarParcelaCliente = async () => {
-    const dataPrevistaISO = dataBRParaISO(novaParcelaCliente.data_prevista || '');
-
-    if (!obraEcoSelecionada || !novaParcelaCliente.descricao || !dataPrevistaISO || !novaParcelaCliente.valor_previsto) {
-      return mostrarAviso('Preencha descrição, data prevista válida e valor previsto da parcela.', 'erro');
+    if (!obraEcoSelecionada || !novaParcelaCliente.descricao || !novaParcelaCliente.data_prevista || !novaParcelaCliente.valor_previsto) {
+      return mostrarAviso('Preencha descrição, data prevista e valor previsto da parcela.', 'erro');
     }
-
     setCarregando(true);
     try {
       const payload = {
         id_obra: obraEcoSelecionada.id,
         descricao: novaParcelaCliente.descricao,
-        data_prevista: dataPrevistaISO,
+        data_prevista: novaParcelaCliente.data_prevista,
         valor_previsto: Number(novaParcelaCliente.valor_previsto) || 0,
-        data_realizada: null,
-        valor_realizado: 0,
-        status: 'a_vencer',
+        data_realizada: novaParcelaCliente.data_realizada || null,
+        valor_realizado: Number(novaParcelaCliente.valor_realizado) || 0,
+        status: novaParcelaCliente.status || 'a_vencer',
         observacao: novaParcelaCliente.observacao || null
       };
-
       const { error } = await supabase.from('parcelas_cliente').insert([payload]);
       if (error) throw error;
-
-      setNovaParcelaCliente({ descricao: '', data_prevista: '', valor_previsto: '', observacao: '' });
+      setNovaParcelaCliente({ descricao: '', data_prevista: '', valor_previsto: '', data_realizada: '', valor_realizado: '', status: 'a_vencer', observacao: '' });
       mostrarAviso('Parcela adicionada!');
       buscarParcelasCliente(obraEcoSelecionada.id);
-    } catch (error: any) {
-      mostrarAviso(error.message, 'erro');
-    } finally {
-      setCarregando(false);
-    }
-  };
-
-  const abrirLiquidacaoParcela = (parcela: any) => {
-    setParcelaParaLiquidar(parcela);
-    setLiquidacaoParcela({
-      data_recebimento: isoParaDataBR(parcela.data_realizada) || isoParaDataBR(dataHojeISO()),
-      valor_recebido: parcela.valor_realizado && Number(parcela.valor_realizado) > 0 ? String(parcela.valor_realizado) : String(parcela.valor_previsto || '')
-    });
-  };
-
-  const fecharLiquidacaoParcela = () => {
-    setParcelaParaLiquidar(null);
-    setLiquidacaoParcela({ data_recebimento: '', valor_recebido: '' });
-  };
-
-  const confirmarLiquidacaoParcela = async () => {
-    if (!parcelaParaLiquidar || !obraEcoSelecionada) return;
-
-    const dataRealizadaISO = dataBRParaISO(liquidacaoParcela.data_recebimento || '');
-    const valorRecebido = Number(liquidacaoParcela.valor_recebido) || 0;
-    const valorPrevisto = Number(parcelaParaLiquidar.valor_previsto) || 0;
-
-    if (!dataRealizadaISO) return mostrarAviso('Informe uma data de recebimento válida.', 'erro');
-    if (valorRecebido <= 0) return mostrarAviso('Informe um valor recebido maior que zero.', 'erro');
-
-    const novoStatus = valorRecebido >= valorPrevisto ? 'pago' : 'pago_parcial';
-
-    setCarregando(true);
-    try {
-      const payload = {
-        data_realizada: dataRealizadaISO,
-        valor_realizado: valorRecebido,
-        status: novoStatus
-      };
-
-      const { error } = await supabase
-        .from('parcelas_cliente')
-        .update(payload)
-        .eq('id', parcelaParaLiquidar.id);
-
-      if (error) throw error;
-
-      mostrarAviso(novoStatus === 'pago' ? 'Parcela liquidada!' : 'Recebimento parcial registrado!');
-      fecharLiquidacaoParcela();
-      buscarParcelasCliente(obraEcoSelecionada.id);
-    } catch (error: any) {
-      mostrarAviso(error.message, 'erro');
-    } finally {
-      setCarregando(false);
-    }
-  };
-
-  const reabrirParcelaCliente = async (parcela: any) => {
-    if (!parcela || !obraEcoSelecionada) return;
-    if (!window.confirm(`Deseja reabrir a parcela "${parcela.descricao}"? A data de recebimento e o valor recebido serão zerados.`)) return;
-
-    setCarregando(true);
-    try {
-      const statusBase = parcela.data_prevista && parcela.data_prevista < dataHojeISO() ? 'vencido' : 'a_vencer';
-
-      const { error } = await supabase
-        .from('parcelas_cliente')
-        .update({
-          data_realizada: null,
-          valor_realizado: 0,
-          status: statusBase
-        })
-        .eq('id', parcela.id);
-
-      if (error) throw error;
-
-      mostrarAviso('Parcela reaberta com sucesso!');
-      buscarParcelasCliente(obraEcoSelecionada.id);
-    } catch (error: any) {
-      mostrarAviso(error.message, 'erro');
-    } finally {
-      setCarregando(false);
-    }
+    } catch (error: any) { mostrarAviso(error.message, 'erro'); } finally { setCarregando(false); }
   };
 
   const atualizarParcelaCliente = async (id: any, campo: string, valor: any) => {
@@ -768,8 +576,8 @@ export default function App() {
         id_obra: obraEcoSelecionada.id,
         item: novoDocumentoProjeto.item,
         detalhes: novoDocumentoProjeto.detalhes || null,
-        status: 'nao_elaborado',
-        indicador: 'vermelho',
+        status: novoDocumentoProjeto.status || 'nao_elaborado',
+        indicador: novoDocumentoProjeto.indicador || 'vermelho',
         data_prevista: novoDocumentoProjeto.data_prevista || null,
         data_conclusao: novoDocumentoProjeto.data_conclusao || null,
         observacao: novoDocumentoProjeto.observacao || null
@@ -785,32 +593,10 @@ export default function App() {
   const atualizarDocumentoProjeto = async (id: any, campo: string, valor: any) => {
     try {
       const payload: any = { [campo]: valor || null };
-
-      if (campo === 'status') {
-        payload.indicador = indicadorPorStatusDocumento(valor);
-        if (valor === 'concluido') payload.data_conclusao = dataHojeISO();
-        if (valor !== 'concluido') payload.data_conclusao = null;
-      }
-
       const { error } = await supabase.from('documentos_projeto').update(payload).eq('id', id);
       if (error) throw error;
-      setDocumentosProjeto(prev => prev.map(d => d.id === id ? { ...d, ...payload } : d));
+      setDocumentosProjeto(prev => prev.map(d => d.id === id ? { ...d, [campo]: payload[campo] } : d));
     } catch (error: any) { mostrarAviso(error.message, 'erro'); }
-  };
-
-  const iniciarDocumentoProjeto = async (doc: any) => {
-    await atualizarDocumentoProjeto(doc.id, 'status', 'em_andamento');
-    mostrarAviso('Documento marcado como em andamento.');
-  };
-
-  const concluirDocumentoProjeto = async (doc: any) => {
-    await atualizarDocumentoProjeto(doc.id, 'status', 'concluido');
-    mostrarAviso('Documento concluído.');
-  };
-
-  const reabrirDocumentoProjeto = async (doc: any) => {
-    await atualizarDocumentoProjeto(doc.id, 'status', 'em_andamento');
-    mostrarAviso('Documento reaberto.');
   };
 
   const atualizarCronogramaObra = async (id: any, campo: string, valor: any) => {
@@ -819,44 +605,6 @@ export default function App() {
       const { error } = await supabase.from('cronograma_obra').update(payload).eq('id', id);
       if (error) throw error;
       setCronogramaObra(prev => prev.map(c => c.id === id ? { ...c, [campo]: payload[campo] } : c));
-    } catch (error: any) { mostrarAviso(error.message, 'erro'); }
-  };
-
-  const iniciarFaseCronograma = async (fase: any) => {
-    try {
-      const payload: any = {
-        inicio_real: fase.inicio_real || dataHojeISO(),
-        status: 'em_andamento',
-        fim_real: null
-      };
-      const { error } = await supabase.from('cronograma_obra').update(payload).eq('id', fase.id);
-      if (error) throw error;
-      setCronogramaObra(prev => prev.map(c => c.id === fase.id ? { ...c, ...payload } : c));
-      mostrarAviso('Fase iniciada.');
-    } catch (error: any) { mostrarAviso(error.message, 'erro'); }
-  };
-
-  const finalizarFaseCronograma = async (fase: any) => {
-    try {
-      const payload: any = {
-        inicio_real: fase.inicio_real || dataHojeISO(),
-        fim_real: dataHojeISO(),
-        status: 'concluido'
-      };
-      const { error } = await supabase.from('cronograma_obra').update(payload).eq('id', fase.id);
-      if (error) throw error;
-      setCronogramaObra(prev => prev.map(c => c.id === fase.id ? { ...c, ...payload } : c));
-      mostrarAviso('Fase concluída.');
-    } catch (error: any) { mostrarAviso(error.message, 'erro'); }
-  };
-
-  const reabrirFaseCronograma = async (fase: any) => {
-    try {
-      const payload: any = { fim_real: null, status: 'em_andamento' };
-      const { error } = await supabase.from('cronograma_obra').update(payload).eq('id', fase.id);
-      if (error) throw error;
-      setCronogramaObra(prev => prev.map(c => c.id === fase.id ? { ...c, ...payload } : c));
-      mostrarAviso('Fase reaberta.');
     } catch (error: any) { mostrarAviso(error.message, 'erro'); }
   };
 
@@ -1047,21 +795,18 @@ export default function App() {
   const editarObra = (obra: any) => {
     setNovaObra({
       id: obra.id,
-      codigo_externo: obra.codigo_externo || '',
-      nome: obra.nome || '',
+      codigo_externo: obra.codigo_externo,
+      nome: obra.nome,
       descricao: obra.descricao || '',
       fase_atual: obra.fase_atual || 'processo_inicial',
-      data_inicio: obra.data_inicio || '',
-      data_previsao_fim: obra.data_previsao_fim || '',
-      id_responsavel: obra.id_responsavel || '',
-      valor_produto: obra.valor_produto ?? '',
-      valor_servico: obra.valor_servico ?? '',
+      data_inicio: obra.data_inicio,
+      data_previsao_fim: obra.data_previsao_fim,
+      id_responsavel: obra.id_responsavel,
+      valor_produto: obra.valor_produto,
+      valor_servico: obra.valor_servico,
       observacoes: obra.observacoes || ''
     });
-    setTelaAtiva('cadastros_obras');
-    setTimeout(() => {
-      document.getElementById('form-cadastro-obra')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const cancelarEdicaoObra = () => {
@@ -1162,27 +907,12 @@ export default function App() {
 
   const totalPrevistoParcelas = parcelasCliente.reduce((acc, curr) => acc + Number(curr.valor_previsto || 0), 0);
   const totalRealizadoParcelas = parcelasCliente.reduce((acc, curr) => acc + Number(curr.valor_realizado || 0), 0);
-  const saldoReceberParcelas = totalVendaGeral - totalRealizadoParcelas;
-  const valorRestanteDistribuir = totalVendaGeral - totalPrevistoParcelas;
-  const valorRestanteDistribuirPositivo = Math.max(valorRestanteDistribuir, 0);
-  const valorDistribuidoExcedente = Math.max(totalPrevistoParcelas - totalVendaGeral, 0);
-  const parcelasVencidas = parcelasCliente.filter(p => calcularStatusParcela(p) === 'pendente' && p.data_prevista && p.data_prevista < dataHojeISO()).length;
+  const saldoReceberParcelas = totalPrevistoParcelas - totalRealizadoParcelas;
+  const parcelasVencidas = parcelasCliente.filter(p => p.status === 'vencido' || (p.status !== 'pago' && p.data_prevista && p.data_prevista < new Date().toISOString().split('T')[0])).length;
   const documentosConcluidos = documentosProjeto.filter(d => d.status === 'concluido').length;
   const percentualDocumentos = documentosProjeto.length > 0 ? Math.round((documentosConcluidos / documentosProjeto.length) * 100) : 0;
   const fasesConcluidas = cronogramaObra.filter(c => c.status === 'concluido').length;
   const percentualCronograma = cronogramaObra.length > 0 ? Math.round((fasesConcluidas / cronogramaObra.length) * 100) : 0;
-
-  useEffect(() => {
-    if (telaAtiva !== 'painel_obra' || abaPainelObra !== 'financeiro') return;
-    if (!obraEcoSelecionada) return;
-    if (novaParcelaCliente.valor_previsto !== '') return;
-    if (valorRestanteDistribuirPositivo <= 0) return;
-
-    setNovaParcelaCliente((prev: any) => ({
-      ...prev,
-      valor_previsto: String(valorRestanteDistribuirPositivo.toFixed(2))
-    }));
-  }, [telaAtiva, abaPainelObra, obraEcoSelecionada?.id, valorRestanteDistribuirPositivo, novaParcelaCliente.valor_previsto]);
 
   if (carregandoAuth) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-[#2A6377]" size={48} /></div>;
 
@@ -1306,60 +1036,6 @@ export default function App() {
                {tarefaSelecionada.status === 'pendente' && (<button onClick={() => { atualizarStatusTarefa(tarefaSelecionada.id, 'em_andamento'); setTarefaSelecionada(null); }} className="bg-[#2A6377] text-white px-6 py-3 md:py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-[#1e4857] transition shadow-md flex-1 sm:flex-none justify-center"><Play size={18}/> Iniciar Tarefa</button>)}
                {tarefaSelecionada.status === 'em_andamento' && (<button onClick={() => { atualizarStatusTarefa(tarefaSelecionada.id, 'concluida'); setTarefaSelecionada(null); }} className="bg-green-600 text-white px-6 py-3 md:py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-green-700 transition shadow-md flex-1 sm:flex-none justify-center"><Check size={18} strokeWidth={3}/> Concluir Tarefa</button>)}
                {tarefaSelecionada.status === 'concluida' && (<div className="flex items-center justify-center gap-2 text-green-600 font-bold px-4 py-3 md:py-2 bg-green-100 rounded-lg flex-1 sm:flex-none"><CheckCircle2 size={18}/> Concluída</div>)}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {parcelaParaLiquidar && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[88] flex items-center justify-center p-4" onClick={fecharLiquidacaoParcela}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-slate-100 flex justify-between items-start gap-4">
-              <div>
-                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><DollarSign className="text-[#2A6377]" size={22}/> Liquidar Parcela</h2>
-                <p className="text-sm text-slate-500 mt-1">{parcelaParaLiquidar.descricao}</p>
-              </div>
-              <button onClick={fecharLiquidacaoParcela} className="text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full"><X size={18}/></button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <div className="bg-slate-50 border rounded-xl p-4 text-sm grid grid-cols-2 gap-3">
-                <div><p className="text-xs text-slate-400 font-bold uppercase">Vencimento</p><p className="font-bold text-slate-700">{formatarDataSegura(parcelaParaLiquidar.data_prevista)}</p></div>
-                <div><p className="text-xs text-slate-400 font-bold uppercase">Valor previsto</p><p className="font-bold text-slate-700">{formatarMoeda(parcelaParaLiquidar.valor_previsto)}</p></div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold mb-1 text-slate-700">Data de recebimento</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="dd/mm/aaaa"
-                  maxLength={10}
-                  value={liquidacaoParcela.data_recebimento}
-                  onChange={e => setLiquidacaoParcela({ ...liquidacaoParcela, data_recebimento: formatarEntradaDataBR(e.target.value) })}
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold mb-1 text-slate-700">Valor recebido</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={liquidacaoParcela.valor_recebido}
-                  onChange={e => setLiquidacaoParcela({ ...liquidacaoParcela, valor_recebido: e.target.value })}
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                />
-                <p className="text-xs text-slate-400 mt-2">Se o valor recebido for menor que o previsto, o sistema marcará como parcial.</p>
-              </div>
-            </div>
-
-            <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-              <button onClick={fecharLiquidacaoParcela} className="px-5 py-2 bg-white border rounded-lg font-medium text-slate-600 hover:bg-slate-100 transition">Cancelar</button>
-              <button onClick={confirmarLiquidacaoParcela} disabled={carregando} className="px-5 py-2 bg-[#2A6377] text-white rounded-lg font-bold flex items-center gap-2 hover:bg-[#1e4857] transition disabled:opacity-50">
-                {carregando ? <Loader2 className="animate-spin" size={16}/> : <CheckCircle2 size={16}/>} Confirmar
-              </button>
             </div>
           </div>
         </div>
@@ -1570,9 +1246,8 @@ export default function App() {
               </div>
             </header>
 
-            <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur pb-3 mb-3">
-              <div className="bg-white rounded-xl border shadow-sm overflow-visible">
-                <div className="flex flex-wrap">
+            <div className="bg-white rounded-xl border shadow-sm mb-6 overflow-x-auto">
+              <div className="flex min-w-max">
                 {[
                   { id: 'resumo', label: 'Resumo', icon: LayoutDashboard },
                   { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
@@ -1582,12 +1257,11 @@ export default function App() {
                 ].map(aba => {
                   const IconeAba = aba.icon;
                   return (
-                    <button key={aba.id} onClick={() => setAbaPainelObra(aba.id)} className={`shrink-0 px-4 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition ${abaPainelObra === aba.id ? 'border-[#2A6377] text-[#2A6377] bg-[#2A6377]/5' : 'border-transparent text-slate-500 hover:text-[#2A6377] hover:bg-slate-50'}`}>
+                    <button key={aba.id} onClick={() => setAbaPainelObra(aba.id)} className={`px-4 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition ${abaPainelObra === aba.id ? 'border-[#2A6377] text-[#2A6377] bg-[#2A6377]/5' : 'border-transparent text-slate-500 hover:text-[#2A6377] hover:bg-slate-50'}`}>
                       <IconeAba size={16}/> {aba.label}
                     </button>
                   );
                 })}
-                </div>
               </div>
             </div>
 
@@ -1595,7 +1269,7 @@ export default function App() {
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-blue-500"><p className="text-xs text-slate-400 font-bold uppercase">Venda Total</p><p className="text-2xl font-bold text-slate-800 mt-1">{formatarMoeda(totalVendaGeral)}</p></div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-emerald-500"><p className="text-xs text-slate-400 font-bold uppercase">Recebido</p><p className="text-2xl font-bold text-emerald-700 mt-1">{formatarMoeda(totalRealizadoParcelas)}</p></div>
+                  <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-emerald-500"><p className="text-xs text-slate-400 font-bold uppercase">Recebido</p><p className="text-2xl font-bold text-emerald-700 mt-1">{formatarMoeda(totalRealizadoParcelas || totalFaturadoGeral)}</p></div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-amber-500"><p className="text-xs text-slate-400 font-bold uppercase">Cronograma</p><p className="text-2xl font-bold text-amber-700 mt-1">{percentualCronograma}%</p></div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-red-500"><p className="text-xs text-slate-400 font-bold uppercase">Parcelas Vencidas</p><p className="text-2xl font-bold text-red-600 mt-1">{parcelasVencidas}</p></div>
                 </div>
@@ -1611,7 +1285,7 @@ export default function App() {
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between items-center border-b pb-2"><span>Documentos concluídos</span><span className="font-bold">{documentosConcluidos}/{documentosProjeto.length} ({percentualDocumentos}%)</span></div>
                       <div className="flex justify-between items-center border-b pb-2"><span>Fases concluídas</span><span className="font-bold">{fasesConcluidas}/{cronogramaObra.length} ({percentualCronograma}%)</span></div>
-                      <div className="flex justify-between items-center border-b pb-2"><span>Saldo a receber</span><span className="font-bold text-amber-700">{formatarMoeda(saldoReceberParcelas)}</span></div>
+                      <div className="flex justify-between items-center border-b pb-2"><span>Saldo a receber</span><span className="font-bold text-amber-700">{formatarMoeda(saldoReceberParcelas || saldoGeral)}</span></div>
                       <div className="flex justify-between items-center"><span>Fase atual</span><span className="font-bold text-[#2A6377]">{labelFase(obraEcoSelecionada.fase_atual || 'processo_inicial')}</span></div>
                     </div>
                   </div>
@@ -1621,11 +1295,10 @@ export default function App() {
 
             {abaPainelObra === 'financeiro' && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="bg-white p-5 rounded-xl shadow-sm border"><p className="text-xs text-slate-400 font-bold uppercase">Venda Total Prevista</p><p className="text-2xl font-bold text-slate-800">{formatarMoeda(totalVendaGeral)}</p></div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border"><p className="text-xs text-slate-400 font-bold uppercase">Total Recebido</p><p className="text-2xl font-bold text-emerald-700">{formatarMoeda(totalRealizadoParcelas)}</p></div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border"><p className="text-xs text-slate-400 font-bold uppercase">Saldo a Receber</p><p className="text-2xl font-bold text-amber-700">{formatarMoeda(saldoReceberParcelas)}</p></div>
-                  <div className={`bg-white p-5 rounded-xl shadow-sm border ${valorDistribuidoExcedente > 0 ? 'border-red-200 bg-red-50' : ''}`}><p className="text-xs text-slate-400 font-bold uppercase">Falta Distribuir</p><p className={`text-2xl font-bold ${valorDistribuidoExcedente > 0 ? 'text-red-600' : 'text-blue-700'}`}>{valorDistribuidoExcedente > 0 ? `-${formatarMoeda(valorDistribuidoExcedente)}` : formatarMoeda(valorRestanteDistribuirPositivo)}</p></div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white p-5 rounded-xl shadow-sm border"><p className="text-xs text-slate-400 font-bold uppercase">Total Previsto</p><p className="text-2xl font-bold text-slate-800">{formatarMoeda(totalPrevistoParcelas || totalVendaGeral)}</p></div>
+                  <div className="bg-white p-5 rounded-xl shadow-sm border"><p className="text-xs text-slate-400 font-bold uppercase">Total Realizado</p><p className="text-2xl font-bold text-emerald-700">{formatarMoeda(totalRealizadoParcelas)}</p></div>
+                  <div className="bg-white p-5 rounded-xl shadow-sm border"><p className="text-xs text-slate-400 font-bold uppercase">Saldo</p><p className="text-2xl font-bold text-amber-700">{formatarMoeda(saldoReceberParcelas)}</p></div>
                 </div>
 
                 {isAdmin && (
@@ -1633,36 +1306,27 @@ export default function App() {
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Plus size={18}/> Nova Parcela / Recebimento</h3>
                     <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
                       <input placeholder="Descrição" value={novaParcelaCliente.descricao} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, descricao: e.target.value})} className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
-                      <input type="text" inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10} value={novaParcelaCliente.data_prevista} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, data_prevista: formatarEntradaDataBR(e.target.value)})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
-                      <input type="number" step="0.01" min="0" placeholder="Valor previsto" value={novaParcelaCliente.valor_previsto} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, valor_previsto: e.target.value})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
-                      <input placeholder="Observação" value={novaParcelaCliente.observacao || ''} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, observacao: e.target.value})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
+                      <input type="date" value={novaParcelaCliente.data_prevista} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, data_prevista: e.target.value})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
+                      <input type="number" placeholder="Valor previsto" value={novaParcelaCliente.valor_previsto} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, valor_previsto: e.target.value})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
+                      <select value={novaParcelaCliente.status} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, status: e.target.value})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377] bg-white"><option value="a_vencer">A Vencer</option><option value="vencido">Vencido</option><option value="pago_parcial">Pago Parcial</option><option value="pago">Pago</option><option value="cancelado">Cancelado</option></select>
                       <button onClick={salvarParcelaCliente} disabled={carregando} className="bg-[#2A6377] text-white rounded-lg font-bold flex items-center justify-center gap-2"><Save size={16}/> Salvar</button>
-                    </div>
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                      <div className="bg-slate-50 border rounded-lg p-3"><span className="text-slate-400 font-bold uppercase text-xs block">Venda total</span><span className="font-bold text-slate-700">{formatarMoeda(totalVendaGeral)}</span></div>
-                      <div className="bg-slate-50 border rounded-lg p-3"><span className="text-slate-400 font-bold uppercase text-xs block">Já distribuído</span><span className="font-bold text-slate-700">{formatarMoeda(totalPrevistoParcelas)}</span></div>
-                      <div className={`${valorDistribuidoExcedente > 0 ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-100'} border rounded-lg p-3`}><span className="text-slate-400 font-bold uppercase text-xs block">Falta distribuir</span><span className={`font-bold ${valorDistribuidoExcedente > 0 ? 'text-red-600' : 'text-blue-700'}`}>{valorDistribuidoExcedente > 0 ? `Excedeu ${formatarMoeda(valorDistribuidoExcedente)}` : formatarMoeda(valorRestanteDistribuirPositivo)}</span></div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 mt-3">
-                      <button type="button" onClick={() => setNovaParcelaCliente({ ...novaParcelaCliente, valor_previsto: String(valorRestanteDistribuirPositivo.toFixed(2)) })} className="text-xs font-bold text-[#2A6377] bg-[#2A6377]/10 px-3 py-2 rounded-lg hover:bg-[#2A6377]/20 transition">Usar saldo restante</button>
-                      <p className="text-xs text-slate-400">A data é digitada no formato dd/mm/aaaa para evitar o problema do seletor nativo de data no StackBlitz.</p>
                     </div>
                   </div>
                 )}
 
-                <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
+                <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                   <div className="p-4 border-b"><h3 className="font-bold text-lg">Pagamentos Cliente</h3></div>
-                  <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-sm min-w-[920px]"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3 text-left">Item</th><th className="p-3">Data Prevista</th><th className="p-3">Valor Previsto</th><th className="p-3">Data Recebimento</th><th className="p-3">Valor Recebido</th><th className="p-3">Status</th>{isAdmin && <th className="p-3">Ações</th>}</tr></thead><tbody>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[900px]"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3 text-left">Item</th><th className="p-3">Data Prevista</th><th className="p-3">Valor Previsto</th><th className="p-3">Data Realizada</th><th className="p-3">Valor Realizado</th><th className="p-3">Status</th>{isAdmin && <th className="p-3"></th>}</tr></thead><tbody>
                       {parcelasCliente.length === 0 ? <tr><td colSpan={7} className="p-6 text-center text-slate-500">Nenhuma parcela cadastrada.</td></tr> : parcelasCliente.map(parcela => (
                         <tr key={parcela.id} className="border-t hover:bg-slate-50">
-                          <td className="p-3 font-medium"><div>{parcela.descricao}</div>{parcela.observacao && <div className="text-xs text-slate-400 font-normal mt-1">{parcela.observacao}</div>}</td>
+                          <td className="p-3 font-medium">{parcela.descricao}</td>
                           <td className="p-3 text-center">{formatarDataSegura(parcela.data_prevista)}</td>
                           <td className="p-3 text-center font-bold">{formatarMoeda(parcela.valor_previsto)}</td>
-                          <td className="p-3 text-center">{parcela.data_realizada ? formatarDataSegura(parcela.data_realizada) : '-'}</td>
-                          <td className="p-3 text-center font-medium">{Number(parcela.valor_realizado || 0) > 0 ? formatarMoeda(parcela.valor_realizado) : '-'}</td>
-                          <td className="p-3 text-center"><span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusParcela(parcela)}`}>{labelStatusParcelaCalculado(parcela)}</span></td>
-                          {isAdmin && <td className="p-3 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => abrirLiquidacaoParcela(parcela)} className="px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-xs font-bold hover:bg-[#1e4857] transition">{Number(parcela.valor_realizado || 0) > 0 ? 'Editar' : 'Liquidar'}</button>{Number(parcela.valor_realizado || 0) > 0 && <button onClick={() => reabrirParcelaCliente(parcela)} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition">Reabrir</button>}<button onClick={() => deletarRegistroPMIS('parcelas_cliente', parcela.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></div></td>}
+                          <td className="p-3 text-center">{isAdmin ? <input type="date" value={parcela.data_realizada || ''} onChange={e => atualizarParcelaCliente(parcela.id, 'data_realizada', e.target.value)} className="border rounded p-1"/> : formatarDataSegura(parcela.data_realizada)}</td>
+                          <td className="p-3 text-center">{isAdmin ? <input type="number" value={parcela.valor_realizado || ''} onChange={e => atualizarParcelaCliente(parcela.id, 'valor_realizado', e.target.value)} className="border rounded p-1 w-28"/> : formatarMoeda(parcela.valor_realizado)}</td>
+                          <td className="p-3 text-center">{isAdmin ? <select value={parcela.status} onChange={e => atualizarParcelaCliente(parcela.id, 'status', e.target.value)} className="border rounded p-1 bg-white"><option value="a_vencer">A Vencer</option><option value="vencido">Vencido</option><option value="pago_parcial">Pago Parcial</option><option value="pago">Pago</option><option value="cancelado">Cancelado</option></select> : labelStatusParcela(parcela.status)}</td>
+                          {isAdmin && <td className="p-3 text-center"><button onClick={() => deletarRegistroPMIS('parcelas_cliente', parcela.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>}
                         </tr>
                       ))}
                     </tbody></table>
@@ -1672,65 +1336,50 @@ export default function App() {
             )}
 
             {abaPainelObra === 'cronograma' && (
-              <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
+              <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                 <div className="p-4 border-b"><h3 className="font-bold text-lg flex items-center gap-2"><Calendar size={18} className="text-[#2A6377]"/> Cronograma Resumo</h3></div>
-                <div className="overflow-x-auto max-w-full">
-                  <table className="w-full text-sm min-w-[1000px]"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3 text-left">Fase</th><th className="p-3">Início Previsto</th><th className="p-3">Prazo Entrega</th><th className="p-3">Início Real</th><th className="p-3">Fim Real</th><th className="p-3">Status</th>{isAdmin && <th className="p-3">Ações</th>}</tr></thead><tbody>
-                    {cronogramaObra.length === 0 ? <tr><td colSpan={isAdmin ? 7 : 6} className="p-6 text-center text-slate-500">Nenhuma fase cadastrada.</td></tr> : cronogramaObra.map(fase => {
-                      const inicioPrevisto = obraEcoSelecionada?.data_inicio || fase.inicio_previsto;
-                      const fimPrevisto = obraEcoSelecionada?.data_previsao_fim || fase.fim_previsto;
-                      return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[900px]"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3 text-left">Fase</th><th className="p-3">Início Prev.</th><th className="p-3">Fim Prev.</th><th className="p-3">Início Real</th><th className="p-3">Fim Real</th><th className="p-3">Status</th></tr></thead><tbody>
+                    {cronogramaObra.length === 0 ? <tr><td colSpan={6} className="p-6 text-center text-slate-500">Nenhuma fase cadastrada.</td></tr> : cronogramaObra.map(fase => (
                       <tr key={fase.id} className="border-t hover:bg-slate-50">
                         <td className="p-3 font-bold text-[#2A6377]">{labelFase(fase.fase)}</td>
-                        <td className="p-3 text-center text-slate-700">{formatarDataSegura(inicioPrevisto)}</td>
-                        <td className="p-3 text-center text-slate-700">{formatarDataSegura(fimPrevisto)}</td>
-                        <td className="p-3 text-center text-slate-700">{fase.inicio_real ? formatarDataSegura(fase.inicio_real) : '-'}</td>
-                        <td className="p-3 text-center text-slate-700">{fase.fim_real ? formatarDataSegura(fase.fim_real) : '-'}</td>
-                        <td className="p-3 text-center"><span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusCronograma(fase.status)}`}>{labelStatusCronograma(fase.status)}</span></td>
-                        {isAdmin && (
-                          <td className="p-3 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                              {fase.status === 'nao_iniciado' && <button onClick={() => iniciarFaseCronograma(fase)} className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-200 transition">Iniciar</button>}
-                              {fase.status === 'em_andamento' && <button onClick={() => finalizarFaseCronograma(fase)} className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition">Finalizar</button>}
-                              {fase.status === 'concluido' && <button onClick={() => reabrirFaseCronograma(fase)} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition">Reabrir</button>}
-                              {fase.status === 'atrasado' && <button onClick={() => iniciarFaseCronograma(fase)} className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-200 transition">Iniciar</button>}
-                            </div>
-                          </td>
-                        )}
+                        <td className="p-3 text-center">{isAdmin ? <input type="date" value={fase.inicio_previsto || ''} onChange={e => atualizarCronogramaObra(fase.id, 'inicio_previsto', e.target.value)} className="border rounded p-1"/> : formatarDataSegura(fase.inicio_previsto)}</td>
+                        <td className="p-3 text-center">{isAdmin ? <input type="date" value={fase.fim_previsto || ''} onChange={e => atualizarCronogramaObra(fase.id, 'fim_previsto', e.target.value)} className="border rounded p-1"/> : formatarDataSegura(fase.fim_previsto)}</td>
+                        <td className="p-3 text-center">{isAdmin ? <input type="date" value={fase.inicio_real || ''} onChange={e => atualizarCronogramaObra(fase.id, 'inicio_real', e.target.value)} className="border rounded p-1"/> : formatarDataSegura(fase.inicio_real)}</td>
+                        <td className="p-3 text-center">{isAdmin ? <input type="date" value={fase.fim_real || ''} onChange={e => atualizarCronogramaObra(fase.id, 'fim_real', e.target.value)} className="border rounded p-1"/> : formatarDataSegura(fase.fim_real)}</td>
+                        <td className="p-3 text-center">{isAdmin ? <select value={fase.status} onChange={e => atualizarCronogramaObra(fase.id, 'status', e.target.value)} className="border rounded p-1 bg-white"><option value="nao_iniciado">Não Iniciado</option><option value="em_andamento">Em Andamento</option><option value="concluido">Concluído</option><option value="atrasado">Atrasado</option><option value="cancelado">Cancelado</option></select> : fase.status}</td>
                       </tr>
-                    )})}
+                    ))}
                   </tbody></table>
                 </div>
-                <div className="px-4 py-3 bg-slate-50 border-t text-xs text-slate-500">As datas previstas vêm do cronograma padrão. Quando não houver data na fase, o sistema usa o início e o prazo de entrega cadastrados na obra. As datas reais são preenchidas pelos botões Iniciar e Finalizar.</div>
               </div>
             )}
-
 
             {abaPainelObra === 'documentos' && (
               <div className="space-y-6">
                 {isAdmin && (
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Plus size={18}/> Novo Documento</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
                       <input placeholder="Item" value={novoDocumentoProjeto.item} onChange={e => setNovoDocumentoProjeto({...novoDocumentoProjeto, item: e.target.value})} className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
                       <input placeholder="Detalhes" value={novoDocumentoProjeto.detalhes} onChange={e => setNovoDocumentoProjeto({...novoDocumentoProjeto, detalhes: e.target.value})} className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
+                      <select value={novoDocumentoProjeto.status} onChange={e => setNovoDocumentoProjeto({...novoDocumentoProjeto, status: e.target.value})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377] bg-white"><option value="nao_elaborado">Não Elaborado</option><option value="em_andamento">Em Andamento</option><option value="concluido">Concluído</option><option value="nao_aplicavel">Não Aplicável</option></select>
                       <button onClick={salvarDocumentoProjeto} disabled={carregando} className="bg-[#2A6377] text-white rounded-lg font-bold flex items-center justify-center gap-2"><Save size={16}/> Salvar</button>
                     </div>
-                    <p className="text-xs text-slate-400 mt-3">Novos documentos entram como “Não Elaborado” e indicador vermelho. Use os botões da lista para iniciar ou concluir.</p>
                   </div>
                 )}
 
-                <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
+                <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                   <div className="p-4 border-b"><h3 className="font-bold text-lg flex items-center gap-2"><FileText size={18} className="text-[#2A6377]"/> Documentos do Projeto</h3></div>
-                  <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-sm min-w-[1100px]"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3 text-left">Item</th><th className="p-3 text-left">Detalhes</th><th className="p-3">Status</th><th className="p-3">Indicador</th><th className="p-3">Conclusão</th><th className="p-3 text-left">Anexos</th>{isAdmin && <th className="p-3">Ações</th>}</tr></thead><tbody>
-                      {documentosProjeto.length === 0 ? <tr><td colSpan={isAdmin ? 7 : 6} className="p-6 text-center text-slate-500">Nenhum documento cadastrado.</td></tr> : documentosProjeto.map(doc => (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[1100px]"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3 text-left">Item</th><th className="p-3 text-left">Detalhes</th><th className="p-3">Status</th><th className="p-3">Indicador</th><th className="p-3">Conclusão</th><th className="p-3 text-left">Anexos</th>{isAdmin && <th className="p-3"></th>}</tr></thead><tbody>
+                      {documentosProjeto.length === 0 ? <tr><td colSpan={7} className="p-6 text-center text-slate-500">Nenhum documento cadastrado.</td></tr> : documentosProjeto.map(doc => (
                         <tr key={doc.id} className="border-t hover:bg-slate-50 align-top">
                           <td className="p-3 font-bold">{doc.item}</td>
                           <td className="p-3 text-slate-600 max-w-[260px]">{doc.detalhes}</td>
-                          <td className="p-3 text-center"><span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusDocumento(doc.status)}`}>{labelStatusDocumento(doc.status)}</span></td>
-                          <td className="p-3 text-center"><span className={`inline-block w-5 h-5 rounded-full border-2 border-slate-800 ${corIndicadorDocumento(doc.status)}`}></span></td>
-                          <td className="p-3 text-center text-slate-700">{doc.data_conclusao ? formatarDataSegura(doc.data_conclusao) : '-'}</td>
+                          <td className="p-3 text-center">{isAdmin ? <select value={doc.status} onChange={e => atualizarDocumentoProjeto(doc.id, 'status', e.target.value)} className="border rounded p-1 bg-white"><option value="nao_elaborado">Não Elaborado</option><option value="em_andamento">Em Andamento</option><option value="concluido">Concluído</option><option value="nao_aplicavel">Não Aplicável</option></select> : labelStatusDocumento(doc.status)}</td>
+                          <td className="p-3 text-center">{isAdmin ? <select value={doc.indicador} onChange={e => atualizarDocumentoProjeto(doc.id, 'indicador', e.target.value)} className="border rounded p-1 bg-white"><option value="verde">Verde</option><option value="amarelo">Amarelo</option><option value="vermelho">Vermelho</option></select> : <span className={`inline-block w-5 h-5 rounded-full border-2 border-slate-800 ${corIndicador(doc.indicador)}`}></span>}</td>
+                          <td className="p-3 text-center">{isAdmin ? <input type="date" value={doc.data_conclusao || ''} onChange={e => atualizarDocumentoProjeto(doc.id, 'data_conclusao', e.target.value)} className="border rounded p-1"/> : formatarDataSegura(doc.data_conclusao)}</td>
                           <td className="p-3 min-w-[280px]">
                             <div className="space-y-2">
                               {(arquivosDocumentos[doc.id] || []).length === 0 ? (
@@ -1754,17 +1403,7 @@ export default function App() {
                               )}
                             </div>
                           </td>
-                          {isAdmin && (
-                            <td className="p-3 text-center">
-                              <div className="flex flex-col items-center gap-2">
-                                {doc.status === 'nao_elaborado' && <button onClick={() => iniciarDocumentoProjeto(doc)} className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-200 transition w-24">Iniciar</button>}
-                                {doc.status === 'em_andamento' && <button onClick={() => concluirDocumentoProjeto(doc)} className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition w-24">Concluir</button>}
-                                {doc.status === 'concluido' && <button onClick={() => reabrirDocumentoProjeto(doc)} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition w-24">Reabrir</button>}
-                                {doc.status !== 'concluido' && doc.status !== 'em_andamento' && <button onClick={() => concluirDocumentoProjeto(doc)} className="px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs font-bold hover:bg-green-100 transition w-24">Concluir</button>}
-                                <button onClick={() => deletarRegistroPMIS('documentos_projeto', doc.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
-                              </div>
-                            </td>
-                          )}
+                          {isAdmin && <td className="p-3 text-center"><button onClick={() => deletarRegistroPMIS('documentos_projeto', doc.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>}
                         </tr>
                       ))}
                     </tbody></table>
@@ -1772,7 +1411,6 @@ export default function App() {
                 </div>
               </div>
             )}
-
 
             {abaPainelObra === 'diario_tarefas' && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 items-start">
@@ -1824,7 +1462,7 @@ export default function App() {
         {telaAtiva === 'cadastros_obras' && isAdmin && (
           <div className="animate-in fade-in dash-main-wrapper max-w-5xl">
             <h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8 text-slate-800">Cadastros &rarr; Obras</h2>
-            <form id="form-cadastro-obra" onSubmit={salvarObra} className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 mb-6 md:mb-8 max-w-full">
+            <form onSubmit={salvarObra} className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 mb-6 md:mb-8 max-w-full">
               <div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="text-xl font-bold">{novaObra.id ? 'Editar Obra' : 'Nova Obra'}</h3>{novaObra.id && (<button type="button" onClick={cancelarEdicaoObra} className="text-gray-500 flex items-center gap-1 text-sm"><X size={16} /> Cancelar</button>)}</div>
               {erroObra && (<div className="mb-6 bg-red-50 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3"><AlertTriangle size={20} /> <span className="text-sm">{erroObra}</span></div>)}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 max-w-full">
