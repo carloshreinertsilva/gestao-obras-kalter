@@ -25,6 +25,19 @@ export default function App() {
   const [resumoReal, setResumoReal] = useState<any>({ obrasAtivas: 0, tarefasAtrasadas: 0, tarefasHoje: 0 });
   const [dadosGrafico, setDadosGrafico] = useState<any[]>([]);
   const [feedGlobal, setFeedGlobal] = useState<any[]>([]);
+  const [resumoPMIS, setResumoPMIS] = useState<any>({
+    obrasAtivas: 0,
+    carteiraTotal: 0,
+    recebidoTotal: 0,
+    saldoReceber: 0,
+    valorVencido: 0,
+    documentosPendentes: 0,
+    fasesAtrasadas: 0,
+    tarefasAtrasadas: 0,
+    tarefasHoje: 0
+  });
+  const [statusProjetosPMIS, setStatusProjetosPMIS] = useState<any[]>([]);
+  const [projetosCriticosPMIS, setProjetosCriticosPMIS] = useState<any[]>([]);
   
   const [listaUsuarios, setListaUsuarios] = useState<any[]>([]);
   
@@ -77,6 +90,9 @@ export default function App() {
   const [novoDocumentoProjeto, setNovoDocumentoProjeto] = useState<any>({ item: '', detalhes: '', status: 'nao_elaborado', indicador: 'vermelho', data_prevista: '', data_conclusao: '', observacao: '' });
   const [arquivosDocumentos, setArquivosDocumentos] = useState<any>({});
   const [uploadDocumentoId, setUploadDocumentoId] = useState<string>('');
+  const [faseCronogramaModal, setFaseCronogramaModal] = useState<any>(null);
+  const [acaoCronogramaModal, setAcaoCronogramaModal] = useState<string>('');
+  const [formCronogramaModal, setFormCronogramaModal] = useState<any>({ data: '', observacao: '' });
 
 
   const formatarDataSegura = (dataStr: any) => {
@@ -96,6 +112,10 @@ export default function App() {
   };
 
   const dataHojeISO = () => new Date().toISOString().split('T')[0];
+
+  const selecionarTextoAoFocar = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.currentTarget.select();
+  };
 
   const isoParaDataBR = (dataStr: any) => {
     if (!dataStr) return '';
@@ -411,57 +431,162 @@ export default function App() {
     async function buscarDadosDashboard() {
       if (telaAtiva !== 'dashboard' || !usuarioAtual) return;
       try {
-        let queryObras = supabase.from('obras').select('*', { count: 'exact', head: true }).eq('status', 'em_andamento');
-        let idsMinhasObras: any[] = [];
-        if (!isAdmin) {
-          queryObras = queryObras.eq('id_responsavel', usuarioAtual.id);
-          const { data: obrasUsuario } = await supabase.from('obras').select('id').eq('id_responsavel', usuarioAtual.id); idsMinhasObras = obrasUsuario?.map(o => o.id) || [];
-        }
-        
-        let queryTarefas = supabase.from('tarefas').select('*', { count: 'exact', head: true }).neq('status', 'concluida').lt('data_vencimento', new Date().toISOString().split('T')[0]);
-        let queryGrafico = supabase.from('tarefas').select('status, obras!inner(nome)');
-        
-        if (!isAdmin) {
-          if (idsMinhasObras.length > 0) { 
-            const condicao = `id_responsavel.eq.${usuarioAtual.id},id_obra.in.(${idsMinhasObras.join(',')})`; 
-            queryTarefas = queryTarefas.or(condicao); 
-            queryGrafico = queryGrafico.or(condicao);
-          } else { 
-            queryTarefas = queryTarefas.eq('id_responsavel', usuarioAtual.id); 
-            queryGrafico = queryGrafico.eq('id_responsavel', usuarioAtual.id); 
-          }
-        }
-        
-        const [{ count: obrasCount }, { count: atrasadasCount }] = await Promise.all([queryObras, queryTarefas]);
-        
-        const hoje = new Date().toISOString().split('T')[0];
-        const { count: hojeCount } = await supabase.from('tarefas').select('*', { count: 'exact', head: true }).eq('id_responsavel', usuarioAtual.id).neq('status', 'concluida').eq('data_vencimento', hoje);
+        const hoje = dataHojeISO();
+        const em7Dias = new Date();
+        em7Dias.setDate(em7Dias.getDate() + 7);
+        const em7DiasISO = em7Dias.toISOString().split('T')[0];
 
-        setResumoReal({ 
-          obrasAtivas: obrasCount || 0, 
-          tarefasAtrasadas: atrasadasCount || 0,
-          tarefasHoje: hojeCount || 0
+        let queryObras = supabase
+          .from('obras')
+          .select('id, codigo_externo, nome, fase_atual, data_previsao_fim, id_responsavel, valor_produto, valor_servico, usuarios(nome)')
+          .eq('status', 'em_andamento')
+          .order('created_at', { ascending: false });
+
+        if (!isAdmin) queryObras = queryObras.eq('id_responsavel', usuarioAtual.id);
+
+        const { data: obrasDashboard, error: obrasErro } = await queryObras;
+        if (obrasErro) throw obrasErro;
+
+        const obras = obrasDashboard || [];
+        const idsObras = obras.map((o: any) => o.id);
+
+        let parcelasData: any[] = [];
+        let documentosData: any[] = [];
+        let cronogramaData: any[] = [];
+        let tarefasData: any[] = [];
+
+        if (idsObras.length > 0) {
+          const [parcelasResp, documentosResp, cronogramaResp, tarefasResp] = await Promise.all([
+            supabase.from('parcelas_cliente').select('id_obra, data_prevista, valor_previsto, valor_realizado').in('id_obra', idsObras),
+            supabase.from('documentos_projeto').select('id_obra, item, status').in('id_obra', idsObras),
+            supabase.from('cronograma_obra').select('id_obra, fase, status, inicio_previsto, fim_previsto, inicio_real, fim_real').in('id_obra', idsObras),
+            supabase.from('tarefas').select('id, id_obra, titulo, status, data_vencimento, id_responsavel, obras(codigo_externo, nome)').in('id_obra', idsObras)
+          ]);
+
+          if (parcelasResp.error) throw parcelasResp.error;
+          if (documentosResp.error) throw documentosResp.error;
+          if (cronogramaResp.error) throw cronogramaResp.error;
+          if (tarefasResp.error) throw tarefasResp.error;
+
+          parcelasData = parcelasResp.data || [];
+          documentosData = documentosResp.data || [];
+          cronogramaData = cronogramaResp.data || [];
+          tarefasData = tarefasResp.data || [];
+        }
+
+        const carteiraTotal = obras.reduce((acc: number, obra: any) => acc + Number(obra.valor_produto || 0) + Number(obra.valor_servico || 0), 0);
+        const recebidoTotal = parcelasData.reduce((acc: number, parcela: any) => acc + Number(parcela.valor_realizado || 0), 0);
+        const valorVencido = parcelasData.reduce((acc: number, parcela: any) => {
+          const previsto = Number(parcela.valor_previsto || 0);
+          const recebido = Number(parcela.valor_realizado || 0);
+          const saldo = Math.max(previsto - recebido, 0);
+          if (saldo > 0 && parcela.data_prevista && parcela.data_prevista < hoje) return acc + saldo;
+          return acc;
+        }, 0);
+
+        const documentosPendentes = documentosData.filter((doc: any) => doc.status !== 'concluido' && doc.status !== 'nao_aplicavel').length;
+        const fasesAtrasadas = cronogramaData.filter((fase: any) => fase.status !== 'concluido' && fase.status !== 'cancelado' && fase.fim_previsto && fase.fim_previsto < hoje).length;
+        const tarefasAtrasadas = tarefasData.filter((tarefa: any) => tarefa.status !== 'concluida' && tarefa.data_vencimento && String(tarefa.data_vencimento).split('T')[0] < hoje).length;
+        const tarefasHoje = tarefasData.filter((tarefa: any) => tarefa.status !== 'concluida' && tarefa.data_vencimento && String(tarefa.data_vencimento).split('T')[0] === hoje).length;
+
+        setResumoReal({ obrasAtivas: obras.length, tarefasAtrasadas, tarefasHoje });
+        setResumoPMIS({
+          obrasAtivas: obras.length,
+          carteiraTotal,
+          recebidoTotal,
+          saldoReceber: Math.max(carteiraTotal - recebidoTotal, 0),
+          valorVencido,
+          documentosPendentes,
+          fasesAtrasadas,
+          tarefasAtrasadas,
+          tarefasHoje
         });
 
-        const { data: tarefasGrafico } = await queryGrafico;
-        if (tarefasGrafico) {
-          const mapaGrafico: any = {};
-          tarefasGrafico.forEach((t: any) => {
-            const nomeObra = t.obras?.nome || 'Sem Obra';
-            if (!mapaGrafico[nomeObra]) mapaGrafico[nomeObra] = { nome: nomeObra, tarefas_concluidas: 0, tarefas_pendentes: 0 };
-            if (t.status === 'concluida') mapaGrafico[nomeObra].tarefas_concluidas++; else mapaGrafico[nomeObra].tarefas_pendentes++;
-          }); setDadosGrafico(Object.values(mapaGrafico));
-        }
+        const projetos = obras.map((obra: any) => {
+          const parcelasObra = parcelasData.filter((p: any) => p.id_obra === obra.id);
+          const documentosObra = documentosData.filter((d: any) => d.id_obra === obra.id);
+          const cronogramaObraDashboard = cronogramaData.filter((c: any) => c.id_obra === obra.id);
+          const tarefasObra = tarefasData.filter((t: any) => t.id_obra === obra.id);
+          const totalVenda = Number(obra.valor_produto || 0) + Number(obra.valor_servico || 0);
+          const totalRecebido = parcelasObra.reduce((acc: number, p: any) => acc + Number(p.valor_realizado || 0), 0);
+          const saldoReceber = Math.max(totalVenda - totalRecebido, 0);
+          const valorVencidoObra = parcelasObra.reduce((acc: number, p: any) => {
+            const saldo = Math.max(Number(p.valor_previsto || 0) - Number(p.valor_realizado || 0), 0);
+            if (saldo > 0 && p.data_prevista && p.data_prevista < hoje) return acc + saldo;
+            return acc;
+          }, 0);
+
+          const docsNaoElaborados = documentosObra.filter((d: any) => d.status === 'nao_elaborado').length;
+          const docsEmAndamento = documentosObra.filter((d: any) => d.status === 'em_andamento').length;
+          const docsPendentes = documentosObra.filter((d: any) => d.status !== 'concluido' && d.status !== 'nao_aplicavel').length;
+          const fasesAtrasadasObra = cronogramaObraDashboard.filter((c: any) => c.status !== 'concluido' && c.status !== 'cancelado' && c.fim_previsto && c.fim_previsto < hoje).length;
+          const fasesEmAndamento = cronogramaObraDashboard.filter((c: any) => c.status === 'em_andamento').length;
+          const fasesProximas = cronogramaObraDashboard.filter((c: any) => c.status !== 'concluido' && c.status !== 'cancelado' && c.fim_previsto && c.fim_previsto >= hoje && c.fim_previsto <= em7DiasISO).length;
+          const tarefasAtrasadasObra = tarefasObra.filter((t: any) => t.status !== 'concluida' && t.data_vencimento && String(t.data_vencimento).split('T')[0] < hoje).length;
+          const tarefasProximas = tarefasObra.filter((t: any) => t.status !== 'concluida' && t.data_vencimento && String(t.data_vencimento).split('T')[0] >= hoje && String(t.data_vencimento).split('T')[0] <= em7DiasISO).length;
+
+          const financeiroStatus = valorVencidoObra > 0 ? 'vermelho' : saldoReceber > 0 ? 'amarelo' : 'verde';
+          const documentosStatus = docsNaoElaborados > 0 ? 'vermelho' : docsEmAndamento > 0 || docsPendentes > 0 ? 'amarelo' : 'verde';
+          const cronogramaStatus = fasesAtrasadasObra > 0 ? 'vermelho' : fasesEmAndamento > 0 || fasesProximas > 0 ? 'amarelo' : 'verde';
+          const tarefasStatus = tarefasAtrasadasObra > 0 ? 'vermelho' : tarefasProximas > 0 ? 'amarelo' : 'verde';
+          const score = [financeiroStatus, documentosStatus, cronogramaStatus, tarefasStatus].reduce((acc, status) => acc + (status === 'vermelho' ? 2 : status === 'amarelo' ? 1 : 0), 0);
+          const statusGeral = score >= 4 ? 'vermelho' : score >= 2 ? 'amarelo' : 'verde';
+
+          const motivosCriticos = [
+            valorVencidoObra > 0 ? `Financeiro vencido: ${formatarMoeda(valorVencidoObra)}` : '',
+            docsPendentes > 0 ? `${docsPendentes} documento(s) pendente(s)` : '',
+            fasesAtrasadasObra > 0 ? `${fasesAtrasadasObra} fase(s) atrasada(s)` : '',
+            tarefasAtrasadasObra > 0 ? `${tarefasAtrasadasObra} tarefa(s) atrasada(s)` : ''
+          ].filter(Boolean);
+
+          return {
+            id: obra.id,
+            codigo: obra.codigo_externo,
+            nome: obra.nome,
+            fase: obra.fase_atual,
+            responsavel: obra.usuarios?.nome || 'Sem responsável',
+            totalVenda,
+            totalRecebido,
+            saldoReceber,
+            valorVencido: valorVencidoObra,
+            documentosPendentes: docsPendentes,
+            fasesAtrasadas: fasesAtrasadasObra,
+            tarefasAtrasadas: tarefasAtrasadasObra,
+            financeiroStatus,
+            documentosStatus,
+            cronogramaStatus,
+            tarefasStatus,
+            statusGeral,
+            score,
+            motivosCriticos,
+            obraOriginal: obra
+          };
+        });
+
+        setStatusProjetosPMIS(projetos);
+        setProjetosCriticosPMIS(projetos.filter((p: any) => p.score > 0).sort((a: any, b: any) => b.score - a.score).slice(0, 6));
+
+        const mapaFases: any = {};
+        fasesProjeto.forEach(fase => { mapaFases[fase.valor] = { nome: fase.label, total: 0 }; });
+        obras.forEach((obra: any) => {
+          const fase = obra.fase_atual || 'processo_inicial';
+          if (!mapaFases[fase]) mapaFases[fase] = { nome: labelFase(fase), total: 0 };
+          mapaFases[fase].total++;
+        });
+        setDadosGrafico(Object.values(mapaFases).filter((item: any) => item.total > 0));
 
         try {
           let queryFeed = supabase.from('diario_obra').select('id, texto, created_at, usuarios(nome), obras!inner(codigo_externo, nome)').order('created_at', { ascending: false }).limit(6);
-          if (!isAdmin && idsMinhasObras.length > 0) queryFeed = queryFeed.in('id_obra', idsMinhasObras);
+          if (!isAdmin && idsObras.length > 0) queryFeed = queryFeed.in('id_obra', idsObras);
           const { data: feedData } = await queryFeed;
           if (feedData) setFeedGlobal(feedData);
         } catch (err) { console.log('Tabela diario_obra ausente para o Feed'); }
+      } catch (error) {
+        console.error(error);
+      }
+    }
 
-      } catch (error) { console.error(error); }
-    } buscarDadosDashboard();
+    buscarDadosDashboard();
   }, [telaAtiva, usuarioAtual]);
 
   const buscarHistoricoUnificado = async (idDaObra: any) => {
@@ -822,31 +947,85 @@ export default function App() {
     } catch (error: any) { mostrarAviso(error.message, 'erro'); }
   };
 
-  const iniciarFaseCronograma = async (fase: any) => {
-    try {
-      const payload: any = {
-        inicio_real: fase.inicio_real || dataHojeISO(),
-        status: 'em_andamento',
-        fim_real: null
-      };
-      const { error } = await supabase.from('cronograma_obra').update(payload).eq('id', fase.id);
-      if (error) throw error;
-      setCronogramaObra(prev => prev.map(c => c.id === fase.id ? { ...c, ...payload } : c));
-      mostrarAviso('Fase iniciada.');
-    } catch (error: any) { mostrarAviso(error.message, 'erro'); }
+  const abrirModalCronograma = (fase: any, acao: string) => {
+    setFaseCronogramaModal(fase);
+    setAcaoCronogramaModal(acao);
+
+    if (acao === 'editar_previsto') {
+      setFormCronogramaModal({
+        inicio_previsto: isoParaDataBR(fase.inicio_previsto || obraEcoSelecionada?.data_inicio || ''),
+        fim_previsto: isoParaDataBR(fase.fim_previsto || obraEcoSelecionada?.data_previsao_fim || ''),
+        observacao: fase.observacao || ''
+      });
+      return;
+    }
+
+    setFormCronogramaModal({
+      data: isoParaDataBR(acao === 'finalizar' ? (fase.fim_real || dataHojeISO()) : (fase.inicio_real || dataHojeISO())),
+      observacao: fase.observacao || ''
+    });
   };
 
-  const finalizarFaseCronograma = async (fase: any) => {
+  const fecharModalCronograma = () => {
+    setFaseCronogramaModal(null);
+    setAcaoCronogramaModal('');
+    setFormCronogramaModal({ data: '', observacao: '' });
+  };
+
+  const salvarAcaoCronograma = async () => {
+    if (!faseCronogramaModal) return;
+
     try {
       const payload: any = {
-        inicio_real: fase.inicio_real || dataHojeISO(),
-        fim_real: dataHojeISO(),
-        status: 'concluido'
+        observacao: formCronogramaModal.observacao || null
       };
-      const { error } = await supabase.from('cronograma_obra').update(payload).eq('id', fase.id);
+
+      if (acaoCronogramaModal === 'editar_previsto') {
+        const inicioPrevistoISO = dataBRParaISO(formCronogramaModal.inicio_previsto || '');
+        const fimPrevistoISO = dataBRParaISO(formCronogramaModal.fim_previsto || '');
+
+        if (!inicioPrevistoISO || !fimPrevistoISO) {
+          mostrarAviso('Informe início previsto e prazo de entrega no formato dd/mm/aaaa.', 'erro');
+          return;
+        }
+
+        if (inicioPrevistoISO > fimPrevistoISO) {
+          mostrarAviso('O início previsto não pode ser maior que o prazo de entrega.', 'erro');
+          return;
+        }
+
+        payload.inicio_previsto = inicioPrevistoISO;
+        payload.fim_previsto = fimPrevistoISO;
+      } else {
+        const dataISO = dataBRParaISO(formCronogramaModal.data || '');
+        if (!dataISO) {
+          mostrarAviso('Informe uma data válida no formato dd/mm/aaaa.', 'erro');
+          return;
+        }
+
+        if (acaoCronogramaModal === 'iniciar') {
+          payload.inicio_real = dataISO;
+          payload.fim_real = null;
+          payload.status = 'em_andamento';
+        }
+
+        if (acaoCronogramaModal === 'finalizar') {
+          payload.inicio_real = faseCronogramaModal.inicio_real || dataISO;
+          payload.fim_real = dataISO;
+          payload.status = 'concluido';
+        }
+      }
+
+      const { error } = await supabase
+        .from('cronograma_obra')
+        .update(payload)
+        .eq('id', faseCronogramaModal.id);
+
       if (error) throw error;
-      setCronogramaObra(prev => prev.map(c => c.id === fase.id ? { ...c, ...payload } : c));
-      mostrarAviso('Fase concluída.');
+
+      setCronogramaObra(prev => prev.map(c => c.id === faseCronogramaModal.id ? { ...c, ...payload } : c));
+      mostrarAviso(acaoCronogramaModal === 'editar_previsto' ? 'Prazos previstos atualizados.' : acaoCronogramaModal === 'finalizar' ? 'Fase finalizada.' : 'Fase iniciada.');
+      fecharModalCronograma();
     } catch (error: any) { mostrarAviso(error.message, 'erro'); }
   };
 
@@ -1172,6 +1351,7 @@ export default function App() {
   void saldoServico;
   void saldoGeral;
   void percentualGeral;
+  void resumoReal;
 
   const totalPrevistoParcelas = parcelasCliente.reduce((acc, curr) => acc + Number(curr.valor_previsto || 0), 0);
   const totalRealizadoParcelas = parcelasCliente.reduce((acc, curr) => acc + Number(curr.valor_realizado || 0), 0);
@@ -1184,6 +1364,29 @@ export default function App() {
   const percentualDocumentos = documentosProjeto.length > 0 ? Math.round((documentosConcluidos / documentosProjeto.length) * 100) : 0;
   const fasesConcluidas = cronogramaObra.filter(c => c.status === 'concluido').length;
   const percentualCronograma = cronogramaObra.length > 0 ? Math.round((fasesConcluidas / cronogramaObra.length) * 100) : 0;
+
+  const estiloStatusPMIS = (status: string) => {
+    const mapa: any = {
+      verde: 'bg-green-100 text-green-700 border-green-200',
+      amarelo: 'bg-amber-100 text-amber-700 border-amber-200',
+      vermelho: 'bg-red-100 text-red-700 border-red-200'
+    };
+    return mapa[status] || 'bg-slate-100 text-slate-600 border-slate-200';
+  };
+
+  const labelStatusPMIS = (status: string) => {
+    const mapa: any = { verde: 'OK', amarelo: 'Atenção', vermelho: 'Crítico' };
+    return mapa[status] || status;
+  };
+
+  const bolinhaStatusPMIS = (status: string) => {
+    const mapa: any = { verde: 'bg-green-500', amarelo: 'bg-amber-400', vermelho: 'bg-red-500' };
+    return mapa[status] || 'bg-slate-300';
+  };
+
+  const abrirProjetoDashboard = (projeto: any) => {
+    if (projeto?.obraOriginal) abrirPainelObra(projeto.obraOriginal);
+  };
 
   useEffect(() => {
     if (telaAtiva !== 'painel_obra' || abaPainelObra !== 'financeiro') return;
@@ -1324,6 +1527,88 @@ export default function App() {
         </div>
       )}
 
+      {faseCronogramaModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[95] flex items-center justify-center p-4" onClick={fecharModalCronograma}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex justify-between items-start gap-4">
+              <div>
+                <h2 className="font-bold text-xl text-[#2A6377]">{acaoCronogramaModal === 'editar_previsto' ? 'Editar prazos previstos' : acaoCronogramaModal === 'finalizar' ? 'Finalizar fase' : 'Iniciar fase'}</h2>
+                <p className="text-sm text-slate-500 mt-1">{labelFase(faseCronogramaModal.fase)}</p>
+              </div>
+              <button onClick={fecharModalCronograma} className="text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full"><X size={18}/></button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 border rounded-xl p-4">
+                <div><p className="text-xs text-slate-400 font-bold uppercase">Início previsto</p><p className="font-bold text-slate-700">{formatarDataSegura(faseCronogramaModal.inicio_previsto || obraEcoSelecionada?.data_inicio)}</p></div>
+                <div><p className="text-xs text-slate-400 font-bold uppercase">Prazo entrega</p><p className="font-bold text-slate-700">{formatarDataSegura(faseCronogramaModal.fim_previsto || obraEcoSelecionada?.data_previsao_fim)}</p></div>
+              </div>
+
+              {acaoCronogramaModal === 'editar_previsto' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-bold mb-1 text-slate-700">Início previsto</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="dd/mm/aaaa"
+                      value={formCronogramaModal.inicio_previsto || ''}
+                      onFocus={selecionarTextoAoFocar}
+                      onChange={e => setFormCronogramaModal({ ...formCronogramaModal, inicio_previsto: formatarEntradaDataBR(e.target.value) })}
+                      className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold mb-1 text-slate-700">Prazo de entrega</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="dd/mm/aaaa"
+                      value={formCronogramaModal.fim_previsto || ''}
+                      onFocus={selecionarTextoAoFocar}
+                      onChange={e => setFormCronogramaModal({ ...formCronogramaModal, fim_previsto: formatarEntradaDataBR(e.target.value) })}
+                      className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-bold mb-1 text-slate-700">{acaoCronogramaModal === 'finalizar' ? 'Data de finalização' : 'Data de início'}</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="dd/mm/aaaa"
+                    value={formCronogramaModal.data || ''}
+                    onFocus={selecionarTextoAoFocar}
+                    onChange={e => setFormCronogramaModal({ ...formCronogramaModal, data: formatarEntradaDataBR(e.target.value) })}
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-bold mb-1 text-slate-700">Observação</label>
+                <textarea
+                  rows={3}
+                  placeholder={acaoCronogramaModal === 'editar_previsto' ? 'Ex.: prazo ajustado após alinhamento com engenharia/compras...' : 'Ex.: início validado em reunião, etapa finalizada com pendências, aguardando cliente...'}
+                  value={formCronogramaModal.observacao || ''}
+                  onChange={e => setFormCronogramaModal({ ...formCronogramaModal, observacao: e.target.value })}
+                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                />
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-gray-100 bg-slate-50 flex justify-end gap-3">
+              <button onClick={fecharModalCronograma} className="px-5 py-2 rounded-lg bg-white border font-medium text-slate-600 hover:bg-slate-100">Cancelar</button>
+              <button onClick={salvarAcaoCronograma} className="px-5 py-2 rounded-lg bg-[#2A6377] text-white font-bold hover:bg-[#1e4857]">Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {parcelaParaLiquidar && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[88] flex items-center justify-center p-4" onClick={fecharLiquidacaoParcela}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -1349,6 +1634,7 @@ export default function App() {
                   placeholder="dd/mm/aaaa"
                   maxLength={10}
                   value={liquidacaoParcela.data_recebimento}
+                  onFocus={selecionarTextoAoFocar}
                   onChange={e => setLiquidacaoParcela({ ...liquidacaoParcela, data_recebimento: formatarEntradaDataBR(e.target.value) })}
                   className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
                 />
@@ -1470,60 +1756,154 @@ export default function App() {
       <main className="flex-1 p-4 md:p-8 overflow-y-auto overflow-x-hidden bg-slate-50/50">
         
         {telaAtiva === 'dashboard' && (
-          <div className="animate-in fade-in h-full flex flex-col">
-            <h2 className="text-2xl md:text-3xl font-bold mb-6 text-slate-800">Dashboard {isAdmin ? 'Global' : 'Pessoal'}</h2>
+          <div className="animate-in fade-in h-full flex flex-col gap-6">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+              <div>
+                <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Dashboard PMIS {isAdmin ? 'Global' : 'Pessoal'}</h2>
+                <p className="text-sm text-slate-400 mt-1">Resumo executivo da saúde dos projetos, com foco em financeiro, documentação, cronograma e tarefas.</p>
+              </div>
+              <button onClick={() => setTelaAtiva('minhas_obras')} className="bg-[#2A6377] text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#1e4857] transition">
+                <FolderOpen size={16} /> Ver Obras
+              </button>
+            </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
-              <div className="bg-white p-5 rounded-xl shadow-sm flex items-center gap-4 border border-slate-100 border-l-4 border-l-blue-500">
-                <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><Briefcase size={24} /></div>
-                <div><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Obras Ativas</p><p className="text-3xl font-bold text-slate-800">{resumoReal.obrasAtivas}</p></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-blue-500">
+                <div className="flex items-center justify-between mb-3"><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Obras Ativas</p><Briefcase className="text-blue-500" size={22}/></div>
+                <p className="text-3xl font-bold text-slate-800">{resumoPMIS.obrasAtivas}</p>
               </div>
-              <div className="bg-white p-5 rounded-xl shadow-sm flex items-center gap-4 border border-slate-100 border-l-4 border-l-amber-500">
-                <div className="p-3 bg-amber-50 text-amber-600 rounded-lg"><CalendarPlus size={24} /></div>
-                <div><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Tarefas P/ Hoje</p><p className="text-3xl font-bold text-slate-800">{resumoReal.tarefasHoje}</p></div>
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-slate-500">
+                <div className="flex items-center justify-between mb-3"><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Carteira Total</p><DollarSign className="text-slate-500" size={22}/></div>
+                <p className="text-2xl font-bold text-slate-800">{formatarMoeda(resumoPMIS.carteiraTotal)}</p>
               </div>
-              <div className="bg-white p-5 rounded-xl shadow-sm flex items-center gap-4 border border-slate-100 border-l-4 border-l-red-500">
-                <div className="p-3 bg-red-50 text-red-600 rounded-lg"><AlertCircle size={24} /></div>
-                <div><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Tarefas Atrasadas</p><p className="text-3xl font-bold text-red-600">{resumoReal.tarefasAtrasadas}</p></div>
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-green-500">
+                <div className="flex items-center justify-between mb-3"><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Recebido</p><CheckCircle2 className="text-green-500" size={22}/></div>
+                <p className="text-2xl font-bold text-green-700">{formatarMoeda(resumoPMIS.recebidoTotal)}</p>
+              </div>
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-orange-500">
+                <div className="flex items-center justify-between mb-3"><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Saldo a Receber</p><Clock className="text-orange-500" size={22}/></div>
+                <p className="text-2xl font-bold text-orange-700">{formatarMoeda(resumoPMIS.saldoReceber)}</p>
+              </div>
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-red-500">
+                <div className="flex items-center justify-between mb-3"><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Valor Vencido</p><AlertCircle className="text-red-500" size={22}/></div>
+                <p className="text-2xl font-bold text-red-600">{formatarMoeda(resumoPMIS.valorVencido)}</p>
+              </div>
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-amber-500">
+                <div className="flex items-center justify-between mb-3"><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Alertas</p><AlertTriangle className="text-amber-500" size={22}/></div>
+                <p className="text-3xl font-bold text-slate-800">{resumoPMIS.documentosPendentes + resumoPMIS.fasesAtrasadas + resumoPMIS.tarefasAtrasadas}</p>
+                <p className="text-[11px] text-slate-400 mt-1">Docs, fases e tarefas</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 items-start">
-              <div className="lg:col-span-2 flex flex-col gap-6">
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2"><CheckSquare size={20} className="text-[#2A6377]"/> Minhas Tarefas de Foco</h3>
-                  {tarefasDashboard.length === 0 ? (
-                    <div className="text-center p-8 text-slate-400 flex flex-col items-center"><CheckCircle2 size={40} className="mb-2 text-green-200"/> Tudo em dia! Nenhuma tarefa pendente.</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {tarefasDashboard.map(tarefa => (
-                        <div key={tarefa.id} onClick={() => setTarefaSelecionada(tarefa)} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border hover:border-[#2A6377] transition cursor-pointer group">
-                          <div className="flex items-center gap-3 truncate">
-                            <div className="w-2 h-2 rounded-full bg-[#2A6377] shrink-0"></div>
-                            <div className="truncate">
-                              <p className="text-xs font-bold text-[#2A6377] uppercase">{tarefa.obras?.codigo_externo}</p>
-                              <p className="font-semibold text-slate-700 truncate">{tarefa.titulo}</p>
-                            </div>
-                          </div>
-                          <div className={`text-[10px] font-bold px-2 py-1 rounded shrink-0 flex items-center gap-1 ${isAtrasada(tarefa.data_vencimento, tarefa.status) ? 'bg-red-100 text-red-700' : 'bg-white border text-slate-500'}`}>
-                            <Clock size={12}/> {formatarDataSegura(tarefa.data_vencimento)}
-                          </div>
-                        </div>
-                      ))}
-                      <button onClick={() => setTelaAtiva('tarefas')} className="w-full mt-2 text-xs font-bold text-center text-slate-400 hover:text-[#2A6377] p-2 transition">Ver Kanban Completo &rarr;</button>
-                    </div>
-                  )}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+              <div className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                  <h3 className="text-lg font-bold flex items-center gap-2"><Activity size={20} className="text-[#2A6377]"/> Status Geral dos Projetos</h3>
+                  <p className="text-xs text-slate-400">Clique em uma obra para abrir o painel PMIS.</p>
                 </div>
-
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                  <h3 className="text-lg font-bold mb-4 border-b pb-2">Status Geral por Obra</h3>
-                  <div className="h-64 w-full">
-                    {dadosGrafico.length === 0 ? (<div className="h-full flex items-center justify-center text-gray-400">Sem dados.</div>) : (<ResponsiveContainer width="100%" height="100%"><BarChart data={dadosGrafico}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" /><XAxis dataKey="nome" axisLine={false} tickLine={false} /><YAxis allowDecimals={false} axisLine={false} tickLine={false} /><Tooltip cursor={{fill: '#f3f4f6'}} /><Bar dataKey="tarefas_concluidas" name="Concluídas" fill="#22c55e" radius={[4, 4, 0, 0]} /><Bar dataKey="tarefas_pendentes" name="Pendentes" fill="#f87171" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>)}
-                  </div>
+                <div className="overflow-x-auto max-w-full">
+                  <table className="w-full text-sm min-w-[980px]">
+                    <thead className="bg-slate-50 text-slate-500 uppercase text-xs">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Obra</th>
+                        <th className="px-4 py-3 text-left">Fase</th>
+                        <th className="px-4 py-3 text-center">Financeiro</th>
+                        <th className="px-4 py-3 text-center">Documentos</th>
+                        <th className="px-4 py-3 text-center">Cronograma</th>
+                        <th className="px-4 py-3 text-center">Tarefas</th>
+                        <th className="px-4 py-3 text-center">Geral</th>
+                        <th className="px-4 py-3 text-right">Saldo</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {statusProjetosPMIS.length === 0 ? (
+                        <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Nenhuma obra ativa encontrada.</td></tr>
+                      ) : (
+                        statusProjetosPMIS.map(projeto => (
+                          <tr key={projeto.id} onClick={() => abrirProjetoDashboard(projeto)} className="hover:bg-slate-50 cursor-pointer transition">
+                            <td className="px-4 py-3">
+                              <p className="font-bold text-[#2A6377]">{projeto.codigo} - {projeto.nome}</p>
+                              <p className="text-xs text-slate-400">Resp.: {projeto.responsavel}</p>
+                            </td>
+                            <td className="px-4 py-3 text-slate-700">{labelFase(projeto.fase)}</td>
+                            {['financeiroStatus', 'documentosStatus', 'cronogramaStatus', 'tarefasStatus'].map(campo => (
+                              <td key={campo} className="px-4 py-3 text-center">
+                                <span className={`inline-flex w-3 h-3 rounded-full ${bolinhaStatusPMIS(projeto[campo])}`} title={labelStatusPMIS(projeto[campo])}></span>
+                              </td>
+                            ))}
+                            <td className="px-4 py-3 text-center">
+                              <span className={`inline-flex px-3 py-1 rounded-full border text-xs font-bold ${estiloStatusPMIS(projeto.statusGeral)}`}>{labelStatusPMIS(projeto.statusGeral)}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-slate-700">{formatarMoeda(projeto.saldoReceber)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
-              <div className="lg:col-span-1 bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col h-[650px]">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-5 border-b border-slate-100">
+                  <h3 className="text-lg font-bold flex items-center gap-2"><AlertTriangle size={20} className="text-amber-500"/> Projetos Críticos</h3>
+                </div>
+                <div className="p-5 space-y-4 max-h-[480px] overflow-y-auto">
+                  {projetosCriticosPMIS.length === 0 ? (
+                    <div className="text-center p-8 text-slate-400"><CheckCircle2 size={42} className="mx-auto mb-2 text-green-200"/> Nenhum alerta crítico no momento.</div>
+                  ) : (
+                    projetosCriticosPMIS.map(projeto => (
+                      <div key={projeto.id} onClick={() => abrirProjetoDashboard(projeto)} className="border rounded-xl p-4 hover:border-[#2A6377] hover:bg-slate-50 cursor-pointer transition">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div>
+                            <p className="font-bold text-[#2A6377] text-sm">{projeto.codigo} - {projeto.nome}</p>
+                            <p className="text-xs text-slate-400">{labelFase(projeto.fase)}</p>
+                          </div>
+                          <span className={`px-2 py-1 rounded-full border text-[10px] font-bold ${estiloStatusPMIS(projeto.statusGeral)}`}>{labelStatusPMIS(projeto.statusGeral)}</span>
+                        </div>
+                        <ul className="space-y-1 text-xs text-slate-600">
+                          {projeto.motivosCriticos.slice(0, 3).map((motivo: string, idx: number) => <li key={idx} className="flex gap-2"><span className="text-amber-500">•</span>{motivo}</li>)}
+                        </ul>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2"><Activity size={20} className="text-[#2A6377]"/> Obras por Fase</h3>
+                <div className="h-72 w-full">
+                  {dadosGrafico.length === 0 ? (<div className="h-full flex items-center justify-center text-gray-400">Sem dados.</div>) : (<ResponsiveContainer width="100%" height="100%"><BarChart data={dadosGrafico}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" /><XAxis dataKey="nome" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} axisLine={false} tickLine={false} /><Tooltip cursor={{fill: '#f3f4f6'}} /><Bar dataKey="total" name="Obras" fill="#2A6377" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>)}
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2"><CheckSquare size={20} className="text-[#2A6377]"/> Minhas Tarefas Críticas</h3>
+                {tarefasDashboard.length === 0 ? (
+                  <div className="text-center p-8 text-slate-400 flex flex-col items-center"><CheckCircle2 size={40} className="mb-2 text-green-200"/> Tudo em dia! Nenhuma tarefa pendente.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {tarefasDashboard.map(tarefa => (
+                      <div key={tarefa.id} onClick={() => setTarefaSelecionada(tarefa)} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border hover:border-[#2A6377] transition cursor-pointer group">
+                        <div className="flex items-center gap-3 truncate">
+                          <div className="w-2 h-2 rounded-full bg-[#2A6377] shrink-0"></div>
+                          <div className="truncate">
+                            <p className="text-xs font-bold text-[#2A6377] uppercase">{tarefa.obras?.codigo_externo}</p>
+                            <p className="font-semibold text-slate-700 truncate">{tarefa.titulo}</p>
+                          </div>
+                        </div>
+                        <div className={`text-[10px] font-bold px-2 py-1 rounded shrink-0 flex items-center gap-1 ${isAtrasada(tarefa.data_vencimento, tarefa.status) ? 'bg-red-100 text-red-700' : 'bg-white border text-slate-500'}`}>
+                          <Clock size={12}/> {formatarDataSegura(tarefa.data_vencimento)}
+                        </div>
+                      </div>
+                    ))}
+                    <button onClick={() => setTelaAtiva('tarefas')} className="w-full mt-2 text-xs font-bold text-center text-slate-400 hover:text-[#2A6377] p-2 transition">Ver Kanban Completo &rarr;</button>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col h-[410px]">
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2"><Activity size={20} className="text-blue-500"/> Últimas Atualizações</h3>
                 <div className="flex-1 overflow-y-auto pr-2 space-y-4">
                   {feedGlobal.length === 0 ? (
@@ -1646,7 +2026,7 @@ export default function App() {
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Plus size={18}/> Nova Parcela / Recebimento</h3>
                     <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
                       <input placeholder="Descrição" value={novaParcelaCliente.descricao} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, descricao: e.target.value})} className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
-                      <input type="text" inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10} value={novaParcelaCliente.data_prevista} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, data_prevista: formatarEntradaDataBR(e.target.value)})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
+                      <input type="text" inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10} value={novaParcelaCliente.data_prevista} onFocus={selecionarTextoAoFocar} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, data_prevista: formatarEntradaDataBR(e.target.value)})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
                       <input type="number" step="0.01" min="0" placeholder="Valor previsto" value={novaParcelaCliente.valor_previsto} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, valor_previsto: e.target.value})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
                       <input placeholder="Observação" value={novaParcelaCliente.observacao || ''} onChange={e => setNovaParcelaCliente({...novaParcelaCliente, observacao: e.target.value})} className="border rounded-lg p-3 outline-none focus:border-[#2A6377]" />
                       <button onClick={salvarParcelaCliente} disabled={carregando} className="bg-[#2A6377] text-white rounded-lg font-bold flex items-center justify-center gap-2"><Save size={16}/> Salvar</button>
@@ -1688,10 +2068,10 @@ export default function App() {
               <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
                 <div className="p-4 border-b"><h3 className="font-bold text-lg flex items-center gap-2"><Calendar size={18} className="text-[#2A6377]"/> Cronograma Resumo</h3></div>
                 <div className="overflow-x-auto max-w-full">
-                  <table className="w-full text-sm min-w-[1000px]"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3 text-left">Fase</th><th className="p-3">Início Previsto</th><th className="p-3">Prazo Entrega</th><th className="p-3">Início Real</th><th className="p-3">Fim Real</th><th className="p-3">Status</th>{isAdmin && <th className="p-3">Ações</th>}</tr></thead><tbody>
-                    {cronogramaObra.length === 0 ? <tr><td colSpan={isAdmin ? 7 : 6} className="p-6 text-center text-slate-500">Nenhuma fase cadastrada.</td></tr> : cronogramaObra.map(fase => {
-                      const inicioPrevisto = obraEcoSelecionada?.data_inicio || fase.inicio_previsto;
-                      const fimPrevisto = obraEcoSelecionada?.data_previsao_fim || fase.fim_previsto;
+                  <table className="w-full text-sm min-w-[1120px]"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3 text-left">Fase</th><th className="p-3">Início Previsto</th><th className="p-3">Prazo Entrega</th><th className="p-3">Início Real</th><th className="p-3">Fim Real</th><th className="p-3">Status</th><th className="p-3 text-left">Observação</th>{isAdmin && <th className="p-3">Ações</th>}</tr></thead><tbody>
+                    {cronogramaObra.length === 0 ? <tr><td colSpan={isAdmin ? 8 : 7} className="p-6 text-center text-slate-500">Nenhuma fase cadastrada.</td></tr> : cronogramaObra.map(fase => {
+                      const inicioPrevisto = fase.inicio_previsto || obraEcoSelecionada?.data_inicio;
+                      const fimPrevisto = fase.fim_previsto || obraEcoSelecionada?.data_previsao_fim;
                       return (
                       <tr key={fase.id} className="border-t hover:bg-slate-50">
                         <td className="p-3 font-bold text-[#2A6377]">{labelFase(fase.fase)}</td>
@@ -1700,13 +2080,15 @@ export default function App() {
                         <td className="p-3 text-center text-slate-700">{fase.inicio_real ? formatarDataSegura(fase.inicio_real) : '-'}</td>
                         <td className="p-3 text-center text-slate-700">{fase.fim_real ? formatarDataSegura(fase.fim_real) : '-'}</td>
                         <td className="p-3 text-center"><span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusCronograma(fase.status)}`}>{labelStatusCronograma(fase.status)}</span></td>
+                        <td className="p-3 text-slate-600 max-w-[220px] truncate" title={fase.observacao || ''}>{fase.observacao || '-'}</td>
                         {isAdmin && (
                           <td className="p-3 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                              {fase.status === 'nao_iniciado' && <button onClick={() => iniciarFaseCronograma(fase)} className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-200 transition">Iniciar</button>}
-                              {fase.status === 'em_andamento' && <button onClick={() => finalizarFaseCronograma(fase)} className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition">Finalizar</button>}
+                            <div className="flex items-center justify-center gap-2 flex-wrap">
+                              <button onClick={() => abrirModalCronograma(fase, 'editar_previsto')} className="px-3 py-1.5 rounded-lg bg-white border text-slate-700 text-xs font-bold hover:bg-slate-100 transition">Editar prazos</button>
+                              {fase.status === 'nao_iniciado' && <button onClick={() => abrirModalCronograma(fase, 'iniciar')} className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-200 transition">Iniciar</button>}
+                              {fase.status === 'em_andamento' && <button onClick={() => abrirModalCronograma(fase, 'finalizar')} className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition">Finalizar</button>}
                               {fase.status === 'concluido' && <button onClick={() => reabrirFaseCronograma(fase)} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition">Reabrir</button>}
-                              {fase.status === 'atrasado' && <button onClick={() => iniciarFaseCronograma(fase)} className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-200 transition">Iniciar</button>}
+                              {fase.status === 'atrasado' && <button onClick={() => abrirModalCronograma(fase, 'iniciar')} className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-200 transition">Iniciar</button>}
                             </div>
                           </td>
                         )}
@@ -1714,7 +2096,7 @@ export default function App() {
                     )})}
                   </tbody></table>
                 </div>
-                <div className="px-4 py-3 bg-slate-50 border-t text-xs text-slate-500">As datas previstas vêm do cronograma padrão. Quando não houver data na fase, o sistema usa o início e o prazo de entrega cadastrados na obra. As datas reais são preenchidas pelos botões Iniciar e Finalizar.</div>
+                <div className="px-4 py-3 bg-slate-50 border-t text-xs text-slate-500">As datas previstas podem ser ajustadas pelo botão Editar prazos. Quando a fase ainda não tiver datas próprias, o sistema usa o início e o prazo de entrega cadastrados na obra como sugestão. As datas reais são registradas pelos botões Iniciar e Finalizar, informando data e observação.</div>
               </div>
             )}
 
