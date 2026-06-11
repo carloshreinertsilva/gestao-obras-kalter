@@ -714,6 +714,12 @@ export default function App() {
     setObraEcoSelecionada(null);
   };
   const isAdmin = usuarioAtual?.perfil === "admin";
+  const podeEditarObraSelecionada = Boolean(
+    isAdmin ||
+      (obraEcoSelecionada &&
+        usuarioAtual &&
+        obraEcoSelecionada.id_responsavel === usuarioAtual.id),
+  );
 
   useEffect(() => {
     async function buscarNotificacoes() {
@@ -4847,7 +4853,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {isAdmin && (
+                {podeEditarObraSelecionada && (
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                       <Plus size={18} /> Nova Parcela / Recebimento
@@ -4983,7 +4989,7 @@ export default function App() {
                           <th className="p-3">Data Recebimento</th>
                           <th className="p-3">Valor Recebido</th>
                           <th className="p-3">Status</th>
-                          {isAdmin && <th className="p-3">Ações</th>}
+                          {podeEditarObraSelecionada && <th className="p-3">Ações</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -5033,7 +5039,7 @@ export default function App() {
                                   {labelStatusParcelaCalculado(parcela)}
                                 </span>
                               </td>
-                              {isAdmin && (
+                              {podeEditarObraSelecionada && (
                                 <td className="p-3 text-center">
                                   <div className="flex items-center justify-center gap-2">
                                     <button
@@ -5127,7 +5133,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {isAdmin && (
+                {podeEditarObraSelecionada && (
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                       <Plus size={18} /> Nova Previsão de Faturamento
@@ -5234,7 +5240,7 @@ export default function App() {
                         valores.
                       </p>
                     </div>
-                    {isAdmin && (
+                    {podeEditarObraSelecionada && (
                       <button
                         onClick={abrirModalEscopoFaturamento}
                         className="px-4 py-2 rounded-lg bg-[#2A6377] text-white text-sm font-bold hover:bg-[#1e4857] transition flex items-center gap-2"
@@ -5274,7 +5280,7 @@ export default function App() {
                               </div>
                             </th>
                           ))}
-                          {isAdmin && (
+                          {podeEditarObraSelecionada && (
                             <th className="p-3 text-center">Ações</th>
                           )}
                         </tr>
@@ -5283,7 +5289,7 @@ export default function App() {
                         {familiasFaturamento.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={isAdmin ? 7 : 6}
+                              colSpan={podeEditarObraSelecionada ? 7 : 6}
                               className="p-6 text-center text-slate-500"
                             >
                               Nenhuma família criada para esta obra. Verifique
@@ -5293,7 +5299,7 @@ export default function App() {
                         ) : familiasFaturamentoComEscopo.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={isAdmin ? 7 : 6}
+                              colSpan={podeEditarObraSelecionada ? 7 : 6}
                               className="p-6 text-center text-slate-500"
                             >
                               Nenhuma família com escopo informado. Clique em
@@ -5380,7 +5386,7 @@ export default function App() {
                                     </td>
                                   );
                                 })}
-                                {isAdmin && (
+                                {podeEditarObraSelecionada && (
                                   <td className="p-3 text-center">
                                     <button
                                       onClick={() =>
@@ -5415,14 +5421,14 @@ export default function App() {
                           <th className="p-3 text-right">Previsto</th>
                           <th className="p-3 text-right">Realizado</th>
                           <th className="p-3 text-right">Saldo</th>
-                          {isAdmin && <th className="p-3">Ações</th>}
+                          {podeEditarObraSelecionada && <th className="p-3">Ações</th>}
                         </tr>
                       </thead>
                       <tbody>
                         {previsoesComSaldo.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={isAdmin ? 7 : 6}
+                              colSpan={podeEditarObraSelecionada ? 7 : 6}
                               className="p-6 text-center text-slate-500"
                             >
                               Nenhuma previsão cadastrada.
@@ -5461,7 +5467,7 @@ export default function App() {
                                 <td className="p-3 text-right font-bold text-amber-700">
                                   {formatarMoeda(previsao.saldo)}
                                 </td>
-                                {isAdmin && (
+                                {podeEditarObraSelecionada && (
                                   <td className="p-3">
                                     <div className="flex justify-center gap-2">
                                       <button
@@ -5507,14 +5513,14 @@ export default function App() {
                           <th className="p-3">Data</th>
                           <th className="p-3">NF</th>
                           <th className="p-3 text-right">Valor</th>
-                          {isAdmin && <th className="p-3">Ações</th>}
+                          {podeEditarObraSelecionada && <th className="p-3">Ações</th>}
                         </tr>
                       </thead>
                       <tbody>
                         {realizadosFaturamentoDoEscopo.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={isAdmin ? 6 : 5}
+                              colSpan={podeEditarObraSelecionada ? 6 : 5}
                               className="p-6 text-center text-slate-500"
                             >
                               Nenhum faturamento realizado registrado.
@@ -5550,7 +5556,7 @@ export default function App() {
                                 <td className="p-3 text-right font-bold text-emerald-700">
                                   {formatarMoeda(realizado.valor_realizado)}
                                 </td>
-                                {isAdmin && (
+                                {podeEditarObraSelecionada && (
                                   <td className="p-3 text-center">
                                     <button
                                       onClick={() =>
@@ -5592,14 +5598,14 @@ export default function App() {
                         <th className="p-3">Fim Real</th>
                         <th className="p-3">Status</th>
                         <th className="p-3 text-left">Observação</th>
-                        {isAdmin && <th className="p-3">Ações</th>}
+                        {podeEditarObraSelecionada && <th className="p-3">Ações</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {cronogramaObra.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={isAdmin ? 8 : 7}
+                            colSpan={podeEditarObraSelecionada ? 8 : 7}
                             className="p-6 text-center text-slate-500"
                           >
                             Nenhuma fase cadastrada.
@@ -5650,7 +5656,7 @@ export default function App() {
                               >
                                 {fase.observacao || "-"}
                               </td>
-                              {isAdmin && (
+                              {podeEditarObraSelecionada && (
                                 <td className="p-3 text-center">
                                   <div className="flex items-center justify-center gap-2 flex-wrap">
                                     <button
@@ -5729,7 +5735,7 @@ export default function App() {
 
             {abaPainelObra === "documentos" && (
               <div className="space-y-6">
-                {isAdmin && (
+                {podeEditarObraSelecionada && (
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                       <Plus size={18} /> Novo Documento
@@ -5789,14 +5795,14 @@ export default function App() {
                           <th className="p-3">Indicador</th>
                           <th className="p-3">Conclusão</th>
                           <th className="p-3 text-left">Anexos</th>
-                          {isAdmin && <th className="p-3">Ações</th>}
+                          {podeEditarObraSelecionada && <th className="p-3">Ações</th>}
                         </tr>
                       </thead>
                       <tbody>
                         {documentosProjeto.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={isAdmin ? 7 : 6}
+                              colSpan={podeEditarObraSelecionada ? 7 : 6}
                               className="p-6 text-center text-slate-500"
                             >
                               Nenhum documento cadastrado.
@@ -5862,7 +5868,7 @@ export default function App() {
                                               )}
                                             </p>
                                           </button>
-                                          {isAdmin && (
+                                          {podeEditarObraSelecionada && (
                                             <button
                                               onClick={() =>
                                                 excluirArquivoDocumento(arquivo)
@@ -5876,7 +5882,7 @@ export default function App() {
                                       ),
                                     )
                                   )}
-                                  {isAdmin && (
+                                  {podeEditarObraSelecionada && (
                                     <label
                                       className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition ${uploadDocumentoId === doc.id ? "bg-slate-200 text-slate-500" : "bg-[#2A6377]/10 text-[#2A6377] hover:bg-[#2A6377]/20"}`}
                                     >
@@ -5905,7 +5911,7 @@ export default function App() {
                                   )}
                                 </div>
                               </td>
-                              {isAdmin && (
+                              {podeEditarObraSelecionada && (
                                 <td className="p-3 text-center">
                                   <div className="flex flex-col items-center gap-2">
                                     {doc.status === "nao_elaborado" && (
