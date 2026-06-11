@@ -263,8 +263,6 @@ export default function App() {
 
   const dataHojeISO = () => new Date().toISOString().split("T")[0];
 
-  const competenciaAtualMes = () => new Date().toISOString().slice(0, 7);
-
   const competenciaParaData = (competencia: string) => {
     if (!competencia) return null;
     if (/^\d{4}-\d{2}$/.test(competencia)) return `${competencia}-01`;
