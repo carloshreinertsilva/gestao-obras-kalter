@@ -790,6 +790,12 @@ export default function App() {
         const em7Dias = new Date();
         em7Dias.setDate(em7Dias.getDate() + 7);
         const em7DiasISO = em7Dias.toISOString().split("T")[0];
+        const isDocumentoEntregaTecnica = (item: any) =>
+          String(item || "")
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .includes("termo de entrega tecnica");
 
         let queryObras = supabase
           .from("obras")
@@ -881,7 +887,9 @@ export default function App() {
 
         const documentosPendentes = documentosData.filter(
           (doc: any) =>
-            doc.status !== "concluido" && doc.status !== "nao_aplicavel",
+            !isDocumentoEntregaTecnica(doc.item) &&
+            doc.status !== "concluido" &&
+            doc.status !== "nao_aplicavel",
         ).length;
         const fasesAtrasadas = cronogramaData.filter(
           (fase: any) =>
@@ -953,13 +961,16 @@ export default function App() {
             0,
           );
 
-          const docsNaoElaborados = documentosObra.filter(
+          const documentosAvaliaveis = documentosObra.filter(
+            (d: any) => !isDocumentoEntregaTecnica(d.item),
+          );
+          const docsNaoElaborados = documentosAvaliaveis.filter(
             (d: any) => d.status === "nao_elaborado",
           ).length;
-          const docsEmAndamento = documentosObra.filter(
+          const docsEmAndamento = documentosAvaliaveis.filter(
             (d: any) => d.status === "em_andamento",
           ).length;
-          const docsPendentes = documentosObra.filter(
+          const docsPendentes = documentosAvaliaveis.filter(
             (d: any) =>
               d.status !== "concluido" && d.status !== "nao_aplicavel",
           ).length;
@@ -981,6 +992,8 @@ export default function App() {
               c.fim_previsto >= hoje &&
               c.fim_previsto <= em7DiasISO,
           ).length;
+          void fasesEmAndamento;
+          void fasesProximas;
           const tarefasAtrasadasObra = tarefasObra.filter(
             (t: any) =>
               t.status !== "concluida" &&
@@ -995,24 +1008,14 @@ export default function App() {
               String(t.data_vencimento).split("T")[0] <= em7DiasISO,
           ).length;
 
-          const financeiroStatus =
-            valorVencidoObra > 0
-              ? "vermelho"
-              : saldoReceber > 0
-                ? "amarelo"
-                : "verde";
+          const financeiroStatus = valorVencidoObra > 0 ? "vermelho" : "verde";
           const documentosStatus =
             docsNaoElaborados > 0
               ? "vermelho"
               : docsEmAndamento > 0 || docsPendentes > 0
                 ? "amarelo"
                 : "verde";
-          const cronogramaStatus =
-            fasesAtrasadasObra > 0
-              ? "vermelho"
-              : fasesEmAndamento > 0 || fasesProximas > 0
-                ? "amarelo"
-                : "verde";
+          const cronogramaStatus = fasesAtrasadasObra > 0 ? "vermelho" : "verde";
           const tarefasStatus =
             tarefasAtrasadasObra > 0
               ? "vermelho"
