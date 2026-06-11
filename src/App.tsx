@@ -714,6 +714,8 @@ export default function App() {
     setObraEcoSelecionada(null);
   };
   const isAdmin = usuarioAtual?.perfil === "admin";
+  const podeEditarObra = (obra: any) =>
+    Boolean(isAdmin || (obra && usuarioAtual && obra.id_responsavel === usuarioAtual.id));
   const podeEditarObraSelecionada = Boolean(
     isAdmin ||
       (obraEcoSelecionada &&
@@ -2096,6 +2098,35 @@ export default function App() {
     }
   };
 
+  const zerarFaseCronograma = async (fase: any) => {
+    if (
+      !window.confirm(
+        `Deseja zerar a fase ${labelFase(fase.fase)} e voltar para Não iniciado?`,
+      )
+    )
+      return;
+
+    try {
+      const payload: any = {
+        inicio_real: null,
+        fim_real: null,
+        status: "nao_iniciado",
+        observacao: null,
+      };
+      const { error } = await supabase
+        .from("cronograma_obra")
+        .update(payload)
+        .eq("id", fase.id);
+      if (error) throw error;
+      setCronogramaObra((prev) =>
+        prev.map((c) => (c.id === fase.id ? { ...c, ...payload } : c)),
+      );
+      mostrarAviso("Fase voltou para Não iniciado.");
+    } catch (error: any) {
+      mostrarAviso(error.message, "erro");
+    }
+  };
+
   const deletarRegistroPMIS = async (tabela: string, id: any) => {
     if (!window.confirm("Deseja realmente excluir este registro?")) return;
     try {
@@ -2348,12 +2379,16 @@ export default function App() {
   async function salvarObra(e: any) {
     e.preventDefault();
     setErroObra("");
+    const responsavelObra = isAdmin
+      ? novaObra.id_responsavel
+      : usuarioAtual?.id;
+
     if (
       !novaObra.codigo_externo ||
       !novaObra.nome ||
       !novaObra.data_inicio ||
       !novaObra.data_previsao_fim ||
-      !novaObra.id_responsavel
+      !responsavelObra
     ) {
       setErroObra("Todos os campos obrigatórios.");
       return;
@@ -2368,7 +2403,7 @@ export default function App() {
         observacoes: novaObra.observacoes || null,
         data_inicio: novaObra.data_inicio,
         data_previsao_fim: novaObra.data_previsao_fim,
-        id_responsavel: novaObra.id_responsavel,
+        id_responsavel: responsavelObra,
         valor_produto: novaObra.valor_produto || 0,
         valor_servico: novaObra.valor_servico || 0,
         status: "em_andamento",
@@ -4195,21 +4230,21 @@ export default function App() {
               </div>
             </div>
 
-            {isAdmin && (
-              <div className="px-4 mt-8">
-                <p className="text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider flex items-center gap-1">
-                  <Settings size={12} /> Cadastros
-                </p>
-                <div className="space-y-1">
-                  <button
-                    onClick={() => {
-                      setTelaAtiva("cadastros_obras");
-                      setMenuMobileAberto(false);
-                    }}
-                    className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === "cadastros_obras" ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
-                  >
-                    <HardHat size={20} /> Obras
-                  </button>
+            <div className="px-4 mt-8">
+              <p className="text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider flex items-center gap-1">
+                <Settings size={12} /> Cadastros
+              </p>
+              <div className="space-y-1">
+                <button
+                  onClick={() => {
+                    setTelaAtiva("cadastros_obras");
+                    setMenuMobileAberto(false);
+                  }}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === "cadastros_obras" ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
+                >
+                  <HardHat size={20} /> Obras
+                </button>
+                {isAdmin && (
                   <button
                     onClick={() => {
                       setTelaAtiva("cadastros_equipe");
@@ -4219,9 +4254,9 @@ export default function App() {
                   >
                     <Users size={20} /> Equipe
                   </button>
-                </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -5681,27 +5716,43 @@ export default function App() {
                                       </button>
                                     )}
                                     {fase.status === "em_andamento" && (
-                                      <button
-                                        onClick={() =>
-                                          abrirModalCronograma(
-                                            fase,
-                                            "finalizar",
-                                          )
-                                        }
-                                        className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition"
-                                      >
-                                        Finalizar
-                                      </button>
+                                      <>
+                                        <button
+                                          onClick={() =>
+                                            abrirModalCronograma(
+                                              fase,
+                                              "finalizar",
+                                            )
+                                          }
+                                          className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition"
+                                        >
+                                          Finalizar
+                                        </button>
+                                        <button
+                                          onClick={() => zerarFaseCronograma(fase)}
+                                          className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-100 text-xs font-bold hover:bg-red-100 transition"
+                                        >
+                                          Voltar para não iniciado
+                                        </button>
+                                      </>
                                     )}
                                     {fase.status === "concluido" && (
-                                      <button
-                                        onClick={() =>
-                                          reabrirFaseCronograma(fase)
-                                        }
-                                        className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition"
-                                      >
-                                        Reabrir
-                                      </button>
+                                      <>
+                                        <button
+                                          onClick={() =>
+                                            reabrirFaseCronograma(fase)
+                                          }
+                                          className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition"
+                                        >
+                                          Reabrir
+                                        </button>
+                                        <button
+                                          onClick={() => zerarFaseCronograma(fase)}
+                                          className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-100 text-xs font-bold hover:bg-red-100 transition"
+                                        >
+                                          Zerar
+                                        </button>
+                                      </>
                                     )}
                                     {fase.status === "atrasado" && (
                                       <button
@@ -5728,7 +5779,7 @@ export default function App() {
                   prazos. Quando a fase ainda não tiver datas próprias, o
                   sistema usa o início e o prazo de entrega cadastrados na obra
                   como sugestão. As datas reais são registradas pelos botões
-                  Iniciar e Finalizar, informando data e observação.
+                  Iniciar e Finalizar, informando data e observação. Se uma fase foi iniciada por engano, use Voltar para não iniciado.
                 </div>
               </div>
             )}
@@ -6303,7 +6354,7 @@ export default function App() {
           </div>
         )}
 
-        {telaAtiva === "cadastros_obras" && isAdmin && (
+        {telaAtiva === "cadastros_obras" && (
           <div className="animate-in fade-in dash-main-wrapper max-w-5xl">
             <h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8 text-slate-800">
               Cadastros &rarr; Obras
@@ -6414,23 +6465,29 @@ export default function App() {
                   <label className="block text-sm mb-1 max-w-full">
                     Responsável *
                   </label>
-                  <select
-                    value={novaObra.id_responsavel}
-                    onChange={(e) =>
-                      setNovaObra({
-                        ...novaObra,
-                        id_responsavel: e.target.value,
-                      })
-                    }
-                    className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full bg-white"
-                  >
-                    <option value="">Selecione...</option>
-                    {listaUsuarios.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.nome}
-                      </option>
-                    ))}
-                  </select>
+                  {isAdmin ? (
+                    <select
+                      value={novaObra.id_responsavel}
+                      onChange={(e) =>
+                        setNovaObra({
+                          ...novaObra,
+                          id_responsavel: e.target.value,
+                        })
+                      }
+                      className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full bg-white"
+                    >
+                      <option value="">Selecione...</option>
+                      {listaUsuarios.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.nome}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="w-full border p-3 rounded-lg bg-slate-50 text-slate-700 max-w-full">
+                      {usuarioAtual?.nome || "Usuário atual"}
+                    </div>
+                  )}
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm mb-1 max-w-full">
@@ -6569,10 +6626,11 @@ export default function App() {
                             >
                               <FolderOpen size={14} /> Painel
                             </button>
-                            {isAdmin && (
+                            {podeEditarObra(obra) && (
                               <button
                                 onClick={() => editarObra(obra)}
                                 className="text-slate-400 hover:text-[#2A6377] p-1.5 bg-slate-100 rounded transition"
+                                title="Editar cadastro da obra"
                               >
                                 <Edit2 size={14} />
                               </button>
