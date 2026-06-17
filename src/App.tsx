@@ -5270,12 +5270,12 @@ export default function App() {
                     <div>
                       <h3 className="font-bold text-lg flex items-center gap-2">
                         <Receipt size={18} className="text-[#2A6377]" /> Escopo
-                        e Faturamento por Família
+                        por Família
                       </h3>
                       <p className="text-xs text-slate-400 mt-1">
-                        A consulta mostra somente famílias com valor de escopo.
-                        Use “Editar Escopo” para selecionar famílias, grupos e
-                        valores.
+                        Visão resumida do escopo faturável. A consulta mostra
+                        somente famílias com valor de escopo. Use “Editar
+                        Escopo” para selecionar famílias, grupos e valores.
                       </p>
                     </div>
                     {podeEditarObraSelecionada && (
@@ -5288,38 +5288,28 @@ export default function App() {
                     )}
                   </div>
                   <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-xs min-w-[1400px]">
+                    <table className="w-full text-sm min-w-[980px]">
                       <thead className="bg-slate-50 text-slate-600">
                         <tr>
                           <th className="p-3 text-left min-w-[220px]">
                             Grupo de Faturamento
                           </th>
-                          <th className="p-3 text-left min-w-[260px]">
+                          <th className="p-3 text-left min-w-[300px]">
                             Família
                           </th>
-                          <th className="p-3 text-right">Valor Total Escopo</th>
-                          <th className="p-3 text-right">Faturado</th>
-                          <th className="p-3 text-right">À Faturar</th>
-                          {competenciasFaturamento.length === 0 && (
-                            <th className="p-3 text-center">Competências</th>
-                          )}
-                          {competenciasFaturamento.map((comp) => (
-                            <th
-                              key={comp}
-                              className="p-0 text-center"
-                              colSpan={2}
-                            >
-                              <div className="bg-[#2A6377] text-white p-2 font-bold">
-                                {formatarCompetencia(comp)}
-                              </div>
-                              <div className="grid grid-cols-2">
-                                <span className="p-2 border-r">Previsto</span>
-                                <span className="p-2">Realizado</span>
-                              </div>
-                            </th>
-                          ))}
+                          <th className="p-3 text-right min-w-[150px]">
+                            Valor Total Escopo
+                          </th>
+                          <th className="p-3 text-right min-w-[140px]">
+                            Faturado
+                          </th>
+                          <th className="p-3 text-right min-w-[140px]">
+                            À Faturar
+                          </th>
                           {podeEditarObraSelecionada && (
-                            <th className="p-3 text-center">Ações</th>
+                            <th className="p-3 text-center min-w-[110px]">
+                              Ações
+                            </th>
                           )}
                         </tr>
                       </thead>
@@ -5327,7 +5317,7 @@ export default function App() {
                         {familiasFaturamento.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={podeEditarObraSelecionada ? 7 : 6}
+                              colSpan={podeEditarObraSelecionada ? 6 : 5}
                               className="p-6 text-center text-slate-500"
                             >
                               Nenhuma família criada para esta obra. Verifique
@@ -5337,7 +5327,7 @@ export default function App() {
                         ) : familiasFaturamentoComEscopo.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={podeEditarObraSelecionada ? 7 : 6}
+                              colSpan={podeEditarObraSelecionada ? 6 : 5}
                               className="p-6 text-center text-slate-500"
                             >
                               Nenhuma família com escopo informado. Clique em
@@ -5372,58 +5362,17 @@ export default function App() {
                                     </div>
                                   )}
                                 </td>
-                                <td className="p-3 text-right font-bold">
+                                <td className="p-3 text-right font-bold whitespace-nowrap">
                                   {formatarMoeda(familia.valor_total_escopo)}
                                 </td>
-                                <td className="p-3 text-right font-bold text-emerald-700">
+                                <td className="p-3 text-right font-bold text-emerald-700 whitespace-nowrap">
                                   {formatarMoeda(faturadoFamilia)}
                                 </td>
                                 <td
-                                  className={`p-3 text-right font-bold ${saldoFamilia < 0 ? "text-red-600" : "text-amber-700"}`}
+                                  className={`p-3 text-right font-bold whitespace-nowrap ${saldoFamilia < 0 ? "text-red-600" : "text-amber-700"}`}
                                 >
                                   {formatarMoeda(saldoFamilia)}
                                 </td>
-                                {competenciasFaturamento.length === 0 && (
-                                  <td className="p-3 text-center text-slate-400">
-                                    Sem previsão
-                                  </td>
-                                )}
-                                {competenciasFaturamento.map((comp) => {
-                                  const previsto =
-                                    valorPrevistoFamiliaCompetencia(
-                                      familia.id,
-                                      comp,
-                                    );
-                                  const realizado =
-                                    valorRealizadoFamiliaCompetencia(
-                                      familia.id,
-                                      comp,
-                                    );
-                                  return (
-                                    <td
-                                      key={`${familia.id}-${comp}`}
-                                      className="p-0"
-                                      colSpan={2}
-                                    >
-                                      <div className="grid grid-cols-2 h-full">
-                                        <span
-                                          className={`p-3 text-right border-r ${previsto > 0 ? "font-bold text-blue-700" : "text-slate-300"}`}
-                                        >
-                                          {previsto > 0
-                                            ? formatarMoeda(previsto)
-                                            : "-"}
-                                        </span>
-                                        <span
-                                          className={`p-3 text-right ${realizado > 0 ? "font-bold text-emerald-700" : "text-slate-300"}`}
-                                        >
-                                          {realizado > 0
-                                            ? formatarMoeda(realizado)
-                                            : "-"}
-                                        </span>
-                                      </div>
-                                    </td>
-                                  );
-                                })}
                                 {podeEditarObraSelecionada && (
                                   <td className="p-3 text-center">
                                     <button
@@ -5439,6 +5388,148 @@ export default function App() {
                               </tr>
                             );
                           })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
+                  <div className="p-4 border-b">
+                    <h3 className="font-bold text-lg flex items-center gap-2">
+                      <Activity size={18} className="text-[#2A6377]" />
+                      Previsão x Realizado por Competência
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Esta visão funciona como uma planilha: os meses são
+                      adicionados para a direita conforme houver previsão ou
+                      faturamento realizado. Use a rolagem horizontal para ver
+                      todas as competências.
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto max-w-full">
+                    <table
+                      className="text-xs"
+                      style={{
+                        minWidth: `${420 + Math.max(competenciasFaturamento.length, 1) * 260}px`,
+                      }}
+                    >
+                      <thead className="bg-slate-50 text-slate-600">
+                        <tr>
+                          <th
+                            rowSpan={2}
+                            className="p-3 text-left min-w-[320px] sticky left-0 bg-slate-50 z-20 border-r"
+                          >
+                            Família
+                          </th>
+                          {competenciasFaturamento.length === 0 ? (
+                            <th className="p-3 text-center min-w-[260px]">
+                              Competências
+                            </th>
+                          ) : (
+                            competenciasFaturamento.map((comp) => (
+                              <th
+                                key={comp}
+                                className="p-0 text-center min-w-[260px] border-r"
+                                colSpan={2}
+                              >
+                                <div className="bg-[#2A6377] text-white p-2 font-bold">
+                                  {formatarCompetencia(comp)}
+                                </div>
+                              </th>
+                            ))
+                          )}
+                        </tr>
+                        <tr>
+                          {competenciasFaturamento.length === 0 ? (
+                            <th className="p-3 text-center text-slate-400">
+                              Sem previsão cadastrada
+                            </th>
+                          ) : (
+                            competenciasFaturamento.map((comp) => (
+                              <th key={`${comp}-sub`} className="p-0" colSpan={2}>
+                                <div className="grid grid-cols-2 min-w-[260px]">
+                                  <span className="p-2 border-r bg-slate-50">
+                                    Previsto
+                                  </span>
+                                  <span className="p-2 bg-slate-50">
+                                    Realizado
+                                  </span>
+                                </div>
+                              </th>
+                            ))
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {familiasFaturamentoComEscopo.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={Math.max(competenciasFaturamento.length * 2 + 1, 2)}
+                              className="p-6 text-center text-slate-500"
+                            >
+                              Nenhuma família com escopo informado.
+                            </td>
+                          </tr>
+                        ) : (
+                          familiasFaturamentoComEscopo.map((familia) => (
+                            <tr
+                              key={`matriz-${familia.id}`}
+                              className="border-t hover:bg-slate-50"
+                            >
+                              <td className="p-3 font-bold text-[#2A6377] sticky left-0 bg-white z-10 border-r min-w-[320px]">
+                                <div>
+                                  {familia.codigo_familia} -{" "}
+                                  {familia.descricao_familia}
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-normal mt-1">
+                                  {familia.grupo_faturamento || "Sem grupo"}
+                                </div>
+                              </td>
+                              {competenciasFaturamento.length === 0 ? (
+                                <td className="p-3 text-center text-slate-400">
+                                  Sem previsão
+                                </td>
+                              ) : (
+                                competenciasFaturamento.map((comp) => {
+                                  const previsto =
+                                    valorPrevistoFamiliaCompetencia(
+                                      familia.id,
+                                      comp,
+                                    );
+                                  const realizado =
+                                    valorRealizadoFamiliaCompetencia(
+                                      familia.id,
+                                      comp,
+                                    );
+                                  return (
+                                    <td
+                                      key={`${familia.id}-${comp}-matriz`}
+                                      className="p-0 border-r"
+                                      colSpan={2}
+                                    >
+                                      <div className="grid grid-cols-2 min-w-[260px]">
+                                        <span
+                                          className={`p-3 text-right border-r whitespace-nowrap ${previsto > 0 ? "font-bold text-blue-700" : "text-slate-300"}`}
+                                        >
+                                          {previsto > 0
+                                            ? formatarMoeda(previsto)
+                                            : "-"}
+                                        </span>
+                                        <span
+                                          className={`p-3 text-right whitespace-nowrap ${realizado > 0 ? "font-bold text-emerald-700" : "text-slate-300"}`}
+                                        >
+                                          {realizado > 0
+                                            ? formatarMoeda(realizado)
+                                            : "-"}
+                                        </span>
+                                      </div>
+                                    </td>
+                                  );
+                                })
+                              )}
+                            </tr>
+                          ))
                         )}
                       </tbody>
                     </table>
