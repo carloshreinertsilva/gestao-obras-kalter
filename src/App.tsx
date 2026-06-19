@@ -2866,6 +2866,16 @@ export default function App() {
       )
       .reduce((acc, r) => acc + Number(r.valor_realizado || 0), 0);
 
+  const totalPrevistoCompetencia = (competencia: string) =>
+    previsoesFaturamentoDoEscopo
+      .filter((p) => String(p.competencia || "").slice(0, 10) === competencia)
+      .reduce((acc, p) => acc + Number(p.valor_previsto || 0), 0);
+
+  const totalRealizadoCompetencia = (competencia: string) =>
+    realizadosFaturamentoDoEscopo
+      .filter((r) => String(r.competencia || "").slice(0, 10) === competencia)
+      .reduce((acc, r) => acc + Number(r.valor_realizado || 0), 0);
+
   const valorRealizadoFamilia = (familiaId: string) =>
     realizadosFaturamento
       .filter((r) => r.id_obra_faturamento_familia === familiaId)
@@ -5532,6 +5542,36 @@ export default function App() {
                           ))
                         )}
                       </tbody>
+                      {competenciasFaturamento.length > 0 && familiasFaturamentoComEscopo.length > 0 && (
+                        <tfoot className="bg-slate-100 border-t-2 border-[#2A6377] text-slate-800">
+                          <tr>
+                            <td className="p-3 font-black text-[#2A6377] sticky left-0 bg-slate-100 z-20 border-r min-w-[320px]">
+                              TOTAL POR COMPETÊNCIA
+                            </td>
+                            {competenciasFaturamento.map((comp) => {
+                              const totalPrevisto = totalPrevistoCompetencia(comp);
+                              const totalRealizado = totalRealizadoCompetencia(comp);
+
+                              return (
+                                <td
+                                  key={`${comp}-total-matriz`}
+                                  className="p-0 border-r"
+                                  colSpan={2}
+                                >
+                                  <div className="grid grid-cols-2 min-w-[260px]">
+                                    <span className="p-3 text-right border-r whitespace-nowrap font-black text-blue-700">
+                                      {totalPrevisto > 0 ? formatarMoeda(totalPrevisto) : "-"}
+                                    </span>
+                                    <span className="p-3 text-right whitespace-nowrap font-black text-emerald-700">
+                                      {totalRealizado > 0 ? formatarMoeda(totalRealizado) : "-"}
+                                    </span>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tfoot>
+                      )}
                     </table>
                   </div>
                 </div>
