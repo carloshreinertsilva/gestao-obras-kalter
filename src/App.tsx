@@ -108,6 +108,7 @@ export default function App() {
   });
   const [erroObra, setErroObra] = useState<string>("");
   const [obrasLista, setObrasLista] = useState<any[]>([]);
+  const [filtroStatusObras, setFiltroStatusObras] = useState<string>("em_andamento");
 
   const [reuniaoForm, setReuniaoForm] = useState<any>({
     id_obra: "",
@@ -121,10 +122,23 @@ export default function App() {
   const [listaOcorrencias, setListaOcorrencias] = useState<any[]>([]);
   const [novaTarefa, setNovaTarefa] = useState<any>({
     titulo: "",
+    descricao: "",
     data_vencimento: "",
     id_responsavel: "",
+    prioridade: "normal",
   });
   const [listaTarefas, setListaTarefas] = useState<any[]>([]);
+
+  const [modalNovaTarefaObraAberto, setModalNovaTarefaObraAberto] =
+    useState<boolean>(false);
+  const [filtroTarefasObra, setFiltroTarefasObra] = useState<string>("abertas");
+  const [novaTarefaObra, setNovaTarefaObra] = useState<any>({
+    titulo: "",
+    descricao: "",
+    data_vencimento: "",
+    id_responsavel: "",
+    prioridade: "normal",
+  });
 
   const [historicoObra, setHistoricoObra] = useState<any[]>([]);
 
@@ -232,6 +246,23 @@ export default function App() {
     numero_nf: "",
     valor_realizado: "",
     observacao: "",
+  });
+
+  // ESTADOS DE ENCERRAMENTO DA OBRA
+  const [modalFinalizarObraAberto, setModalFinalizarObraAberto] =
+    useState<boolean>(false);
+  const [formFinalizarObra, setFormFinalizarObra] = useState<any>({
+    data_finalizacao: new Date().toISOString().split("T")[0],
+    observacao_finalizacao: "",
+  });
+  const [modalCancelarObraAberto, setModalCancelarObraAberto] =
+    useState<boolean>(false);
+  const [formCancelarObra, setFormCancelarObra] = useState<any>({
+    data_cancelamento: new Date().toISOString().split("T")[0],
+    motivo_cancelamento: "",
+    observacao_cancelamento: "",
+    cancelar_tarefas: true,
+    cancelar_cronograma: true,
   });
 
   const formatarDataSegura = (dataStr: any) => {
@@ -412,6 +443,26 @@ export default function App() {
 
   const labelFase = (fase: string) =>
     fasesProjeto.find((f) => f.valor === fase)?.label || fase;
+
+  const labelStatusObra = (status: string) => {
+    const mapa: any = {
+      em_andamento: "Em andamento",
+      finalizada: "Finalizada",
+      cancelada: "Cancelada",
+      pausada: "Pausada",
+    };
+    return mapa[status] || status || "-";
+  };
+
+  const classeStatusObra = (status: string) => {
+    const mapa: any = {
+      em_andamento: "bg-blue-50 text-blue-700 border-blue-100",
+      finalizada: "bg-green-50 text-green-700 border-green-100",
+      cancelada: "bg-red-50 text-red-700 border-red-100",
+      pausada: "bg-amber-50 text-amber-700 border-amber-100",
+    };
+    return mapa[status] || "bg-slate-50 text-slate-600 border-slate-100";
+  };
 
   const labelStatusParcela = (status: string) => {
     const mapa: any = {
@@ -787,10 +838,18 @@ export default function App() {
       let query = supabase
         .from("obras")
         .select(
-          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, usuarios(nome)",
+          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, usuarios(nome)",
         )
-        .eq("status", "em_andamento")
         .order("created_at", { ascending: false });
+
+      if (telaAtiva === "cadastros_obras" || telaAtiva === "minhas_obras") {
+        if (filtroStatusObras !== "todas") {
+          query = query.eq("status", filtroStatusObras);
+        }
+      } else {
+        query = query.eq("status", "em_andamento");
+      }
+
       if (!isAdmin) query = query.eq("id_responsavel", usuarioAtual.id);
       const { data } = await query;
       if (data) {
@@ -808,7 +867,7 @@ export default function App() {
       buscarUsuarios();
       buscarObras();
     }
-  }, [telaAtiva, sessao, usuarioAtual]);
+  }, [telaAtiva, sessao, usuarioAtual, filtroStatusObras]);
 
   useEffect(() => {
     async function buscarDadosDashboard() {
@@ -2363,7 +2422,7 @@ export default function App() {
       let query = supabase
         .from("tarefas")
         .select(
-          `id, id_obra, titulo, status, data_vencimento, id_responsavel, created_at, obras!inner(codigo_externo, nome, id_responsavel), usuarios(nome)`,
+          `id, id_obra, titulo, descricao, status, data_vencimento, id_responsavel, created_at, origem, prioridade, data_conclusao, observacao_conclusao, obras!inner(codigo_externo, nome, id_responsavel), usuarios(nome)`,
         )
         .order("created_at", { ascending: false });
       if (!isAdmin) {
@@ -2747,7 +2806,65 @@ export default function App() {
       ...listaTarefas,
       { ...novaTarefa, nome_responsavel: nomeResp },
     ]);
-    setNovaTarefa({ titulo: "", data_vencimento: "", id_responsavel: "" });
+    setNovaTarefa({
+      titulo: "",
+      descricao: "",
+      data_vencimento: "",
+      id_responsavel: "",
+      prioridade: "normal",
+    });
+  };
+
+  const abrirModalNovaTarefaObra = () => {
+    setNovaTarefaObra({
+      titulo: "",
+      descricao: "",
+      data_vencimento: "",
+      id_responsavel: usuarioAtual?.id || "",
+      prioridade: "normal",
+    });
+    setModalNovaTarefaObraAberto(true);
+  };
+
+  const salvarTarefaObra = async () => {
+    if (!obraEcoSelecionada) return;
+    if (!novaTarefaObra.titulo || !novaTarefaObra.id_responsavel) {
+      return mostrarAviso("Preencha título e responsável.", "erro");
+    }
+
+    setCarregando(true);
+    try {
+      const { error } = await supabase.from("tarefas").insert([
+        {
+          id_obra: obraEcoSelecionada.id,
+          id_reuniao_origem: null,
+          titulo: novaTarefaObra.titulo,
+          descricao: novaTarefaObra.descricao || null,
+          data_vencimento: novaTarefaObra.data_vencimento || null,
+          id_responsavel: novaTarefaObra.id_responsavel,
+          prioridade: novaTarefaObra.prioridade || "normal",
+          origem: "avulsa",
+          status: "pendente",
+        },
+      ]);
+
+      if (error) throw error;
+
+      mostrarAviso("Tarefa criada na obra!");
+      setModalNovaTarefaObraAberto(false);
+      setNovaTarefaObra({
+        titulo: "",
+        descricao: "",
+        data_vencimento: "",
+        id_responsavel: "",
+        prioridade: "normal",
+      });
+      buscarTarefasKanban();
+    } catch (error: any) {
+      mostrarAviso(error.message, "erro");
+    } finally {
+      setCarregando(false);
+    }
   };
 
   async function salvarReuniaoObra() {
@@ -2786,8 +2903,11 @@ export default function App() {
             id_obra: reuniaoForm.id_obra,
             id_reuniao_origem: reuniaoSalva.id,
             titulo: t.titulo,
+            descricao: t.descricao || null,
             data_vencimento: t.data_vencimento || null,
             id_responsavel: t.id_responsavel,
+            prioridade: t.prioridade || "normal",
+            origem: "reuniao",
             status: "pendente",
           })),
         );
@@ -2917,6 +3037,13 @@ export default function App() {
     filtroObraKanban === "todas"
       ? tarefasKanban || []
       : (tarefasKanban || []).filter((t) => t?.id_obra === filtroObraKanban);
+  const tarefasPainelObra = tarefasFiltradas.filter((t) => {
+    if (filtroTarefasObra === "todas") return true;
+    if (filtroTarefasObra === "abertas") return t.status !== "concluida";
+    if (filtroTarefasObra === "atrasadas")
+      return isAtrasada(t.data_vencimento, t.status);
+    return t.status === filtroTarefasObra;
+  });
   const tarefasDashboard = tarefasKanban
     .filter(
       (t) => t.status !== "concluida" && t.id_responsavel === usuarioAtual?.id,
@@ -3021,6 +3148,132 @@ export default function App() {
   );
   const saldoFaturarFamilias =
     totalEscopoFaturamento - totalRealizadoFaturamento;
+  const saldoFaturarFamiliasPositivo = Math.max(saldoFaturarFamilias, 0);
+  const obraSemEscopoFaturamento = totalEscopoFaturamento <= 0;
+  const obraComFaturamentoPendente =
+    totalEscopoFaturamento > 0 && totalRealizadoFaturamento < totalEscopoFaturamento;
+  const podeFinalizarObraPorFaturamento =
+    !obraSemEscopoFaturamento && !obraComFaturamentoPendente;
+
+  const abrirModalFinalizarObra = () => {
+    setFormFinalizarObra({
+      data_finalizacao: new Date().toISOString().split("T")[0],
+      observacao_finalizacao: "",
+    });
+    setModalFinalizarObraAberto(true);
+  };
+
+  const confirmarFinalizacaoObra = async () => {
+    if (!obraEcoSelecionada) return;
+
+    if (obraSemEscopoFaturamento) {
+      mostrarAviso(
+        "Não é possível finalizar. Informe o escopo de faturamento da obra antes de encerrar.",
+        "erro",
+      );
+      return;
+    }
+
+    if (obraComFaturamentoPendente) {
+      mostrarAviso(
+        `Não é possível finalizar. Ainda existe ${formatarMoeda(saldoFaturarFamiliasPositivo)} a faturar.`,
+        "erro",
+      );
+      return;
+    }
+
+    if (!formFinalizarObra.data_finalizacao) {
+      mostrarAviso("Informe a data de finalização.", "erro");
+      return;
+    }
+
+    setCarregando(true);
+    try {
+      const { data, error } = await supabase.rpc("finalizar_obra_pmis", {
+        p_id_obra: obraEcoSelecionada.id,
+        p_data_finalizacao: formFinalizarObra.data_finalizacao,
+        p_observacao: formFinalizarObra.observacao_finalizacao || "",
+      });
+
+      if (error) throw error;
+
+      if (data && data.ok === false) {
+        mostrarAviso(data.mensagem || "Não foi possível finalizar a obra.", "erro");
+        return;
+      }
+
+      mostrarAviso("Obra finalizada com sucesso!");
+      setModalFinalizarObraAberto(false);
+      setObraEcoSelecionada(null);
+      await buscarObras();
+      setTelaAtiva("minhas_obras");
+    } catch (error: any) {
+      mostrarAviso(error.message || "Erro ao finalizar obra.", "erro");
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const abrirModalCancelarObra = () => {
+    setFormCancelarObra({
+      data_cancelamento: new Date().toISOString().split("T")[0],
+      motivo_cancelamento: "",
+      observacao_cancelamento: "",
+      cancelar_tarefas: true,
+      cancelar_cronograma: true,
+    });
+    setModalCancelarObraAberto(true);
+  };
+
+  const confirmarCancelamentoObra = async () => {
+    if (!obraEcoSelecionada) return;
+
+    if (!formCancelarObra.data_cancelamento) {
+      mostrarAviso("Informe a data de cancelamento.", "erro");
+      return;
+    }
+
+    if (!formCancelarObra.motivo_cancelamento?.trim()) {
+      mostrarAviso("Informe o motivo do cancelamento.", "erro");
+      return;
+    }
+
+    const confirmar = window.confirm(
+      "Tem certeza que deseja cancelar esta obra? Ela sairá das obras em andamento, mas o histórico permanecerá disponível.",
+    );
+
+    if (!confirmar) return;
+
+    setCarregando(true);
+    try {
+      const { data, error } = await supabase.rpc("cancelar_obra_pmis", {
+        p_id_obra: obraEcoSelecionada.id,
+        p_data_cancelamento: formCancelarObra.data_cancelamento,
+        p_motivo_cancelamento: formCancelarObra.motivo_cancelamento,
+        p_observacao_cancelamento: formCancelarObra.observacao_cancelamento || "",
+        p_cancelar_tarefas: Boolean(formCancelarObra.cancelar_tarefas),
+        p_cancelar_cronograma: Boolean(formCancelarObra.cancelar_cronograma),
+      });
+
+      if (error) throw error;
+
+      if (data && data.ok === false) {
+        mostrarAviso(data.mensagem || "Não foi possível cancelar a obra.", "erro");
+        return;
+      }
+
+      mostrarAviso("Obra cancelada com sucesso!");
+      setModalCancelarObraAberto(false);
+      setObraEcoSelecionada(null);
+      await buscarObras();
+      setTelaAtiva("minhas_obras");
+    } catch (error: any) {
+      mostrarAviso(error.message || "Erro ao cancelar obra.", "erro");
+    } finally {
+      setCarregando(false);
+    }
+  };
+
   const competenciasFaturamento = Array.from(
     new Set(
       [
@@ -4022,6 +4275,151 @@ export default function App() {
         </div>
       )}
 
+      {modalNovaTarefaObraAberto && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[86] flex items-center justify-center p-4"
+          onClick={() => setModalNovaTarefaObraAberto(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-gray-100 flex justify-between items-start gap-4">
+              <div>
+                <h2 className="font-bold text-xl text-[#2A6377] flex items-center gap-2">
+                  <CheckSquare size={20} /> Nova Tarefa da Obra
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {obraEcoSelecionada?.codigo_externo} - {obraEcoSelecionada?.nome}
+                </p>
+              </div>
+              <button
+                onClick={() => setModalNovaTarefaObraAberto(false)}
+                className="text-slate-400 hover:text-red-500 bg-slate-100 rounded-full p-2"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Título da tarefa
+                </label>
+                <input
+                  value={novaTarefaObra.titulo}
+                  onChange={(e) =>
+                    setNovaTarefaObra({ ...novaTarefaObra, titulo: e.target.value })
+                  }
+                  placeholder="Ex.: Validar cronograma revisado com cliente"
+                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Descrição / contexto
+                </label>
+                <textarea
+                  rows={3}
+                  value={novaTarefaObra.descricao}
+                  onChange={(e) =>
+                    setNovaTarefaObra({
+                      ...novaTarefaObra,
+                      descricao: e.target.value,
+                    })
+                  }
+                  placeholder="Detalhe o que precisa ser feito, premissas ou alinhamentos."
+                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">
+                    Responsável
+                  </label>
+                  <select
+                    value={novaTarefaObra.id_responsavel}
+                    onChange={(e) =>
+                      setNovaTarefaObra({
+                        ...novaTarefaObra,
+                        id_responsavel: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  >
+                    <option value="">Selecione</option>
+                    {listaUsuarios.map((usuario) => (
+                      <option key={usuario.id} value={usuario.id}>
+                        {usuario.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">
+                    Prazo
+                  </label>
+                  <input
+                    type="date"
+                    value={novaTarefaObra.data_vencimento}
+                    onChange={(e) =>
+                      setNovaTarefaObra({
+                        ...novaTarefaObra,
+                        data_vencimento: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">
+                    Prioridade
+                  </label>
+                  <select
+                    value={novaTarefaObra.prioridade}
+                    onChange={(e) =>
+                      setNovaTarefaObra({
+                        ...novaTarefaObra,
+                        prioridade: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  >
+                    <option value="baixa">Baixa</option>
+                    <option value="normal">Normal</option>
+                    <option value="alta">Alta</option>
+                    <option value="critica">Crítica</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-sm text-blue-800">
+                Esta tarefa será criada diretamente na obra, sem vínculo obrigatório com uma ata. Na reunião, ela continuará disponível para revisão e acompanhamento.
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-100 bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => setModalNovaTarefaObraAberto(false)}
+                className="px-5 py-2 bg-white border rounded-lg font-bold text-slate-600"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={salvarTarefaObra}
+                disabled={carregando || !novaTarefaObra.titulo || !novaTarefaObra.id_responsavel}
+                className="px-5 py-2 bg-[#2A6377] text-white rounded-lg font-bold flex items-center gap-2 disabled:opacity-50"
+              >
+                {carregando ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                Salvar tarefa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DETALHES DA TAREFA E COMENTÁRIOS */}
       {tarefaSelecionada && (
         <div
@@ -4096,6 +4494,23 @@ export default function App() {
               </div>
 
               <div className="w-full md:w-2/3 flex flex-col">
+                <div className="mb-4 bg-slate-50 border rounded-lg p-4 text-sm">
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <span className="text-[10px] font-bold uppercase px-2 py-1 rounded bg-[#2A6377]/10 text-[#2A6377]">
+                      Origem: {tarefaSelecionada.origem === "reuniao" ? "Reunião" : "Avulsa"}
+                    </span>
+                    <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded ${tarefaSelecionada.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefaSelecionada.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefaSelecionada.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
+                      Prioridade: {tarefaSelecionada.prioridade || "normal"}
+                    </span>
+                  </div>
+                  <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">
+                    Descrição
+                  </p>
+                  <p className="text-slate-700 whitespace-pre-wrap">
+                    {tarefaSelecionada.descricao || "Sem descrição cadastrada."}
+                  </p>
+                </div>
+
                 <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4">
                   <MessageSquare size={18} className="text-[#2A6377]" />{" "}
                   Atualizações
@@ -4466,6 +4881,284 @@ export default function App() {
                   <CheckCircle2 size={16} />
                 )}{" "}
                 Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalFinalizarObraAberto && obraEcoSelecionada && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[85] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <CheckCircle2 className="text-emerald-600" size={22} />
+                  Finalizar Obra
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {obraEcoSelecionada.codigo_externo} - {obraEcoSelecionada.nome}
+                </p>
+              </div>
+              <button
+                onClick={() => setModalFinalizarObraAberto(false)}
+                className="text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-50 border rounded-xl p-4">
+                  <p className="text-[10px] uppercase font-bold text-slate-400">Escopo a faturar</p>
+                  <p className="text-xl font-bold text-slate-800 mt-1">
+                    {formatarMoeda(totalEscopoFaturamento)}
+                  </p>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                  <p className="text-[10px] uppercase font-bold text-emerald-600">Faturado</p>
+                  <p className="text-xl font-bold text-emerald-700 mt-1">
+                    {formatarMoeda(totalRealizadoFaturamento)}
+                  </p>
+                </div>
+                <div className={`${saldoFaturarFamiliasPositivo > 0 ? "bg-red-50 border-red-100" : "bg-green-50 border-green-100"} border rounded-xl p-4`}>
+                  <p className={`text-[10px] uppercase font-bold ${saldoFaturarFamiliasPositivo > 0 ? "text-red-600" : "text-green-600"}`}>Saldo a faturar</p>
+                  <p className={`text-xl font-bold mt-1 ${saldoFaturarFamiliasPositivo > 0 ? "text-red-700" : "text-green-700"}`}>
+                    {formatarMoeda(saldoFaturarFamiliasPositivo)}
+                  </p>
+                </div>
+              </div>
+
+              {obraSemEscopoFaturamento ? (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-start gap-3">
+                  <AlertTriangle size={22} className="shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">Escopo de faturamento não informado.</p>
+                    <p className="text-sm mt-1">
+                      Para finalizar a obra, primeiro cadastre o escopo na aba Faturamento e registre o faturamento realizado. Isso evita encerrar uma obra sem validar se todo o escopo foi faturado.
+                    </p>
+                  </div>
+                </div>
+              ) : obraComFaturamentoPendente ? (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-start gap-3">
+                  <AlertTriangle size={22} className="shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">Não é possível finalizar esta obra.</p>
+                    <p className="text-sm mt-1">
+                      Ainda existe faturamento pendente. A obra só pode ser finalizada quando o valor faturado for igual ou superior ao escopo total de faturamento. Contas a receber em aberto não bloqueiam a finalização.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-xl flex items-start gap-3">
+                  <CheckCircle2 size={22} className="shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">Faturamento validado.</p>
+                    <p className="text-sm mt-1">
+                      Não há saldo a faturar. Você pode finalizar a obra mesmo que ainda existam parcelas a receber.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Data de finalização</label>
+                  <input
+                    type="date"
+                    value={formFinalizarObra.data_finalizacao}
+                    onChange={(e) =>
+                      setFormFinalizarObra((prev: any) => ({
+                        ...prev,
+                        data_finalizacao: e.target.value,
+                      }))
+                    }
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    disabled={!podeFinalizarObraPorFaturamento}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Saldo a receber em aberto</label>
+                  <div className="w-full border rounded-lg p-3 bg-slate-50 font-bold text-slate-700">
+                    {formatarMoeda(Math.max(saldoReceberParcelas, 0))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Observação de encerramento</label>
+                <textarea
+                  rows={4}
+                  value={formFinalizarObra.observacao_finalizacao}
+                  onChange={(e) =>
+                    setFormFinalizarObra((prev: any) => ({
+                      ...prev,
+                      observacao_finalizacao: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  placeholder="Ex.: Obra entregue e faturamento concluído. Recebimentos seguem conforme condição comercial."
+                  disabled={!podeFinalizarObraPorFaturamento}
+                />
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                onClick={() => setModalFinalizarObraAberto(false)}
+                className="px-5 py-3 rounded-lg font-bold bg-white border hover:bg-slate-100 text-slate-600"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={confirmarFinalizacaoObra}
+                disabled={!podeFinalizarObraPorFaturamento || carregando}
+                className="px-5 py-3 rounded-lg font-bold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {carregando ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                Confirmar Finalização
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalCancelarObraAberto && obraEcoSelecionada && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[85] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <AlertTriangle className="text-red-600" size={22} />
+                  Cancelar Obra
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {obraEcoSelecionada.codigo_externo} - {obraEcoSelecionada.nome}
+                </p>
+              </div>
+              <button
+                onClick={() => setModalCancelarObraAberto(false)}
+                className="text-slate-400 hover:text-red-500 bg-slate-100 p-2 rounded-full"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-5">
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-start gap-3">
+                <AlertTriangle size={22} className="shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Atenção: cancelamento não apaga o histórico.</p>
+                  <p className="text-sm mt-1">
+                    A obra sairá das listas de obras em andamento. Reuniões, documentos, faturamento, diário e registros existentes serão preservados para consulta.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Data de cancelamento</label>
+                  <input
+                    type="date"
+                    value={formCancelarObra.data_cancelamento}
+                    onChange={(e) =>
+                      setFormCancelarObra((prev: any) => ({
+                        ...prev,
+                        data_cancelamento: e.target.value,
+                      }))
+                    }
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Motivo do cancelamento</label>
+                  <input
+                    type="text"
+                    value={formCancelarObra.motivo_cancelamento}
+                    onChange={(e) =>
+                      setFormCancelarObra((prev: any) => ({
+                        ...prev,
+                        motivo_cancelamento: e.target.value,
+                      }))
+                    }
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    placeholder="Ex.: Cancelado pelo cliente, revisão comercial, perda do projeto..."
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Observação</label>
+                <textarea
+                  rows={4}
+                  value={formCancelarObra.observacao_cancelamento}
+                  onChange={(e) =>
+                    setFormCancelarObra((prev: any) => ({
+                      ...prev,
+                      observacao_cancelamento: e.target.value,
+                    }))
+                  }
+                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  placeholder="Descreva o contexto do cancelamento e próximos passos, se houver."
+                />
+              </div>
+
+              <div className="bg-slate-50 border rounded-xl p-4 space-y-3">
+                <label className="flex items-start gap-3 text-sm text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formCancelarObra.cancelar_tarefas}
+                    onChange={(e) =>
+                      setFormCancelarObra((prev: any) => ({
+                        ...prev,
+                        cancelar_tarefas: e.target.checked,
+                      }))
+                    }
+                    className="mt-1"
+                  />
+                  <span>
+                    <strong>Cancelar tarefas pendentes da obra</strong>
+                    <br />
+                    <span className="text-slate-500">Tarefas já concluídas permanecem como histórico.</span>
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-3 text-sm text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formCancelarObra.cancelar_cronograma}
+                    onChange={(e) =>
+                      setFormCancelarObra((prev: any) => ({
+                        ...prev,
+                        cancelar_cronograma: e.target.checked,
+                      }))
+                    }
+                    className="mt-1"
+                  />
+                  <span>
+                    <strong>Cancelar fases de cronograma em aberto</strong>
+                    <br />
+                    <span className="text-slate-500">Fases concluídas permanecem concluídas.</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                onClick={() => setModalCancelarObraAberto(false)}
+                className="px-5 py-3 rounded-lg font-bold bg-white border hover:bg-slate-100 text-slate-600"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={confirmarCancelamentoObra}
+                disabled={carregando}
+                className="px-5 py-3 rounded-lg font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {carregando ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
+                Confirmar Cancelamento
               </button>
             </div>
           </div>
@@ -5078,12 +5771,35 @@ export default function App() {
 
         {telaAtiva === "minhas_obras" && (
           <div className="animate-in fade-in h-full">
-            <h2 className="text-2xl md:text-3xl font-bold mb-6 text-slate-800">
-              Minhas Obras em Andamento
-            </h2>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6">
+              <div>
+                <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
+                  Minhas Obras
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Consulte obras em andamento, finalizadas, canceladas ou todo o histórico.
+                </p>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm flex items-center gap-3 w-full md:w-auto">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                  Situação
+                </label>
+                <select
+                  value={filtroStatusObras}
+                  onChange={(e) => setFiltroStatusObras(e.target.value)}
+                  className="border rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-[#2A6377] flex-1 md:min-w-[180px]"
+                >
+                  <option value="em_andamento">Em andamento</option>
+                  <option value="finalizada">Finalizadas</option>
+                  <option value="cancelada">Canceladas</option>
+                  <option value="pausada">Pausadas</option>
+                  <option value="todas">Todas</option>
+                </select>
+              </div>
+            </div>
             {obrasLista.length === 0 ? (
               <div className="bg-white p-10 rounded-xl text-center border text-slate-400">
-                Nenhuma obra vinculada a você.
+                Nenhuma obra encontrada para o filtro selecionado.
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -5095,9 +5811,24 @@ export default function App() {
                   >
                     <div className="h-2 bg-[#2A6377]"></div>
                     <div className="p-5 flex-1 flex flex-col">
-                      <span className="text-[10px] font-bold bg-slate-100 text-slate-500 uppercase px-2 py-1 rounded w-fit mb-3">
-                        {obra.codigo_externo}
-                      </span>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className="text-[10px] font-bold bg-slate-100 text-slate-500 uppercase px-2 py-1 rounded w-fit">
+                          {obra.codigo_externo}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
+                            obra.status === "finalizada"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : obra.status === "cancelada"
+                                ? "bg-red-50 text-red-700"
+                                : obra.status === "pausada"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-blue-50 text-blue-700"
+                          }`}
+                        >
+                          {labelStatusObra(obra.status)}
+                        </span>
+                      </div>
                       <h3 className="text-lg font-bold text-slate-800 leading-tight mb-4 group-hover:text-[#2A6377] transition">
                         {obra.nome}
                       </h3>
@@ -5151,6 +5882,40 @@ export default function App() {
                   </span>
                 </div>
               </div>
+              {podeEditarObraSelecionada && !["finalizada", "cancelada"].includes(obraEcoSelecionada.status) && (
+                <details className="relative self-start md:self-auto group">
+                  <summary className="list-none cursor-pointer select-none bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition">
+                    <Settings size={18} /> Ações da Obra
+                    <ChevronRight size={16} className="rotate-90 transition group-open:-rotate-90" />
+                  </summary>
+
+                  <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                    <button
+                      onClick={() => {
+                        editarObra(obraEcoSelecionada);
+                        setTelaAtiva("cadastros_obras");
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <Edit2 size={16} /> Editar cadastro
+                    </button>
+
+                    <button
+                      onClick={abrirModalFinalizarObra}
+                      className="w-full text-left px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2"
+                    >
+                      <CheckCircle2 size={16} /> Finalizar obra
+                    </button>
+
+                    <button
+                      onClick={abrirModalCancelarObra}
+                      className="w-full text-left px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-slate-100"
+                    >
+                      <AlertTriangle size={16} /> Cancelar obra
+                    </button>
+                  </div>
+                </details>
+              )}
             </header>
 
             <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur pb-3 mb-3">
@@ -6879,24 +7644,56 @@ export default function App() {
                 </div>
 
                 <div className="lg:col-span-2 flex flex-col bg-white p-5 rounded-xl shadow-sm border h-full min-h-[600px]">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
-                    <CheckSquare size={20} className="text-[#2A6377]" /> Tarefas
-                    da Obra
-                  </h3>
+                  <div className="border-b pb-3 mb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold flex items-center gap-2">
+                        <CheckSquare size={20} className="text-[#2A6377]" /> Tarefas da Obra
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Crie e acompanhe tarefas avulsas da obra. Tarefas de reunião também aparecem aqui.
+                      </p>
+                    </div>
+                    {podeEditarObraSelecionada && !["finalizada", "cancelada"].includes(obraEcoSelecionada.status) && (
+                      <button
+                        onClick={abrirModalNovaTarefaObra}
+                        className="bg-[#2A6377] hover:bg-[#1e4857] text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2"
+                      >
+                        <Plus size={16} /> Nova Tarefa
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {[
+                      { id: "abertas", label: "Abertas" },
+                      { id: "atrasadas", label: "Atrasadas" },
+                      { id: "pendente", label: "A Fazer" },
+                      { id: "em_andamento", label: "Em Andamento" },
+                      { id: "concluida", label: "Concluídas" },
+                      { id: "todas", label: "Todas" },
+                    ].map((filtro) => (
+                      <button
+                        key={filtro.id}
+                        onClick={() => setFiltroTarefasObra(filtro.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${filtroTarefasObra === filtro.id ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}`}
+                      >
+                        {filtro.label}
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex gap-4 overflow-x-auto pb-2 items-start flex-1">
                     <div className="flex-1 min-w-[260px] bg-gray-50 rounded-xl p-3 border">
                       <div className="flex justify-between items-center mb-3">
                         <h4 className="font-bold text-sm">A Fazer</h4>
                         <span className="bg-gray-200 text-[10px] px-2 py-0.5 rounded-full font-bold">
                           {
-                            tarefasFiltradas.filter(
+                            tarefasPainelObra.filter(
                               (t) => t?.status === "pendente",
                             ).length
                           }
                         </span>
                       </div>
                       <div className="space-y-2">
-                        {tarefasFiltradas
+                        {tarefasPainelObra
                           .filter((t) => t?.status === "pendente")
                           .map((tarefa) => (
                             <div
@@ -6907,6 +7704,14 @@ export default function App() {
                               <p className="font-medium text-sm leading-tight mb-2">
                                 {tarefa?.titulo}
                               </p>
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                                  {tarefa?.origem === "reuniao" ? "Reunião" : "Avulsa"}
+                                </span>
+                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${tarefa?.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefa?.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefa?.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
+                                  {tarefa?.prioridade || "normal"}
+                                </span>
+                              </div>
                               <div className="flex justify-between items-center border-t pt-2">
                                 <span className="text-[10px] uppercase font-bold text-slate-400">
                                   <User size={10} className="inline mr-1" />
@@ -6930,14 +7735,14 @@ export default function App() {
                         </h4>
                         <span className="bg-[#2A6377]/20 text-[#2A6377] text-[10px] px-2 py-0.5 rounded-full font-bold">
                           {
-                            tarefasFiltradas.filter(
+                            tarefasPainelObra.filter(
                               (t) => t?.status === "em_andamento",
                             ).length
                           }
                         </span>
                       </div>
                       <div className="space-y-2">
-                        {tarefasFiltradas
+                        {tarefasPainelObra
                           .filter((t) => t?.status === "em_andamento")
                           .map((tarefa) => (
                             <div
@@ -6948,6 +7753,14 @@ export default function App() {
                               <p className="font-medium text-sm leading-tight mb-2">
                                 {tarefa?.titulo}
                               </p>
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                                  {tarefa?.origem === "reuniao" ? "Reunião" : "Avulsa"}
+                                </span>
+                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${tarefa?.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefa?.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefa?.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
+                                  {tarefa?.prioridade || "normal"}
+                                </span>
+                              </div>
                               <div className="flex justify-between items-center border-t pt-2">
                                 <span className="text-[10px] uppercase font-bold text-slate-400">
                                   <User size={10} className="inline mr-1" />
@@ -6971,7 +7784,7 @@ export default function App() {
                         </h4>
                       </div>
                       <div className="space-y-2">
-                        {tarefasFiltradas
+                        {tarefasPainelObra
                           .filter((t) => t?.status === "concluida")
                           .map((tarefa) => (
                             <div
@@ -7322,22 +8135,46 @@ export default function App() {
             </form>
 
             <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 max-w-full">
-              <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full">
-                Todas as Obras (Banco de Dados)
-              </h3>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 border-b pb-4 max-w-full">
+                <div>
+                  <h3 className="text-lg font-bold max-w-full">
+                    Consulta de Obras
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Use o filtro para consultar obras em andamento, finalizadas, canceladas ou todo o histórico.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Situação
+                  </label>
+                  <select
+                    value={filtroStatusObras}
+                    onChange={(e) => setFiltroStatusObras(e.target.value)}
+                    className="border rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-[#2A6377]"
+                  >
+                    <option value="em_andamento">Em andamento</option>
+                    <option value="finalizada">Finalizadas</option>
+                    <option value="cancelada">Canceladas</option>
+                    <option value="pausada">Pausadas</option>
+                    <option value="todas">Todas</option>
+                  </select>
+                </div>
+              </div>
               {obrasLista.length === 0 ? (
                 <p className="text-gray-500 text-sm max-w-full truncate">
                   Nenhuma obra.
                 </p>
               ) : (
                 <div className="overflow-x-auto pb-2 max-w-full">
-                  <table className="w-full text-left border-collapse min-w-[700px] max-w-full">
+                  <table className="w-full text-left border-collapse min-w-[850px] max-w-full">
                     <thead>
                       <tr className="bg-slate-50 text-slate-600 text-sm border-y max-w-full">
                         <th className="p-3 max-w-full truncate">Código</th>
                         <th className="p-3 max-w-full truncate">Nome</th>
                         <th className="p-3 max-w-full truncate">Fase</th>
                         <th className="p-3 max-w-full truncate">Responsável</th>
+                        <th className="p-3 max-w-full truncate">Status</th>
                         <th className="p-3 max-w-full truncate">
                           Prazo Entrega
                         </th>
@@ -7361,6 +8198,11 @@ export default function App() {
                           </td>
                           <td className="p-3 text-slate-600 max-w-full truncate">
                             {obra.usuarios?.nome}
+                          </td>
+                          <td className="p-3 text-slate-600 max-w-full truncate">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-bold ${classeStatusObra(obra.status)}`}>
+                              {labelStatusObra(obra.status)}
+                            </span>
                           </td>
                           <td className="p-3 text-slate-600 max-w-full truncate">
                             {formatarDataSegura(obra.data_previsao_fim)}
@@ -7601,10 +8443,10 @@ export default function App() {
                   <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">
                     4. Gerar Tarefas
                   </h3>
-                  <div className="flex flex-col sm:flex-row gap-3 mb-3 w-full max-w-full items-start">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 w-full max-w-full">
                     <input
                       type="text"
-                      className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full"
+                      className="border rounded-lg p-2 w-full outline-none max-w-full"
                       placeholder="O que precisa ser feito..."
                       value={novaTarefa.titulo}
                       onChange={(e) =>
@@ -7613,7 +8455,7 @@ export default function App() {
                     />
                     <input
                       type="date"
-                      className="border rounded-lg p-2 w-full sm:w-[160px] shrinking-0 max-w-full"
+                      className="border rounded-lg p-2 w-full outline-none max-w-full"
                       value={novaTarefa.data_vencimento}
                       onChange={(e) =>
                         setNovaTarefa({
@@ -7623,6 +8465,18 @@ export default function App() {
                       }
                     />
                   </div>
+                  <textarea
+                    rows={2}
+                    className="border rounded-lg p-2 w-full outline-none max-w-full mb-3"
+                    placeholder="Descrição / contexto da tarefa..."
+                    value={novaTarefa.descricao}
+                    onChange={(e) =>
+                      setNovaTarefa({
+                        ...novaTarefa,
+                        descricao: e.target.value,
+                      })
+                    }
+                  />
                   <div className="flex flex-col sm:flex-row gap-3 mb-4 w-full max-w-full items-start">
                     <select
                       className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full"
@@ -7640,6 +8494,21 @@ export default function App() {
                           {u.nome}
                         </option>
                       ))}
+                    </select>
+                    <select
+                      className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full"
+                      value={novaTarefa.prioridade}
+                      onChange={(e) =>
+                        setNovaTarefa({
+                          ...novaTarefa,
+                          prioridade: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="baixa">Prioridade baixa</option>
+                      <option value="normal">Prioridade normal</option>
+                      <option value="alta">Prioridade alta</option>
+                      <option value="critica">Prioridade crítica</option>
                     </select>
                     <button
                       onClick={adicionarTarefa}
@@ -7661,6 +8530,12 @@ export default function App() {
                           <span className="flex items-center gap-1 max-w-full truncate">
                             <User size={12} className="shrink-0" />{" "}
                             {tar.nome_responsavel}
+                          </span>
+                          <span className="flex items-center gap-1 max-w-full truncate uppercase">
+                            Origem: reunião
+                          </span>
+                          <span className="flex items-center gap-1 max-w-full truncate uppercase">
+                            Prioridade: {tar.prioridade || "normal"}
                           </span>
                           {tar.data_vencimento && (
                             <span className="flex items-center gap-1 max-w-full truncate">
