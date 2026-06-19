@@ -214,7 +214,15 @@ export default function App() {
   const [familiaFaturamentoEmEdicao, setFamiliaFaturamentoEmEdicao] =
     useState<any>(null);
   const [formFamiliaFaturamento, setFormFamiliaFaturamento] = useState<any>({
+    id_grupo_faturamento: "",
     grupo_faturamento: "",
+    valor_total_escopo: "",
+    observacao: "",
+  });
+  const [modalNovoItemEscopoAberto, setModalNovoItemEscopoAberto] = useState<boolean>(false);
+  const [novoItemEscopoFaturamento, setNovoItemEscopoFaturamento] = useState<any>({
+    id_grupo_faturamento: "",
+    codigo_familia: "",
     valor_total_escopo: "",
     observacao: "",
   });
@@ -349,6 +357,36 @@ export default function App() {
 
     if (!grupo) return codigoLimpo;
     return grupo.descricao ? `${grupo.codigo} - ${grupo.descricao}` : grupo.codigo;
+  };
+
+  const grupoFaturamentoPorId = (idGrupo: any) =>
+    gruposFaturamentoObra.find((g) => String(g.id) === String(idGrupo));
+
+  const idGrupoFaturamentoDaFamilia = (familia: any) => {
+    if (familia?.id_grupo_faturamento) return familia.id_grupo_faturamento;
+    const codigo = codigoGrupoFaturamento(familia?.grupo_faturamento);
+    return (
+      gruposFaturamentoObra.find(
+        (g) => codigoGrupoFaturamento(g.codigo) === codigo,
+      )?.id || ""
+    );
+  };
+
+  const familiasPadraoFaturamento = () => {
+    const mapa = new Map<string, any>();
+    familiasFaturamento.forEach((familia: any) => {
+      const codigo = String(familia.codigo_familia || "").trim();
+      if (!codigo || mapa.has(codigo)) return;
+      mapa.set(codigo, {
+        id_familia_padrao: familia.id_familia_padrao || null,
+        codigo_familia: familia.codigo_familia,
+        descricao_familia: familia.descricao_familia,
+        ordem: familia.ordem || 999,
+      });
+    });
+    return Array.from(mapa.values()).sort(
+      (a, b) => Number(a.ordem || 0) - Number(b.ordem || 0),
+    );
   };
 
   const selecionarTextoAoFocar = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -1569,7 +1607,7 @@ export default function App() {
     if (!obraEcoSelecionada || !grupo) return;
 
     const familiasVinculadas = familiasFaturamento.filter(
-      (f) => codigoGrupoFaturamento(f.grupo_faturamento) === codigoGrupoFaturamento(grupo.codigo),
+      (f) => String(f.id_grupo_faturamento || idGrupoFaturamentoDaFamilia(f)) === String(grupo.id),
     );
 
     if (familiasVinculadas.some((f) => Number(f.valor_total_escopo || 0) > 0)) {
@@ -1600,9 +1638,16 @@ export default function App() {
 
   const atualizarFamiliaFaturamento = async () => {
     if (!obraEcoSelecionada || !familiaFaturamentoEmEdicao) return;
+
+    const grupo = grupoFaturamentoPorId(formFamiliaFaturamento.id_grupo_faturamento);
+    if (!grupo && Number(formFamiliaFaturamento.valor_total_escopo || 0) > 0) {
+      return mostrarAviso("Selecione o grupo de faturamento do item.", "erro");
+    }
+
     try {
       const payload = {
-        grupo_faturamento: formFamiliaFaturamento.grupo_faturamento || null,
+        id_grupo_faturamento: grupo?.id || null,
+        grupo_faturamento: grupo?.codigo || null,
         valor_total_escopo:
           Number(formFamiliaFaturamento.valor_total_escopo) || 0,
         observacao: formFamiliaFaturamento.observacao || null,
@@ -1614,24 +1659,146 @@ export default function App() {
       if (error) throw error;
       setFamiliaFaturamentoEmEdicao(null);
       setFormFamiliaFaturamento({
+        id_grupo_faturamento: "",
         grupo_faturamento: "",
         valor_total_escopo: "",
         observacao: "",
       });
       buscarFamiliasFaturamento(obraEcoSelecionada.id);
-      mostrarAviso("Família de faturamento atualizada!");
+      buscarGruposFaturamentoObra(obraEcoSelecionada.id);
+      mostrarAviso("Item de escopo atualizado!");
     } catch (error: any) {
-      mostrarAviso(error.message || "Erro ao atualizar família.", "erro");
+      mostrarAviso(error.message || "Erro ao atualizar item de escopo.", "erro");
     }
   };
 
   const abrirEdicaoFamiliaFaturamento = (familia: any) => {
+    const idGrupo = idGrupoFaturamentoDaFamilia(familia);
     setFamiliaFaturamentoEmEdicao(familia);
     setFormFamiliaFaturamento({
+      id_grupo_faturamento: idGrupo,
       grupo_faturamento: familia.grupo_faturamento || "",
       valor_total_escopo: String(familia.valor_total_escopo || ""),
       observacao: familia.observacao || "",
     });
+  };
+
+  const abrirModalNovoItemEscopo = () => {
+    if (gruposFaturamentoAtivos().length === 0) {
+      mostrarAviso(
+        "Cadastre ao menos um grupo de faturamento antes de adicionar itens ao escopo.",
+        "erro",
+      );
+      setModalGruposFaturamentoAberto(true);
+      return;
+    }
+
+    setNovoItemEscopoFaturamento({
+      id_grupo_faturamento: "",
+      codigo_familia: "",
+      valor_total_escopo: "",
+      observacao: "",
+    });
+    setModalNovoItemEscopoAberto(true);
+  };
+
+  const salvarNovoItemEscopoFaturamento = async () => {
+    if (!obraEcoSelecionada) return;
+
+    const grupo = grupoFaturamentoPorId(novoItemEscopoFaturamento.id_grupo_faturamento);
+    const familiaPadrao = familiasPadraoFaturamento().find(
+      (f) => String(f.codigo_familia) === String(novoItemEscopoFaturamento.codigo_familia),
+    );
+    const valorEscopo = Number(novoItemEscopoFaturamento.valor_total_escopo || 0);
+
+    if (!grupo || !familiaPadrao || valorEscopo <= 0) {
+      return mostrarAviso(
+        "Informe grupo de faturamento, família e valor do escopo.",
+        "erro",
+      );
+    }
+
+    const jaExiste = familiasFaturamento.some(
+      (item) =>
+        String(idGrupoFaturamentoDaFamilia(item)) === String(grupo.id) &&
+        String(item.codigo_familia) === String(familiaPadrao.codigo_familia) &&
+        Number(item.valor_total_escopo || 0) > 0,
+    );
+
+    if (jaExiste) {
+      return mostrarAviso(
+        "Esta família já está lançada neste grupo. Use Ajustar para alterar o valor.",
+        "erro",
+      );
+    }
+
+    setCarregando(true);
+    try {
+      const { error } = await supabase.from("obra_faturamento_familias").insert([
+        {
+          id_obra: obraEcoSelecionada.id,
+          id_grupo_faturamento: grupo.id,
+          grupo_faturamento: grupo.codigo,
+          id_familia_padrao: familiaPadrao.id_familia_padrao,
+          codigo_familia: familiaPadrao.codigo_familia,
+          descricao_familia: familiaPadrao.descricao_familia,
+          ordem: familiaPadrao.ordem || 999,
+          valor_total_escopo: valorEscopo,
+          observacao: novoItemEscopoFaturamento.observacao || null,
+        },
+      ]);
+      if (error) throw error;
+
+      setModalNovoItemEscopoAberto(false);
+      setNovoItemEscopoFaturamento({
+        id_grupo_faturamento: "",
+        codigo_familia: "",
+        valor_total_escopo: "",
+        observacao: "",
+      });
+      buscarFamiliasFaturamento(obraEcoSelecionada.id);
+      mostrarAviso("Item adicionado ao escopo!");
+    } catch (error: any) {
+      mostrarAviso(error.message || "Erro ao adicionar item ao escopo.", "erro");
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const removerItemEscopoFaturamento = async (item: any) => {
+    if (!obraEcoSelecionada || !item) return;
+
+    const possuiPrevisao = previsoesFaturamento.some(
+      (p) => p.id_obra_faturamento_familia === item.id,
+    );
+    const possuiRealizado = realizadosFaturamento.some(
+      (r) => r.id_obra_faturamento_familia === item.id,
+    );
+
+    if (possuiPrevisao || possuiRealizado) {
+      return mostrarAviso(
+        "Este item já possui previsão ou faturamento realizado. Zerar o escopo poderia distorcer o histórico.",
+        "erro",
+      );
+    }
+
+    if (!window.confirm("Remover este item do escopo?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("obra_faturamento_familias")
+        .update({
+          valor_total_escopo: 0,
+          observacao: item.observacao || null,
+        })
+        .eq("id", item.id);
+      if (error) throw error;
+      setFamiliaFaturamentoEmEdicao(null);
+      buscarFamiliasFaturamento(obraEcoSelecionada.id);
+      mostrarAviso("Item removido do escopo.");
+    } catch (error: any) {
+      mostrarAviso(error.message || "Erro ao remover item.", "erro");
+    }
   };
 
   const abrirModalEscopoFaturamento = () => {
@@ -3084,6 +3251,9 @@ export default function App() {
   void saldoGeral;
   void percentualGeral;
   void resumoReal;
+  void abrirModalEscopoFaturamento;
+  void atualizarDraftEscopoFaturamento;
+  void salvarEscopoFaturamento;
 
   const totalPrevistoParcelas = parcelasCliente.reduce(
     (acc, curr) => acc + Number(curr.valor_previsto || 0),
@@ -3765,6 +3935,131 @@ export default function App() {
         </div>
       )}
 
+      {modalNovoItemEscopoAberto && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[85] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden">
+            <div className="p-5 border-b flex justify-between items-start gap-4">
+              <div>
+                <h2 className="font-bold text-xl text-[#2A6377]">
+                  Adicionar item ao escopo
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Escolha o grupo, a família e o valor do escopo. A mesma família pode ser usada em grupos diferentes.
+                </p>
+              </div>
+              <button
+                onClick={() => setModalNovoItemEscopoAberto(false)}
+                className="text-slate-400 hover:text-red-500 bg-slate-100 rounded-full p-2"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Grupo de faturamento
+                </label>
+                <select
+                  value={novoItemEscopoFaturamento.id_grupo_faturamento}
+                  onChange={(e) =>
+                    setNovoItemEscopoFaturamento({
+                      ...novoItemEscopoFaturamento,
+                      id_grupo_faturamento: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                >
+                  <option value="">Selecione um grupo</option>
+                  {gruposFaturamentoAtivos().map((grupo) => (
+                    <option key={grupo.id} value={grupo.id}>
+                      {grupo.codigo} - {grupo.descricao}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Família
+                </label>
+                <select
+                  value={novoItemEscopoFaturamento.codigo_familia}
+                  onChange={(e) =>
+                    setNovoItemEscopoFaturamento({
+                      ...novoItemEscopoFaturamento,
+                      codigo_familia: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                >
+                  <option value="">Selecione uma família</option>
+                  {familiasPadraoFaturamento().map((familia) => (
+                    <option key={familia.codigo_familia} value={familia.codigo_familia}>
+                      {familia.codigo_familia} - {familia.descricao_familia}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Valor do escopo
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={novoItemEscopoFaturamento.valor_total_escopo}
+                  onChange={(e) =>
+                    setNovoItemEscopoFaturamento({
+                      ...novoItemEscopoFaturamento,
+                      valor_total_escopo: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  placeholder="0,00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">
+                  Observação
+                </label>
+                <textarea
+                  rows={3}
+                  value={novoItemEscopoFaturamento.observacao}
+                  onChange={(e) =>
+                    setNovoItemEscopoFaturamento({
+                      ...novoItemEscopoFaturamento,
+                      observacao: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  placeholder="Detalhes internos deste item, se necessário."
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => setModalNovoItemEscopoAberto(false)}
+                className="px-5 py-2 bg-white border rounded-lg font-bold text-slate-600"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={salvarNovoItemEscopoFaturamento}
+                disabled={carregando}
+                className="px-5 py-2 bg-[#2A6377] text-white rounded-lg font-bold disabled:opacity-50"
+              >
+                Salvar item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalEscopoFaturamentoAberto && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[85] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col overflow-hidden">
@@ -3957,7 +4252,7 @@ export default function App() {
             <div className="p-5 border-b flex justify-between items-start gap-4">
               <div>
                 <h2 className="font-bold text-xl text-[#2A6377]">
-                  Editar família de faturamento
+                  Ajustar item do escopo
                 </h2>
                 <p className="text-sm text-slate-500 mt-1">
                   {familiaFaturamentoEmEdicao.codigo_familia} -{" "}
@@ -3977,18 +4272,20 @@ export default function App() {
                   Grupo de faturamento
                 </label>
                 <select
-                  value={formFamiliaFaturamento.grupo_faturamento}
-                  onChange={(e) =>
+                  value={formFamiliaFaturamento.id_grupo_faturamento}
+                  onChange={(e) => {
+                    const grupo = grupoFaturamentoPorId(e.target.value);
                     setFormFamiliaFaturamento({
                       ...formFamiliaFaturamento,
-                      grupo_faturamento: e.target.value,
-                    })
-                  }
+                      id_grupo_faturamento: e.target.value,
+                      grupo_faturamento: grupo?.codigo || "",
+                    });
+                  }}
                   className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
                 >
                   <option value="">Selecione um grupo</option>
                   {gruposFaturamentoAtivos().map((grupo) => (
-                    <option key={grupo.id} value={grupo.codigo}>
+                    <option key={grupo.id} value={grupo.id}>
                       {grupo.codigo} - {grupo.descricao}
                     </option>
                   ))}
@@ -4030,6 +4327,12 @@ export default function App() {
               </div>
             </div>
             <div className="p-4 border-t bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => removerItemEscopoFaturamento(familiaFaturamentoEmEdicao)}
+                className="mr-auto px-5 py-2 bg-red-50 border border-red-200 rounded-lg font-bold text-red-700"
+              >
+                Remover do escopo
+              </button>
               <button
                 onClick={() => setFamiliaFaturamentoEmEdicao(null)}
                 className="px-5 py-2 bg-white border rounded-lg font-bold text-slate-600"
@@ -6332,11 +6635,10 @@ export default function App() {
                   </div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <p className="text-xs text-slate-400 font-bold uppercase">
-                      Famílias no Escopo
+                      Itens no Escopo
                     </p>
                     <p className="text-2xl font-bold text-[#2A6377]">
-                      {familiasFaturamentoComEscopo.length}/
-                      {familiasFaturamento.length}
+                      {familiasFaturamentoComEscopo.length}
                     </p>
                   </div>
                 </div>
@@ -6367,7 +6669,7 @@ export default function App() {
                         <option value="">Família</option>
                         {familiasFaturamentoComEscopo.map((f) => (
                           <option key={f.id} value={f.id}>
-                            {f.codigo_familia} - {f.descricao_familia}
+                            {labelGrupoFaturamento(f.grupo_faturamento)} | {f.codigo_familia} - {f.descricao_familia}
                           </option>
                         ))}
                       </select>
@@ -6398,15 +6700,10 @@ export default function App() {
                       />
                       <select
                         value={novaPrevisaoFaturamento.grupo_faturamento}
-                        onChange={(e) =>
-                          setNovaPrevisaoFaturamento({
-                            ...novaPrevisaoFaturamento,
-                            grupo_faturamento: e.target.value,
-                          })
-                        }
-                        className="border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                        disabled
+                        className="border rounded-lg p-3 outline-none bg-slate-100 text-slate-500"
                       >
-                        <option value="">Grupo faturamento</option>
+                        <option value="">Grupo do item</option>
                         {gruposFaturamentoAtivos().map((grupo) => (
                           <option key={grupo.id} value={grupo.codigo}>
                             {grupo.codigo} - {grupo.descricao}
@@ -6434,8 +6731,8 @@ export default function App() {
                     />
                     {familiasFaturamentoComEscopo.length === 0 && (
                       <p className="text-xs text-amber-600 font-medium mt-3">
-                        Antes de cadastrar previsões, clique em “Editar Escopo”
-                        e informe pelo menos uma família com valor de escopo.
+                        Antes de cadastrar previsões, clique em “Adicionar Item”
+                        e informe pelo menos um item de escopo.
                       </p>
                     )}
                   </div>
@@ -6446,12 +6743,11 @@ export default function App() {
                     <div>
                       <h3 className="font-bold text-lg flex items-center gap-2">
                         <Receipt size={18} className="text-[#2A6377]" /> Escopo
-                        por Família
+                        por Grupo/Família
                       </h3>
                       <p className="text-xs text-slate-400 mt-1">
-                        Visão resumida do escopo faturável. A consulta mostra
-                        somente famílias com valor de escopo. Use “Editar
-                        Escopo” para selecionar famílias, grupos e valores.
+                        Cada linha representa uma combinação de grupo de faturamento, família e valor de escopo.
+                        A mesma família pode aparecer em mais de um grupo.
                       </p>
                     </div>
                     {podeEditarObraSelecionada && (
@@ -6463,10 +6759,10 @@ export default function App() {
                           <Settings size={16} /> Grupos
                         </button>
                         <button
-                          onClick={abrirModalEscopoFaturamento}
+                          onClick={abrirModalNovoItemEscopo}
                           className="px-4 py-2 rounded-lg bg-[#2A6377] text-white text-sm font-bold hover:bg-[#1e4857] transition flex items-center gap-2"
                         >
-                          <Edit2 size={16} /> Editar Escopo
+                          <Plus size={16} /> Adicionar Item
                         </button>
                       </div>
                     )}
@@ -6514,9 +6810,9 @@ export default function App() {
                               colSpan={podeEditarObraSelecionada ? 6 : 5}
                               className="p-6 text-center text-slate-500"
                             >
-                              Nenhuma família com escopo informado. Clique em
-                              “Editar Escopo” para selecionar as famílias
-                              faturáveis desta obra.
+                              Nenhum item de escopo informado. Clique em
+                              “Adicionar Item” para escolher um grupo, uma família
+                              e o valor correspondente.
                             </td>
                           </tr>
                         ) : (
@@ -6533,7 +6829,7 @@ export default function App() {
                                 className="border-t hover:bg-slate-50"
                               >
                                 <td className="p-3 font-medium text-slate-700">
-                                  {familia.grupo_faturamento || "-"}
+                                  {labelGrupoFaturamento(familia.grupo_faturamento)}
                                 </td>
                                 <td className="p-3 font-bold text-[#2A6377]">
                                   <div>
