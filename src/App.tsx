@@ -195,6 +195,7 @@ export default function App() {
 
   // ESTADOS DO CONTROLE DE FATURAMENTO POR FAMÍLIA
   const [familiasFaturamento, setFamiliasFaturamento] = useState<any[]>([]);
+  const [gruposFaturamentoObra, setGruposFaturamentoObra] = useState<any[]>([]);
   const [previsoesFaturamento, setPrevisoesFaturamento] = useState<any[]>([]);
   const [realizadosFaturamento, setRealizadosFaturamento] = useState<any[]>([]);
   const [familiaFaturamentoEmEdicao, setFamiliaFaturamentoEmEdicao] =
@@ -203,6 +204,14 @@ export default function App() {
     grupo_faturamento: "",
     valor_total_escopo: "",
     observacao: "",
+  });
+  const [modalGruposFaturamentoAberto, setModalGruposFaturamentoAberto] =
+    useState<boolean>(false);
+  const [grupoFaturamentoEmEdicao, setGrupoFaturamentoEmEdicao] = useState<any>(null);
+  const [formGrupoFaturamento, setFormGrupoFaturamento] = useState<any>({
+    codigo: "",
+    descricao: "",
+    valor_total_grupo: "",
   });
   const [modalEscopoFaturamentoAberto, setModalEscopoFaturamentoAberto] =
     useState<boolean>(false);
@@ -291,6 +300,25 @@ export default function App() {
       "dez",
     ];
     return `${meses[data.getUTCMonth()]}/${String(data.getUTCFullYear()).slice(-2)}`;
+  };
+
+  const codigoGrupoFaturamento = (valor: any) => String(valor || "").trim();
+
+  const gruposFaturamentoAtivos = () =>
+    gruposFaturamentoObra
+      .filter((g) => g.ativo !== false)
+      .sort((a, b) => String(a.codigo || "").localeCompare(String(b.codigo || "")));
+
+  const labelGrupoFaturamento = (codigo: any) => {
+    const codigoLimpo = codigoGrupoFaturamento(codigo);
+    if (!codigoLimpo) return "Sem grupo";
+
+    const grupo = gruposFaturamentoObra.find(
+      (g) => codigoGrupoFaturamento(g.codigo) === codigoLimpo,
+    );
+
+    if (!grupo) return codigoLimpo;
+    return grupo.descricao ? `${grupo.codigo} - ${grupo.descricao}` : grupo.codigo;
   };
 
   const selecionarTextoAoFocar = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -1389,6 +1417,25 @@ export default function App() {
     }
   };
 
+  const buscarGruposFaturamentoObra = async (idDaObra: any) => {
+    if (!idDaObra) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("obra_faturamento_grupos")
+        .select("*")
+        .eq("id_obra", idDaObra)
+        .order("codigo", { ascending: true });
+
+      if (error) throw error;
+
+      setGruposFaturamentoObra(data || []);
+    } catch (error) {
+      console.error("Erro ao buscar grupos de faturamento:", error);
+      setGruposFaturamentoObra([]);
+    }
+  };
+
   const buscarPrevisoesFaturamento = async (idDaObra: any) => {
     if (!idDaObra) return;
     try {
@@ -1416,6 +1463,108 @@ export default function App() {
       setRealizadosFaturamento(data || []);
     } catch (error) {
       console.error("Erro ao buscar faturamentos realizados:", error);
+    }
+  };
+
+  const limparFormGrupoFaturamento = () => {
+    setGrupoFaturamentoEmEdicao(null);
+    setFormGrupoFaturamento({
+      codigo: "",
+      descricao: "",
+      valor_total_grupo: "",
+    });
+  };
+
+  const salvarGrupoFaturamento = async () => {
+    if (!obraEcoSelecionada) return;
+
+    const codigo = codigoGrupoFaturamento(formGrupoFaturamento.codigo);
+    const descricao = String(formGrupoFaturamento.descricao || "").trim();
+    const valorTotal = Number(formGrupoFaturamento.valor_total_grupo || 0);
+
+    if (!codigo || !descricao || valorTotal <= 0) {
+      return mostrarAviso(
+        "Informe código, descrição e valor total do grupo de faturamento.",
+        "erro",
+      );
+    }
+
+    setCarregando(true);
+    try {
+      if (grupoFaturamentoEmEdicao) {
+        const { error } = await supabase
+          .from("obra_faturamento_grupos")
+          .update({
+            codigo,
+            descricao,
+            valor_total_grupo: valorTotal,
+            ativo: true,
+          })
+          .eq("id", grupoFaturamentoEmEdicao.id);
+        if (error) throw error;
+        mostrarAviso("Grupo de faturamento atualizado!");
+      } else {
+        const { error } = await supabase.from("obra_faturamento_grupos").insert([
+          {
+            id_obra: obraEcoSelecionada.id,
+            codigo,
+            descricao,
+            valor_total_grupo: valorTotal,
+            ativo: true,
+          },
+        ]);
+        if (error) throw error;
+        mostrarAviso("Grupo de faturamento cadastrado!");
+      }
+
+      limparFormGrupoFaturamento();
+      buscarGruposFaturamentoObra(obraEcoSelecionada.id);
+    } catch (error: any) {
+      mostrarAviso(error.message || "Erro ao salvar grupo de faturamento.", "erro");
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const editarGrupoFaturamento = (grupo: any) => {
+    setGrupoFaturamentoEmEdicao(grupo);
+    setFormGrupoFaturamento({
+      codigo: grupo.codigo || "",
+      descricao: grupo.descricao || "",
+      valor_total_grupo: String(grupo.valor_total_grupo || ""),
+    });
+  };
+
+  const excluirGrupoFaturamento = async (grupo: any) => {
+    if (!obraEcoSelecionada || !grupo) return;
+
+    const familiasVinculadas = familiasFaturamento.filter(
+      (f) => codigoGrupoFaturamento(f.grupo_faturamento) === codigoGrupoFaturamento(grupo.codigo),
+    );
+
+    if (familiasVinculadas.some((f) => Number(f.valor_total_escopo || 0) > 0)) {
+      return mostrarAviso(
+        "Este grupo está vinculado ao escopo. Remova o grupo das famílias antes de excluir.",
+        "erro",
+      );
+    }
+
+    if (!window.confirm(`Excluir o grupo ${grupo.codigo} - ${grupo.descricao}?`)) return;
+
+    setCarregando(true);
+    try {
+      const { error } = await supabase
+        .from("obra_faturamento_grupos")
+        .delete()
+        .eq("id", grupo.id);
+      if (error) throw error;
+
+      buscarGruposFaturamentoObra(obraEcoSelecionada.id);
+      mostrarAviso("Grupo de faturamento excluído!");
+    } catch (error: any) {
+      mostrarAviso(error.message || "Erro ao excluir grupo.", "erro");
+    } finally {
+      setCarregando(false);
     }
   };
 
@@ -1456,6 +1605,15 @@ export default function App() {
   };
 
   const abrirModalEscopoFaturamento = () => {
+    if (gruposFaturamentoAtivos().length === 0) {
+      mostrarAviso(
+        "Cadastre ao menos um grupo de faturamento antes de montar o escopo.",
+        "erro",
+      );
+      setModalGruposFaturamentoAberto(true);
+      return;
+    }
+
     setEscopoFaturamentoDraft(
       familiasFaturamento.map((familia) => ({
         ...familia,
@@ -1496,6 +1654,40 @@ export default function App() {
 
   const salvarEscopoFaturamento = async () => {
     if (!obraEcoSelecionada) return;
+
+    const gruposAtivos = gruposFaturamentoAtivos();
+    const familiasSelecionadas = escopoFaturamentoDraft.filter(
+      (f) => Boolean(f.usar_no_escopo) && Number(f.valor_total_escopo || 0) > 0,
+    );
+
+    const familiaSemGrupo = familiasSelecionadas.find(
+      (f) => !codigoGrupoFaturamento(f.grupo_faturamento),
+    );
+    if (familiaSemGrupo) {
+      return mostrarAviso(
+        `Informe o grupo de faturamento da família ${familiaSemGrupo.codigo_familia}.`,
+        "erro",
+      );
+    }
+
+    const divergencias = gruposAtivos
+      .map((grupo) => {
+        const somaFamilias = familiasSelecionadas
+          .filter((f) => codigoGrupoFaturamento(f.grupo_faturamento) === codigoGrupoFaturamento(grupo.codigo))
+          .reduce((acc, f) => acc + Number(f.valor_total_escopo || 0), 0);
+        const valorGrupo = Number(grupo.valor_total_grupo || 0);
+        const diferenca = somaFamilias - valorGrupo;
+        return { grupo, somaFamilias, valorGrupo, diferenca };
+      })
+      .filter((item) => Math.abs(item.diferenca) > 0.01);
+
+    if (divergencias.length > 0) {
+      const primeira = divergencias[0];
+      return mostrarAviso(
+        `A soma das famílias do grupo ${primeira.grupo.codigo} deve ser igual ao valor do grupo. Grupo: ${formatarMoeda(primeira.valorGrupo)} | Famílias: ${formatarMoeda(primeira.somaFamilias)}.`,
+        "erro",
+      );
+    }
 
     setCarregando(true);
     try {
@@ -2842,6 +3034,74 @@ export default function App() {
     ),
   ).sort();
 
+  const nomeGrupoFaturamento = (familia: any) =>
+    codigoGrupoFaturamento(familia?.grupo_faturamento) || "Sem grupo";
+
+  const valorTotalGrupoCadastrado = (codigoGrupo: string) => {
+    const grupo = gruposFaturamentoObra.find(
+      (g) => codigoGrupoFaturamento(g.codigo) === codigoGrupoFaturamento(codigoGrupo),
+    );
+    return Number(grupo?.valor_total_grupo || 0);
+  };
+
+  const gruposFaturamentoResumo = Array.from(
+    familiasFaturamentoComEscopo
+      .reduce((mapa: Map<string, any>, familia: any) => {
+        const grupo = nomeGrupoFaturamento(familia);
+        const atual = mapa.get(grupo) || {
+          nome: grupo,
+          label: labelGrupoFaturamento(grupo),
+          valorGrupo: valorTotalGrupoCadastrado(grupo),
+          quantidadeFamilias: 0,
+          valorEscopo: 0,
+          valorFaturado: 0,
+        };
+
+        atual.quantidadeFamilias += 1;
+        atual.valorEscopo += Number(familia.valor_total_escopo || 0);
+        atual.valorFaturado += realizadosFaturamentoDoEscopo
+          .filter((realizado: any) => realizado.id_obra_faturamento_familia === familia.id)
+          .reduce((acc, realizado: any) => acc + Number(realizado.valor_realizado || 0), 0);
+
+        mapa.set(grupo, atual);
+        return mapa;
+      }, new Map<string, any>())
+      .values(),
+  ).sort((a: any, b: any) => String(a.nome).localeCompare(String(b.nome)));
+
+  const familiasDoGrupoFaturamento = (grupo: string) =>
+    familiasFaturamentoComEscopo.filter(
+      (familia: any) => nomeGrupoFaturamento(familia) === grupo,
+    );
+
+  const valorPrevistoGrupoCompetencia = (grupo: string, competencia: string) => {
+    const idsFamiliasDoGrupo = new Set(
+      familiasDoGrupoFaturamento(grupo).map((familia: any) => familia.id),
+    );
+
+    return previsoesFaturamentoDoEscopo
+      .filter(
+        (previsao: any) =>
+          idsFamiliasDoGrupo.has(previsao.id_obra_faturamento_familia) &&
+          String(previsao.competencia || "").slice(0, 10) === competencia,
+      )
+      .reduce((acc, previsao: any) => acc + Number(previsao.valor_previsto || 0), 0);
+  };
+
+  const valorRealizadoGrupoCompetencia = (grupo: string, competencia: string) => {
+    const idsFamiliasDoGrupo = new Set(
+      familiasDoGrupoFaturamento(grupo).map((familia: any) => familia.id),
+    );
+
+    return realizadosFaturamentoDoEscopo
+      .filter(
+        (realizado: any) =>
+          idsFamiliasDoGrupo.has(realizado.id_obra_faturamento_familia) &&
+          String(realizado.competencia || "").slice(0, 10) === competencia,
+      )
+      .reduce((acc, realizado: any) => acc + Number(realizado.valor_realizado || 0), 0);
+  };
+
   const valorPrevistoFamiliaCompetencia = (
     familiaId: string,
     competencia: string,
@@ -3105,6 +3365,154 @@ export default function App() {
         ))}
       </div>
 
+      {modalGruposFaturamentoAberto && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[86] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="p-5 border-b flex justify-between items-start gap-4">
+              <div>
+                <h2 className="font-bold text-xl text-[#2A6377]">
+                  Grupos de Faturamento da Obra
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Cadastre os grupos e seus valores totais. Depois, no escopo, selecione o grupo de cada família.
+                </p>
+              </div>
+              <button
+                onClick={() => { setModalGruposFaturamentoAberto(false); limparFormGrupoFaturamento(); }}
+                className="text-slate-400 hover:text-red-500 bg-slate-100 rounded-full p-2"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 border-b bg-slate-50">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Código</label>
+                  <input
+                    value={formGrupoFaturamento.codigo}
+                    onChange={(e) => setFormGrupoFaturamento({ ...formGrupoFaturamento, codigo: e.target.value })}
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    placeholder="Ex.: 40.190.2033"
+                  />
+                </div>
+                <div className="md:col-span-5">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Descrição do grupo</label>
+                  <input
+                    value={formGrupoFaturamento.descricao}
+                    onChange={(e) => setFormGrupoFaturamento({ ...formGrupoFaturamento, descricao: e.target.value })}
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    placeholder="Ex.: SKID DE BOMBAS"
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Valor total do grupo</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formGrupoFaturamento.valor_total_grupo}
+                    onChange={(e) => setFormGrupoFaturamento({ ...formGrupoFaturamento, valor_total_grupo: e.target.value })}
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] text-right"
+                    placeholder="0,00"
+                  />
+                </div>
+                <div className="md:col-span-2 flex gap-2">
+                  <button
+                    onClick={salvarGrupoFaturamento}
+                    disabled={carregando}
+                    className="flex-1 bg-[#2A6377] text-white rounded-lg px-4 py-3 font-bold disabled:opacity-50"
+                  >
+                    {grupoFaturamentoEmEdicao ? "Atualizar" : "Adicionar"}
+                  </button>
+                  {grupoFaturamentoEmEdicao && (
+                    <button
+                      onClick={limparFormGrupoFaturamento}
+                      className="bg-white border rounded-lg px-3 py-3 font-bold text-slate-600"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-sm min-w-[900px]">
+                <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10">
+                  <tr>
+                    <th className="p-3 text-left">Código</th>
+                    <th className="p-3 text-left">Descrição</th>
+                    <th className="p-3 text-right">Valor Grupo</th>
+                    <th className="p-3 text-right">Soma Famílias</th>
+                    <th className="p-3 text-right">Diferença</th>
+                    <th className="p-3 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gruposFaturamentoObra.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-6 text-center text-slate-500">
+                        Nenhum grupo cadastrado para esta obra.
+                      </td>
+                    </tr>
+                  ) : (
+                    gruposFaturamentoAtivos().map((grupo) => {
+                      const somaFamilias = familiasFaturamento
+                        .filter((f) => codigoGrupoFaturamento(f.grupo_faturamento) === codigoGrupoFaturamento(grupo.codigo))
+                        .reduce((acc, f) => acc + Number(f.valor_total_escopo || 0), 0);
+                      const valorGrupo = Number(grupo.valor_total_grupo || 0);
+                      const diferenca = somaFamilias - valorGrupo;
+                      const ok = Math.abs(diferenca) <= 0.01;
+
+                      return (
+                        <tr key={grupo.id} className="border-t hover:bg-slate-50">
+                          <td className="p-3 font-bold text-[#2A6377]">{grupo.codigo}</td>
+                          <td className="p-3">{grupo.descricao}</td>
+                          <td className="p-3 text-right font-bold">{formatarMoeda(valorGrupo)}</td>
+                          <td className="p-3 text-right font-bold text-blue-700">{formatarMoeda(somaFamilias)}</td>
+                          <td className={`p-3 text-right font-bold ${ok ? "text-emerald-700" : "text-amber-700"}`}>
+                            {formatarMoeda(diferenca)}
+                          </td>
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => editarGrupoFaturamento(grupo)}
+                                className="px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-xs font-bold"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => excluirGrupoFaturamento(grupo)}
+                                className="text-red-400 hover:text-red-600"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 border-t bg-slate-50 flex justify-between gap-3">
+              <p className="text-xs text-slate-500 max-w-3xl">
+                A soma das famílias vinculadas a cada grupo deve bater com o valor total cadastrado no grupo.
+              </p>
+              <button
+                onClick={() => { setModalGruposFaturamentoAberto(false); limparFormGrupoFaturamento(); }}
+                className="px-5 py-2 bg-[#2A6377] text-white rounded-lg font-bold"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalEscopoFaturamentoAberto && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[85] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col overflow-hidden">
@@ -3207,7 +3615,7 @@ export default function App() {
                         {familia.codigo_familia} - {familia.descricao_familia}
                       </td>
                       <td className="p-3">
-                        <input
+                        <select
                           disabled={!familia.usar_no_escopo}
                           value={familia.grupo_faturamento || ""}
                           onChange={(e) =>
@@ -3218,8 +3626,14 @@ export default function App() {
                             )
                           }
                           className="w-full border rounded-lg p-2 outline-none focus:border-[#2A6377] disabled:bg-slate-100"
-                          placeholder="Grupo de faturamento"
-                        />
+                        >
+                          <option value="">Selecione um grupo</option>
+                          {gruposFaturamentoAtivos().map((grupo) => (
+                            <option key={grupo.id} value={grupo.codigo}>
+                              {grupo.codigo} - {grupo.descricao}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="p-3">
                         <input
@@ -3310,7 +3724,7 @@ export default function App() {
                 <label className="block text-sm font-bold text-slate-700 mb-1">
                   Grupo de faturamento
                 </label>
-                <input
+                <select
                   value={formFamiliaFaturamento.grupo_faturamento}
                   onChange={(e) =>
                     setFormFamiliaFaturamento({
@@ -3319,8 +3733,14 @@ export default function App() {
                     })
                   }
                   className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                  placeholder="Ex.: 40.190.2033 - SKID DE BOMBAS"
-                />
+                >
+                  <option value="">Selecione um grupo</option>
+                  {gruposFaturamentoAtivos().map((grupo) => (
+                    <option key={grupo.id} value={grupo.codigo}>
+                      {grupo.codigo} - {grupo.descricao}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">
@@ -5236,8 +5656,7 @@ export default function App() {
                         }
                         className="border rounded-lg p-3 outline-none focus:border-[#2A6377]"
                       />
-                      <input
-                        placeholder="Grupo faturamento"
+                      <select
                         value={novaPrevisaoFaturamento.grupo_faturamento}
                         onChange={(e) =>
                           setNovaPrevisaoFaturamento({
@@ -5246,7 +5665,14 @@ export default function App() {
                           })
                         }
                         className="border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                      />
+                      >
+                        <option value="">Grupo faturamento</option>
+                        {gruposFaturamentoAtivos().map((grupo) => (
+                          <option key={grupo.id} value={grupo.codigo}>
+                            {grupo.codigo} - {grupo.descricao}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         onClick={salvarPrevisaoFaturamento}
                         disabled={familiasFaturamentoComEscopo.length === 0}
@@ -5289,12 +5715,20 @@ export default function App() {
                       </p>
                     </div>
                     {podeEditarObraSelecionada && (
-                      <button
-                        onClick={abrirModalEscopoFaturamento}
-                        className="px-4 py-2 rounded-lg bg-[#2A6377] text-white text-sm font-bold hover:bg-[#1e4857] transition flex items-center gap-2"
-                      >
-                        <Edit2 size={16} /> Editar Escopo
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setModalGruposFaturamentoAberto(true)}
+                          className="px-4 py-2 rounded-lg bg-white border border-[#2A6377] text-[#2A6377] text-sm font-bold hover:bg-[#2A6377]/10 transition flex items-center gap-2"
+                        >
+                          <Settings size={16} /> Grupos
+                        </button>
+                        <button
+                          onClick={abrirModalEscopoFaturamento}
+                          className="px-4 py-2 rounded-lg bg-[#2A6377] text-white text-sm font-bold hover:bg-[#1e4857] transition flex items-center gap-2"
+                        >
+                          <Edit2 size={16} /> Editar Escopo
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="overflow-x-auto max-w-full">
@@ -5408,10 +5842,188 @@ export default function App() {
                   <div className="p-4 border-b">
                     <h3 className="font-bold text-lg flex items-center gap-2">
                       <Activity size={18} className="text-[#2A6377]" />
-                      Previsão x Realizado por Competência
+                      Previsão x Realizado por Grupo de Faturamento
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">
-                      Esta visão funciona como uma planilha: os meses são
+                      Visão consolidada por grupo de faturamento. Os valores
+                      previstos e realizados são somados a partir das famílias
+                      vinculadas a cada grupo.
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto max-w-full">
+                    <table
+                      className="text-xs"
+                      style={{
+                        minWidth: `${360 + Math.max(competenciasFaturamento.length, 1) * 260}px`,
+                      }}
+                    >
+                      <thead className="bg-slate-50 text-slate-600">
+                        <tr>
+                          <th
+                            rowSpan={2}
+                            className="p-3 text-left min-w-[260px] sticky left-0 bg-slate-50 z-20 border-r"
+                          >
+                            Grupo de Faturamento
+                          </th>
+                          <th
+                            rowSpan={2}
+                            className="p-3 text-center min-w-[90px] bg-slate-50 border-r"
+                          >
+                            Famílias
+                          </th>
+                          {competenciasFaturamento.length === 0 ? (
+                            <th className="p-3 text-center min-w-[260px]">
+                              Competências
+                            </th>
+                          ) : (
+                            competenciasFaturamento.map((comp) => (
+                              <th
+                                key={`grupo-${comp}`}
+                                className="p-0 text-center min-w-[260px] border-r"
+                                colSpan={2}
+                              >
+                                <div className="bg-[#2A6377] text-white p-2 font-bold">
+                                  {formatarCompetencia(comp)}
+                                </div>
+                              </th>
+                            ))
+                          )}
+                        </tr>
+                        <tr>
+                          {competenciasFaturamento.length === 0 ? (
+                            <th className="p-3 text-center text-slate-400">
+                              Sem previsão cadastrada
+                            </th>
+                          ) : (
+                            competenciasFaturamento.map((comp) => (
+                              <th key={`grupo-${comp}-sub`} className="p-0" colSpan={2}>
+                                <div className="grid grid-cols-2 min-w-[260px]">
+                                  <span className="p-2 border-r bg-slate-50">
+                                    Previsto
+                                  </span>
+                                  <span className="p-2 bg-slate-50">
+                                    Realizado
+                                  </span>
+                                </div>
+                              </th>
+                            ))
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gruposFaturamentoResumo.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={Math.max(competenciasFaturamento.length * 2 + 2, 3)}
+                              className="p-6 text-center text-slate-500"
+                            >
+                              Nenhum grupo de faturamento com escopo informado.
+                            </td>
+                          </tr>
+                        ) : (
+                          gruposFaturamentoResumo.map((grupo: any) => (
+                            <tr
+                              key={`grupo-matriz-${grupo.label || grupo.nome}`}
+                              className="border-t hover:bg-slate-50"
+                            >
+                              <td className="p-3 font-bold text-[#2A6377] sticky left-0 bg-white z-10 border-r min-w-[260px]">
+                                <div>{grupo.label || grupo.nome}</div>
+                                <div className="text-[10px] text-slate-400 font-normal mt-1">
+                                  Escopo: {formatarMoeda(grupo.valorEscopo)} • Faturado: {formatarMoeda(grupo.valorFaturado)}
+                                </div>
+                              </td>
+                              <td className="p-3 text-center font-bold text-slate-600 border-r min-w-[90px]">
+                                {grupo.quantidadeFamilias}
+                              </td>
+                              {competenciasFaturamento.length === 0 ? (
+                                <td className="p-3 text-center text-slate-400">
+                                  Sem previsão
+                                </td>
+                              ) : (
+                                competenciasFaturamento.map((comp) => {
+                                  const previsto = valorPrevistoGrupoCompetencia(
+                                    grupo.nome,
+                                    comp,
+                                  );
+                                  const realizado = valorRealizadoGrupoCompetencia(
+                                    grupo.nome,
+                                    comp,
+                                  );
+                                  return (
+                                    <td
+                                      key={`${grupo.label || grupo.nome}-${comp}-grupo-matriz`}
+                                      className="p-0 border-r"
+                                      colSpan={2}
+                                    >
+                                      <div className="grid grid-cols-2 min-w-[260px]">
+                                        <span
+                                          className={`p-3 text-right border-r whitespace-nowrap ${previsto > 0 ? "font-bold text-blue-700" : "text-slate-300"}`}
+                                        >
+                                          {previsto > 0
+                                            ? formatarMoeda(previsto)
+                                            : "-"}
+                                        </span>
+                                        <span
+                                          className={`p-3 text-right whitespace-nowrap ${realizado > 0 ? "font-bold text-emerald-700" : "text-slate-300"}`}
+                                        >
+                                          {realizado > 0
+                                            ? formatarMoeda(realizado)
+                                            : "-"}
+                                        </span>
+                                      </div>
+                                    </td>
+                                  );
+                                })
+                              )}
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      {competenciasFaturamento.length > 0 && gruposFaturamentoResumo.length > 0 && (
+                        <tfoot className="bg-slate-100 border-t-2 border-[#2A6377] text-slate-800">
+                          <tr>
+                            <td
+                              className="p-3 font-black text-[#2A6377] sticky left-0 bg-slate-100 z-20 border-r min-w-[260px]"
+                              colSpan={2}
+                            >
+                              TOTAL POR COMPETÊNCIA
+                            </td>
+                            {competenciasFaturamento.map((comp) => {
+                              const totalPrevisto = totalPrevistoCompetencia(comp);
+                              const totalRealizado = totalRealizadoCompetencia(comp);
+
+                              return (
+                                <td
+                                  key={`${comp}-total-grupo-matriz`}
+                                  className="p-0 border-r"
+                                  colSpan={2}
+                                >
+                                  <div className="grid grid-cols-2 min-w-[260px]">
+                                    <span className="p-3 text-right border-r whitespace-nowrap font-black text-blue-700">
+                                      {totalPrevisto > 0 ? formatarMoeda(totalPrevisto) : "-"}
+                                    </span>
+                                    <span className="p-3 text-right whitespace-nowrap font-black text-emerald-700">
+                                      {totalRealizado > 0 ? formatarMoeda(totalRealizado) : "-"}
+                                    </span>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
+                  <div className="p-4 border-b">
+                    <h3 className="font-bold text-lg flex items-center gap-2">
+                      <Activity size={18} className="text-[#2A6377]" />
+                      Previsão x Realizado por Família
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Esta visão detalha cada família dentro de seu grupo de faturamento. Os meses são
                       adicionados para a direita conforme houver previsão ou
                       faturamento realizado. Use a rolagem horizontal para ver
                       todas as competências.
@@ -5493,7 +6105,7 @@ export default function App() {
                                   {familia.descricao_familia}
                                 </div>
                                 <div className="text-[10px] text-slate-400 font-normal mt-1">
-                                  {familia.grupo_faturamento || "Sem grupo"}
+                                  {labelGrupoFaturamento(familia.grupo_faturamento)}
                                 </div>
                               </td>
                               {competenciasFaturamento.length === 0 ? (
