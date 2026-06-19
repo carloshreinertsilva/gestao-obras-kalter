@@ -108,7 +108,6 @@ export default function App() {
   });
   const [erroObra, setErroObra] = useState<string>("");
   const [obrasLista, setObrasLista] = useState<any[]>([]);
-  const [filtroStatusObras, setFiltroStatusObras] = useState<string>("em_andamento");
 
   const [reuniaoForm, setReuniaoForm] = useState<any>({
     id_obra: "",
@@ -443,26 +442,6 @@ export default function App() {
 
   const labelFase = (fase: string) =>
     fasesProjeto.find((f) => f.valor === fase)?.label || fase;
-
-  const labelStatusObra = (status: string) => {
-    const mapa: any = {
-      em_andamento: "Em andamento",
-      finalizada: "Finalizada",
-      cancelada: "Cancelada",
-      pausada: "Pausada",
-    };
-    return mapa[status] || status || "-";
-  };
-
-  const classeStatusObra = (status: string) => {
-    const mapa: any = {
-      em_andamento: "bg-blue-50 text-blue-700 border-blue-100",
-      finalizada: "bg-green-50 text-green-700 border-green-100",
-      cancelada: "bg-red-50 text-red-700 border-red-100",
-      pausada: "bg-amber-50 text-amber-700 border-amber-100",
-    };
-    return mapa[status] || "bg-slate-50 text-slate-600 border-slate-100";
-  };
 
   const labelStatusParcela = (status: string) => {
     const mapa: any = {
@@ -840,16 +819,8 @@ export default function App() {
         .select(
           "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, usuarios(nome)",
         )
+        .eq("status", "em_andamento")
         .order("created_at", { ascending: false });
-
-      if (telaAtiva === "cadastros_obras" || telaAtiva === "minhas_obras") {
-        if (filtroStatusObras !== "todas") {
-          query = query.eq("status", filtroStatusObras);
-        }
-      } else {
-        query = query.eq("status", "em_andamento");
-      }
-
       if (!isAdmin) query = query.eq("id_responsavel", usuarioAtual.id);
       const { data } = await query;
       if (data) {
@@ -867,7 +838,7 @@ export default function App() {
       buscarUsuarios();
       buscarObras();
     }
-  }, [telaAtiva, sessao, usuarioAtual, filtroStatusObras]);
+  }, [telaAtiva, sessao, usuarioAtual]);
 
   useEffect(() => {
     async function buscarDadosDashboard() {
@@ -2767,12 +2738,40 @@ export default function App() {
 
   const atualizarStatusTarefa = async (idTarefa: any, novoStatus: any) => {
     try {
+      const payload: any = { status: novoStatus, updated_at: new Date().toISOString() };
+      if (novoStatus === "concluida") payload.data_conclusao = new Date().toISOString();
+      if (["pendente", "em_andamento"].includes(novoStatus)) payload.data_conclusao = null;
+
       await supabase
         .from("tarefas")
-        .update({ status: novoStatus })
+        .update(payload)
         .eq("id", idTarefa);
       buscarTarefasKanban();
       mostrarAviso("Status atualizado!");
+    } catch (error: any) {
+      mostrarAviso(error.message, "erro");
+    }
+  };
+
+  const cancelarTarefa = async (tarefa: any) => {
+    if (!tarefa?.id) return;
+    if (!window.confirm(`Deseja cancelar a tarefa "${tarefa.titulo}"? Ela sairá das tarefas abertas, mas continuará disponível no histórico.`)) return;
+
+    try {
+      const { error } = await supabase
+        .from("tarefas")
+        .update({
+          status: "cancelada",
+          updated_at: new Date().toISOString(),
+          data_conclusao: null,
+        })
+        .eq("id", tarefa.id);
+
+      if (error) throw error;
+
+      setTarefaSelecionada(null);
+      buscarTarefasKanban();
+      mostrarAviso("Tarefa cancelada com sucesso!");
     } catch (error: any) {
       mostrarAviso(error.message, "erro");
     }
@@ -3030,7 +3029,7 @@ export default function App() {
   };
 
   const isAtrasada = (dataVencimento: any, status: any) => {
-    if (!dataVencimento || status === "concluida") return false;
+    if (!dataVencimento || status === "concluida" || status === "cancelada") return false;
     return dataVencimento < new Date().toISOString().split("T")[0];
   };
   const tarefasFiltradas =
@@ -3039,14 +3038,14 @@ export default function App() {
       : (tarefasKanban || []).filter((t) => t?.id_obra === filtroObraKanban);
   const tarefasPainelObra = tarefasFiltradas.filter((t) => {
     if (filtroTarefasObra === "todas") return true;
-    if (filtroTarefasObra === "abertas") return t.status !== "concluida";
+    if (filtroTarefasObra === "abertas") return !["concluida", "cancelada"].includes(t.status);
     if (filtroTarefasObra === "atrasadas")
       return isAtrasada(t.data_vencimento, t.status);
     return t.status === filtroTarefasObra;
   });
   const tarefasDashboard = tarefasKanban
     .filter(
-      (t) => t.status !== "concluida" && t.id_responsavel === usuarioAtual?.id,
+      (t) => !["concluida", "cancelada"].includes(t.status) && t.id_responsavel === usuarioAtual?.id,
     )
     .slice(0, 6);
 
@@ -4594,9 +4593,23 @@ export default function App() {
                   <Check size={18} strokeWidth={3} /> Concluir Tarefa
                 </button>
               )}
+              {!["concluida", "cancelada"].includes(tarefaSelecionada.status) &&
+                (isAdmin || tarefaSelecionada.id_responsavel === usuarioAtual?.id || tarefaSelecionada.obras?.id_responsavel === usuarioAtual?.id) && (
+                <button
+                  onClick={() => cancelarTarefa(tarefaSelecionada)}
+                  className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-6 py-3 md:py-2 rounded-lg font-bold flex items-center gap-2 transition flex-1 sm:flex-none justify-center"
+                >
+                  <X size={18} /> Cancelar Tarefa
+                </button>
+              )}
               {tarefaSelecionada.status === "concluida" && (
                 <div className="flex items-center justify-center gap-2 text-green-600 font-bold px-4 py-3 md:py-2 bg-green-100 rounded-lg flex-1 sm:flex-none">
                   <CheckCircle2 size={18} /> Concluída
+                </div>
+              )}
+              {tarefaSelecionada.status === "cancelada" && (
+                <div className="flex items-center justify-center gap-2 text-red-600 font-bold px-4 py-3 md:py-2 bg-red-100 rounded-lg flex-1 sm:flex-none">
+                  <X size={18} /> Cancelada
                 </div>
               )}
             </div>
@@ -5771,35 +5784,12 @@ export default function App() {
 
         {telaAtiva === "minhas_obras" && (
           <div className="animate-in fade-in h-full">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6">
-              <div>
-                <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
-                  Minhas Obras
-                </h2>
-                <p className="text-sm text-slate-500 mt-1">
-                  Consulte obras em andamento, finalizadas, canceladas ou todo o histórico.
-                </p>
-              </div>
-              <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm flex items-center gap-3 w-full md:w-auto">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                  Situação
-                </label>
-                <select
-                  value={filtroStatusObras}
-                  onChange={(e) => setFiltroStatusObras(e.target.value)}
-                  className="border rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-[#2A6377] flex-1 md:min-w-[180px]"
-                >
-                  <option value="em_andamento">Em andamento</option>
-                  <option value="finalizada">Finalizadas</option>
-                  <option value="cancelada">Canceladas</option>
-                  <option value="pausada">Pausadas</option>
-                  <option value="todas">Todas</option>
-                </select>
-              </div>
-            </div>
+            <h2 className="text-2xl md:text-3xl font-bold mb-6 text-slate-800">
+              Minhas Obras em Andamento
+            </h2>
             {obrasLista.length === 0 ? (
               <div className="bg-white p-10 rounded-xl text-center border text-slate-400">
-                Nenhuma obra encontrada para o filtro selecionado.
+                Nenhuma obra vinculada a você.
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -5811,24 +5801,9 @@ export default function App() {
                   >
                     <div className="h-2 bg-[#2A6377]"></div>
                     <div className="p-5 flex-1 flex flex-col">
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="text-[10px] font-bold bg-slate-100 text-slate-500 uppercase px-2 py-1 rounded w-fit">
-                          {obra.codigo_externo}
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
-                            obra.status === "finalizada"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : obra.status === "cancelada"
-                                ? "bg-red-50 text-red-700"
-                                : obra.status === "pausada"
-                                  ? "bg-amber-50 text-amber-700"
-                                  : "bg-blue-50 text-blue-700"
-                          }`}
-                        >
-                          {labelStatusObra(obra.status)}
-                        </span>
-                      </div>
+                      <span className="text-[10px] font-bold bg-slate-100 text-slate-500 uppercase px-2 py-1 rounded w-fit mb-3">
+                        {obra.codigo_externo}
+                      </span>
                       <h3 className="text-lg font-bold text-slate-800 leading-tight mb-4 group-hover:text-[#2A6377] transition">
                         {obra.nome}
                       </h3>
@@ -7669,6 +7644,7 @@ export default function App() {
                       { id: "pendente", label: "A Fazer" },
                       { id: "em_andamento", label: "Em Andamento" },
                       { id: "concluida", label: "Concluídas" },
+                      { id: "cancelada", label: "Canceladas" },
                       { id: "todas", label: "Todas" },
                     ].map((filtro) => (
                       <button
@@ -7795,6 +7771,34 @@ export default function App() {
                               <p className="font-medium text-sm leading-tight mb-2 line-through text-slate-500">
                                 {tarefa?.titulo}
                               </p>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-[260px] bg-red-50/40 rounded-xl p-3 border border-red-100">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="font-bold text-sm text-red-700">
+                          Canceladas
+                        </h4>
+                        <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                          {tarefasPainelObra.filter((t) => t?.status === "cancelada").length}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {tarefasPainelObra
+                          .filter((t) => t?.status === "cancelada")
+                          .map((tarefa) => (
+                            <div
+                              key={tarefa?.id}
+                              onClick={() => setTarefaSelecionada(tarefa)}
+                              className="bg-white p-3 rounded shadow-sm border opacity-70 cursor-pointer hover:opacity-100"
+                            >
+                              <p className="font-medium text-sm leading-tight mb-2 line-through text-slate-500">
+                                {tarefa?.titulo}
+                              </p>
+                              <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                                Cancelada
+                              </span>
                             </div>
                           ))}
                       </div>
@@ -8135,46 +8139,22 @@ export default function App() {
             </form>
 
             <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 max-w-full">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 border-b pb-4 max-w-full">
-                <div>
-                  <h3 className="text-lg font-bold max-w-full">
-                    Consulta de Obras
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Use o filtro para consultar obras em andamento, finalizadas, canceladas ou todo o histórico.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Situação
-                  </label>
-                  <select
-                    value={filtroStatusObras}
-                    onChange={(e) => setFiltroStatusObras(e.target.value)}
-                    className="border rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-[#2A6377]"
-                  >
-                    <option value="em_andamento">Em andamento</option>
-                    <option value="finalizada">Finalizadas</option>
-                    <option value="cancelada">Canceladas</option>
-                    <option value="pausada">Pausadas</option>
-                    <option value="todas">Todas</option>
-                  </select>
-                </div>
-              </div>
+              <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full">
+                Todas as Obras (Banco de Dados)
+              </h3>
               {obrasLista.length === 0 ? (
                 <p className="text-gray-500 text-sm max-w-full truncate">
                   Nenhuma obra.
                 </p>
               ) : (
                 <div className="overflow-x-auto pb-2 max-w-full">
-                  <table className="w-full text-left border-collapse min-w-[850px] max-w-full">
+                  <table className="w-full text-left border-collapse min-w-[700px] max-w-full">
                     <thead>
                       <tr className="bg-slate-50 text-slate-600 text-sm border-y max-w-full">
                         <th className="p-3 max-w-full truncate">Código</th>
                         <th className="p-3 max-w-full truncate">Nome</th>
                         <th className="p-3 max-w-full truncate">Fase</th>
                         <th className="p-3 max-w-full truncate">Responsável</th>
-                        <th className="p-3 max-w-full truncate">Status</th>
                         <th className="p-3 max-w-full truncate">
                           Prazo Entrega
                         </th>
@@ -8198,11 +8178,6 @@ export default function App() {
                           </td>
                           <td className="p-3 text-slate-600 max-w-full truncate">
                             {obra.usuarios?.nome}
-                          </td>
-                          <td className="p-3 text-slate-600 max-w-full truncate">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-bold ${classeStatusObra(obra.status)}`}>
-                              {labelStatusObra(obra.status)}
-                            </span>
                           </td>
                           <td className="p-3 text-slate-600 max-w-full truncate">
                             {formatarDataSegura(obra.data_previsao_fim)}
