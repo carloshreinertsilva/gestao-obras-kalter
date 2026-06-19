@@ -1489,6 +1489,17 @@ export default function App() {
     if (!idDaObra) return;
 
     try {
+      // Garante compatibilidade com obras antigas que tinham apenas o texto
+      // grupo_faturamento gravado nos itens de escopo. A função é idempotente.
+      const { error: erroRegularizacao } = await supabase.rpc(
+        "regularizar_grupos_faturamento_obra",
+        { p_id_obra: idDaObra }
+      );
+
+      if (erroRegularizacao) {
+        console.warn("Não foi possível regularizar grupos automaticamente:", erroRegularizacao);
+      }
+
       const { data, error } = await supabase
         .from("obra_faturamento_grupos")
         .select("*")
@@ -1502,6 +1513,15 @@ export default function App() {
       console.error("Erro ao buscar grupos de faturamento:", error);
       setGruposFaturamentoObra([]);
     }
+  };
+
+  const abrirModalGruposFaturamento = async () => {
+    if (!obraEcoSelecionada?.id) return;
+
+    await buscarFamiliasFaturamento(obraEcoSelecionada.id);
+    await buscarGruposFaturamentoObra(obraEcoSelecionada.id);
+
+    setModalGruposFaturamentoAberto(true);
   };
 
   const buscarPrevisoesFaturamento = async (idDaObra: any) => {
@@ -1683,13 +1703,13 @@ export default function App() {
     });
   };
 
-  const abrirModalNovoItemEscopo = () => {
+  const abrirModalNovoItemEscopo = async () => {
     if (gruposFaturamentoAtivos().length === 0) {
       mostrarAviso(
         "Cadastre ao menos um grupo de faturamento antes de adicionar itens ao escopo.",
         "erro",
       );
-      setModalGruposFaturamentoAberto(true);
+      await abrirModalGruposFaturamento();
       return;
     }
 
@@ -1801,13 +1821,13 @@ export default function App() {
     }
   };
 
-  const abrirModalEscopoFaturamento = () => {
+  const abrirModalEscopoFaturamento = async () => {
     if (gruposFaturamentoAtivos().length === 0) {
       mostrarAviso(
         "Cadastre ao menos um grupo de faturamento antes de montar o escopo.",
         "erro",
       );
-      setModalGruposFaturamentoAberto(true);
+      await abrirModalGruposFaturamento();
       return;
     }
 
@@ -1870,7 +1890,10 @@ export default function App() {
     const divergencias = gruposAtivos
       .map((grupo) => {
         const somaFamilias = familiasSelecionadas
-          .filter((f) => codigoGrupoFaturamento(f.grupo_faturamento) === codigoGrupoFaturamento(grupo.codigo))
+          .filter((f) =>
+                          String(f.id_grupo_faturamento || "") === String(grupo.id) ||
+                          codigoGrupoFaturamento(f.grupo_faturamento) === codigoGrupoFaturamento(grupo.codigo)
+                        )
           .reduce((acc, f) => acc + Number(f.valor_total_escopo || 0), 0);
         const valorGrupo = Number(grupo.valor_total_grupo || 0);
         const diferenca = somaFamilias - valorGrupo;
@@ -3881,7 +3904,10 @@ export default function App() {
                   ) : (
                     gruposFaturamentoAtivos().map((grupo) => {
                       const somaFamilias = familiasFaturamento
-                        .filter((f) => codigoGrupoFaturamento(f.grupo_faturamento) === codigoGrupoFaturamento(grupo.codigo))
+                        .filter((f) =>
+                          String(f.id_grupo_faturamento || "") === String(grupo.id) ||
+                          codigoGrupoFaturamento(f.grupo_faturamento) === codigoGrupoFaturamento(grupo.codigo)
+                        )
                         .reduce((acc, f) => acc + Number(f.valor_total_escopo || 0), 0);
                       const valorGrupo = Number(grupo.valor_total_grupo || 0);
                       const diferenca = somaFamilias - valorGrupo;
@@ -6753,7 +6779,7 @@ export default function App() {
                     {podeEditarObraSelecionada && (
                       <div className="flex flex-wrap gap-2">
                         <button
-                          onClick={() => setModalGruposFaturamentoAberto(true)}
+                          onClick={abrirModalGruposFaturamento}
                           className="px-4 py-2 rounded-lg bg-white border border-[#2A6377] text-[#2A6377] text-sm font-bold hover:bg-[#2A6377]/10 transition flex items-center gap-2"
                         >
                           <Settings size={16} /> Grupos
