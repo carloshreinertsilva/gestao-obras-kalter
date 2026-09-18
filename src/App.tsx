@@ -108,6 +108,9 @@ export default function App() {
   });
   const [erroObra, setErroObra] = useState<string>("");
   const [obrasLista, setObrasLista] = useState<any[]>([]);
+  const [ordenacaoMinhasObras, setOrdenacaoMinhasObras] = useState<
+    "codigo" | "nome"
+  >("codigo");
 
   const [reuniaoForm, setReuniaoForm] = useState<any>({
     id_obra: "",
@@ -3239,6 +3242,22 @@ export default function App() {
     )
     .slice(0, 6);
 
+  const obrasListaOrdenada = [...obrasLista].sort((a, b) => {
+    if (ordenacaoMinhasObras === "nome") {
+      return (a.nome || "").localeCompare(b.nome || "", "pt-BR", {
+        sensitivity: "base",
+      });
+    }
+    const codigoA = Number(a.codigo_externo);
+    const codigoB = Number(b.codigo_externo);
+    if (!isNaN(codigoA) && !isNaN(codigoB)) return codigoA - codigoB;
+    return String(a.codigo_externo || "").localeCompare(
+      String(b.codigo_externo || ""),
+      "pt-BR",
+      { sensitivity: "base" },
+    );
+  });
+
   // CÁLCULOS DO FINANCEIRO
   const totalVendaProduto = Number(obraEcoSelecionada?.valor_produto) || 0;
   const totalVendaServico = Number(obraEcoSelecionada?.valor_servico) || 0;
@@ -6113,16 +6132,39 @@ export default function App() {
 
         {telaAtiva === "minhas_obras" && (
           <div className="animate-in fade-in h-full">
-            <h2 className="text-2xl md:text-3xl font-bold mb-6 text-slate-800">
-              Minhas Obras em Andamento
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
+                Minhas Obras em Andamento
+              </h2>
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="ordenacao-minhas-obras"
+                  className="text-sm font-medium text-slate-500 whitespace-nowrap"
+                >
+                  Ordenar por:
+                </label>
+                <select
+                  id="ordenacao-minhas-obras"
+                  value={ordenacaoMinhasObras}
+                  onChange={(e) =>
+                    setOrdenacaoMinhasObras(
+                      e.target.value as "codigo" | "nome",
+                    )
+                  }
+                  className="border rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-[#2A6377] bg-white"
+                >
+                  <option value="codigo">Número (Código)</option>
+                  <option value="nome">Descrição (Nome)</option>
+                </select>
+              </div>
+            </div>
             {obrasLista.length === 0 ? (
               <div className="bg-white p-10 rounded-xl text-center border text-slate-400">
                 Nenhuma obra vinculada a você.
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {obrasLista.map((obra) => (
+                {obrasListaOrdenada.map((obra) => (
                   <div
                     key={obra.id}
                     onClick={() => abrirPainelObra(obra)}
