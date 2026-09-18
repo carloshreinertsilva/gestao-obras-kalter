@@ -113,6 +113,10 @@ export default function App() {
   const [ordenacaoMinhasObras, setOrdenacaoMinhasObras] = useState<
     "codigo" | "nome"
   >("codigo");
+  const [obrasCadastroLista, setObrasCadastroLista] = useState<any[]>([]);
+  const [filtroStatusCadastroObras, setFiltroStatusCadastroObras] = useState<
+    "em_andamento" | "finalizada" | "cancelada" | "todas"
+  >("em_andamento");
 
   const [reuniaoForm, setReuniaoForm] = useState<any>({
     id_obra: "",
@@ -579,6 +583,26 @@ export default function App() {
     return mapa[status] || status;
   };
 
+  const labelStatusObra = (status: string) => {
+    const mapa: any = {
+      em_andamento: "Em Andamento",
+      finalizada: "Finalizada",
+      cancelada: "Cancelada",
+      paralisada: "Paralisada",
+      pausada: "Pausada",
+    };
+    return mapa[status] || status;
+  };
+
+  const classeStatusObra = (status: string) => {
+    const mapa: any = {
+      em_andamento: "bg-blue-50 text-blue-700 border-blue-100",
+      finalizada: "bg-green-100 text-green-700 border-green-200",
+      cancelada: "bg-red-100 text-red-700 border-red-200",
+    };
+    return mapa[status] || "bg-slate-100 text-slate-500 border-slate-200";
+  };
+
   const formatarTamanhoArquivo = (bytes: any) => {
     const valor = Number(bytes) || 0;
     if (valor < 1024) return `${valor} B`;
@@ -898,6 +922,30 @@ export default function App() {
       buscarObras();
     }
   }, [telaAtiva, sessao, usuarioAtual]);
+
+  const buscarObrasCadastro = async () => {
+    if (!usuarioAtual) return;
+    try {
+      let query = supabase
+        .from("obras")
+        .select(
+          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, usuarios(nome)",
+        )
+        .order("created_at", { ascending: false });
+      if (filtroStatusCadastroObras !== "todas")
+        query = query.eq("status", filtroStatusCadastroObras);
+      if (!isAdmin) query = query.eq("id_responsavel", idResponsavelEscopo);
+      const { data } = await query;
+      setObrasCadastroLista(data || []);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    if (sessao && usuarioAtual && telaAtiva === "cadastros_obras")
+      buscarObrasCadastro();
+  }, [telaAtiva, sessao, usuarioAtual, filtroStatusCadastroObras]);
 
   useEffect(() => {
     async function buscarDadosDashboard() {
@@ -2949,6 +2997,7 @@ export default function App() {
         observacoes: "",
       });
       buscarObras();
+      buscarObrasCadastro();
       setTelaAtiva("cadastros_obras");
     } catch (error: any) {
       setErroObra("Erro: " + error.message);
@@ -8645,12 +8694,37 @@ export default function App() {
             </form>
 
             <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 max-w-full">
-              <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full">
-                Todas as Obras (Banco de Dados)
-              </h3>
-              {obrasLista.length === 0 ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b pb-2 max-w-full">
+                <h3 className="text-lg font-bold max-w-full">
+                  Todas as Obras (Banco de Dados)
+                </h3>
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor="filtro-status-cadastro-obras"
+                    className="text-sm font-medium text-slate-500 whitespace-nowrap"
+                  >
+                    Status:
+                  </label>
+                  <select
+                    id="filtro-status-cadastro-obras"
+                    value={filtroStatusCadastroObras}
+                    onChange={(e) =>
+                      setFiltroStatusCadastroObras(e.target.value as any)
+                    }
+                    className="border rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-[#2A6377] bg-white"
+                  >
+                    <option value="em_andamento">Em Andamento</option>
+                    <option value="finalizada">Finalizadas</option>
+                    <option value="cancelada">Canceladas</option>
+                    <option value="todas">Todas</option>
+                  </select>
+                </div>
+              </div>
+              {obrasCadastroLista.length === 0 ? (
                 <p className="text-gray-500 text-sm max-w-full truncate">
-                  Nenhuma obra.
+                  {filtroStatusCadastroObras === "todas"
+                    ? "Nenhuma obra."
+                    : `Nenhuma obra ${labelStatusObra(filtroStatusCadastroObras).toLowerCase()}.`}
                 </p>
               ) : (
                 <div className="overflow-x-auto pb-2 max-w-full">
@@ -8661,6 +8735,7 @@ export default function App() {
                         <th className="p-3 max-w-full truncate">Nome</th>
                         <th className="p-3 max-w-full truncate">Fase</th>
                         <th className="p-3 max-w-full truncate">Responsável</th>
+                        <th className="p-3 max-w-full truncate">Status</th>
                         <th className="p-3 max-w-full truncate">
                           Prazo Entrega
                         </th>
@@ -8668,7 +8743,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="text-sm max-w-full">
-                      {obrasLista.map((obra) => (
+                      {obrasCadastroLista.map((obra) => (
                         <tr
                           key={obra.id}
                           className="border-b hover:bg-slate-50 max-w-full"
@@ -8684,6 +8759,23 @@ export default function App() {
                           </td>
                           <td className="p-3 text-slate-600 max-w-full truncate">
                             {obra.usuarios?.nome}
+                          </td>
+                          <td className="p-3 max-w-full truncate">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-1 rounded border uppercase ${classeStatusObra(obra.status)}`}
+                            >
+                              {labelStatusObra(obra.status)}
+                            </span>
+                            {obra.status === "finalizada" && obra.data_finalizacao && (
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                em {formatarDataSegura(obra.data_finalizacao)}
+                              </p>
+                            )}
+                            {obra.status === "cancelada" && obra.data_cancelamento && (
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                em {formatarDataSegura(obra.data_cancelamento)}
+                              </p>
+                            )}
                           </td>
                           <td className="p-3 text-slate-600 max-w-full truncate">
                             {formatarDataSegura(obra.data_previsao_fim)}
