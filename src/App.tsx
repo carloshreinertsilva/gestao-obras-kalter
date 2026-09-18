@@ -89,9 +89,11 @@ export default function App() {
 
   // Obras com os valores de venda
   const [novoUsuario, setNovoUsuario] = useState<any>({
+    id: null,
     nome: "",
     email: "",
     perfil: "engenheiro",
+    id_engenheiro_vinculado: "",
   });
   const [novaObra, setNovaObra] = useState<any>({
     id: null,
@@ -484,6 +486,17 @@ export default function App() {
   const labelFase = (fase: string) =>
     fasesProjeto.find((f) => f.valor === fase)?.label || fase;
 
+  const perfisUsuario = [
+    { valor: "admin", label: "Administrador" },
+    { valor: "engenheiro", label: "Engenheiro/Gestor" },
+    { valor: "assistente", label: "Assistente" },
+    { valor: "logistica", label: "Logística/Suprimentos" },
+  ];
+  const labelPerfilUsuario = (perfil: string) =>
+    perfisUsuario.find((p) => p.valor === perfil)?.label || perfil;
+  const nomeUsuarioPorId = (id: any) =>
+    listaUsuarios.find((u) => u.id === id)?.nome || "";
+
   const labelStatusParcela = (status: string) => {
     const mapa: any = {
       a_vencer: "Pendente",
@@ -813,13 +826,18 @@ export default function App() {
     setObraEcoSelecionada(null);
   };
   const isAdmin = usuarioAtual?.perfil === "admin";
+  // Assistente herda o escopo de obras do engenheiro ao qual está vinculado.
+  const idResponsavelEscopo =
+    usuarioAtual?.perfil === "assistente"
+      ? usuarioAtual?.id_engenheiro_vinculado || usuarioAtual?.id
+      : usuarioAtual?.id;
   const podeEditarObra = (obra: any) =>
-    Boolean(isAdmin || (obra && usuarioAtual && obra.id_responsavel === usuarioAtual.id));
+    Boolean(isAdmin || (obra && usuarioAtual && obra.id_responsavel === idResponsavelEscopo));
   const podeEditarObraSelecionada = Boolean(
     isAdmin ||
       (obraEcoSelecionada &&
         usuarioAtual &&
-        obraEcoSelecionada.id_responsavel === usuarioAtual.id),
+        obraEcoSelecionada.id_responsavel === idResponsavelEscopo),
   );
 
   useEffect(() => {
@@ -844,7 +862,7 @@ export default function App() {
     try {
       const { data } = await supabase
         .from("usuarios")
-        .select("id, nome, email, perfil")
+        .select("id, nome, email, perfil, id_engenheiro_vinculado")
         .eq("ativo", true);
       setListaUsuarios(data || []);
     } catch (error) {
@@ -862,7 +880,7 @@ export default function App() {
         )
         .eq("status", "em_andamento")
         .order("created_at", { ascending: false });
-      if (!isAdmin) query = query.eq("id_responsavel", usuarioAtual.id);
+      if (!isAdmin) query = query.eq("id_responsavel", idResponsavelEscopo);
       const { data } = await query;
       if (data) {
         setObrasLista(data);
@@ -905,7 +923,7 @@ export default function App() {
           .order("created_at", { ascending: false });
 
         if (!isAdmin)
-          queryObras = queryObras.eq("id_responsavel", usuarioAtual.id);
+          queryObras = queryObras.eq("id_responsavel", idResponsavelEscopo);
 
         const { data: obrasDashboard, error: obrasErro } = await queryObras;
         if (obrasErro) throw obrasErro;
@@ -2593,7 +2611,7 @@ export default function App() {
         const { data: obrasUsuario } = await supabase
           .from("obras")
           .select("id")
-          .eq("id_responsavel", usuarioAtual.id);
+          .eq("id_responsavel", idResponsavelEscopo);
         const idsMinhasObras = obrasUsuario?.map((o) => o.id) || [];
         if (idsMinhasObras.length > 0)
           query = query.or(
@@ -2776,16 +2794,35 @@ export default function App() {
     e.preventDefault();
     setCarregando(true);
     try {
-      const { error } = await supabase.from("usuarios").insert([
-        {
-          nome: novoUsuario.nome,
-          email: novoUsuario.email,
-          perfil: novoUsuario.perfil,
-        },
-      ]);
-      if (error) throw error;
-      mostrarAviso("Registado com sucesso!");
-      setNovoUsuario({ nome: "", email: "", perfil: "engenheiro" });
+      const dadosUsuario = {
+        nome: novoUsuario.nome,
+        email: novoUsuario.email,
+        perfil: novoUsuario.perfil,
+        id_engenheiro_vinculado:
+          novoUsuario.perfil === "assistente"
+            ? novoUsuario.id_engenheiro_vinculado || null
+            : null,
+      };
+
+      if (novoUsuario.id) {
+        const { error } = await supabase
+          .from("usuarios")
+          .update(dadosUsuario)
+          .eq("id", novoUsuario.id);
+        if (error) throw error;
+        mostrarAviso("Colaborador atualizado!");
+      } else {
+        const { error } = await supabase.from("usuarios").insert([dadosUsuario]);
+        if (error) throw error;
+        mostrarAviso("Registado com sucesso!");
+      }
+      setNovoUsuario({
+        id: null,
+        nome: "",
+        email: "",
+        perfil: "engenheiro",
+        id_engenheiro_vinculado: "",
+      });
       buscarUsuarios();
     } catch (error: any) {
       mostrarAviso(error.message, "erro");
@@ -2794,12 +2831,37 @@ export default function App() {
     }
   }
 
+  const editarUsuario = (usuario: any) => {
+    setNovoUsuario({
+      id: usuario.id,
+      nome: usuario.nome || "",
+      email: usuario.email || "",
+      perfil: usuario.perfil || "engenheiro",
+      id_engenheiro_vinculado: usuario.id_engenheiro_vinculado || "",
+    });
+    setTimeout(() => {
+      document
+        .getElementById("form-cadastro-colaborador")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  };
+
+  const cancelarEdicaoUsuario = () => {
+    setNovoUsuario({
+      id: null,
+      nome: "",
+      email: "",
+      perfil: "engenheiro",
+      id_engenheiro_vinculado: "",
+    });
+  };
+
   async function salvarObra(e: any) {
     e.preventDefault();
     setErroObra("");
     const responsavelObra = isAdmin
       ? novaObra.id_responsavel
-      : usuarioAtual?.id;
+      : idResponsavelEscopo;
 
     if (
       !novaObra.codigo_externo ||
@@ -4942,7 +5004,7 @@ export default function App() {
                 </button>
               )}
               {!["concluida", "cancelada"].includes(tarefaSelecionada.status) &&
-                (isAdmin || tarefaSelecionada.id_responsavel === usuarioAtual?.id || tarefaSelecionada.obras?.id_responsavel === usuarioAtual?.id) && (
+                (isAdmin || tarefaSelecionada.id_responsavel === usuarioAtual?.id || tarefaSelecionada.obras?.id_responsavel === idResponsavelEscopo) && (
                 <button
                   onClick={() => cancelarTarefa(tarefaSelecionada)}
                   className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-6 py-3 md:py-2 rounded-lg font-bold flex items-center gap-2 transition flex-1 sm:flex-none justify-center"
@@ -8181,11 +8243,12 @@ export default function App() {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
               <form
+                id="form-cadastro-colaborador"
                 onSubmit={salvarUsuario}
                 className="bg-white p-4 md:p-6 rounded-xl shadow-sm border h-fit max-w-full"
               >
                 <h3 className="text-lg font-bold mb-4 border-b pb-2">
-                  Novo Colaborador
+                  {novoUsuario.id ? "Editar Colaborador" : "Novo Colaborador"}
                 </h3>
                 <div className="space-y-4 max-w-full">
                   <div>
@@ -8233,17 +8296,68 @@ export default function App() {
                       }
                       className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full"
                     >
-                      <option value="engenheiro">Engenheiro/Gestor</option>
-                      <option value="admin">Administrador</option>
+                      {perfisUsuario.map((p) => (
+                        <option key={p.valor} value={p.valor}>
+                          {p.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
+                  {novoUsuario.perfil === "assistente" && (
+                    <div>
+                      <label className="block text-sm mb-1 max-w-full">
+                        Engenheiro vinculado
+                      </label>
+                      <select
+                        required
+                        value={novoUsuario.id_engenheiro_vinculado}
+                        onChange={(e) =>
+                          setNovoUsuario({
+                            ...novoUsuario,
+                            id_engenheiro_vinculado: e.target.value,
+                          })
+                        }
+                        className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full"
+                      >
+                        <option value="">Selecione...</option>
+                        {listaUsuarios
+                          .filter((u) => u.perfil === "engenheiro" && u.id !== novoUsuario.id)
+                          .map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.nome}
+                            </option>
+                          ))}
+                      </select>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        O assistente passa a ter o mesmo acesso às obras deste engenheiro.
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-end pt-6">
+                <div className="flex justify-end gap-2 pt-6">
+                  {novoUsuario.id && (
+                    <button
+                      type="button"
+                      onClick={cancelarEdicaoUsuario}
+                      className="text-slate-500 hover:text-slate-700 px-4 py-2 rounded-lg font-medium border"
+                    >
+                      Cancelar
+                    </button>
+                  )}
                   <button
                     type="submit"
                     className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-medium w-full sm:w-auto"
                   >
-                    <Plus size={18} className="inline mr-2" /> Adicionar
+                    {novoUsuario.id ? (
+                      <>
+                        <Save size={18} className="inline mr-2" /> Salvar
+                        alterações
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={18} className="inline mr-2" /> Adicionar
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
@@ -8255,24 +8369,36 @@ export default function App() {
                   {listaUsuarios.map((user) => (
                     <div
                       key={user.id}
-                      className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-lg max-w-full"
+                      onClick={() => editarUsuario(user)}
+                      className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-lg max-w-full cursor-pointer hover:border-[#2A6377] transition group"
                     >
                       <div
-                        className={`p-2 rounded-full text-white ${user.perfil === "admin" ? "bg-[#2A6377]" : "bg-[#2A6377]/60"}`}
+                        className={`p-2 rounded-full text-white shrink-0 ${user.perfil === "admin" ? "bg-[#2A6377]" : "bg-[#2A6377]/60"}`}
                       >
                         <User size={16} />
                       </div>
-                      <div className="overflow-hidden">
+                      <div className="overflow-hidden flex-1">
                         <p className="font-bold text-sm truncate max-w-full">
                           {user.nome}{" "}
                           <span className="text-[10px] ml-2 px-2 py-0.5 bg-gray-200 rounded uppercase inline-block">
-                            {user.perfil}
+                            {labelPerfilUsuario(user.perfil)}
                           </span>
                         </p>
                         <p className="text-xs text-slate-500 truncate max-w-full">
                           {user.email}
                         </p>
+                        {user.perfil === "assistente" && (
+                          <p className="text-[11px] text-[#2A6377] font-bold truncate max-w-full">
+                            Assistente de:{" "}
+                            {nomeUsuarioPorId(user.id_engenheiro_vinculado) ||
+                              "não definido"}
+                          </p>
+                        )}
                       </div>
+                      <Edit2
+                        size={14}
+                        className="text-slate-300 group-hover:text-[#2A6377] shrink-0 transition"
+                      />
                     </div>
                   ))}
                 </div>
@@ -8404,15 +8530,19 @@ export default function App() {
                       className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full bg-white"
                     >
                       <option value="">Selecione...</option>
-                      {listaUsuarios.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.nome}
-                        </option>
-                      ))}
+                      {listaUsuarios
+                        .filter((user) => ["admin", "engenheiro"].includes(user.perfil))
+                        .map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.nome}
+                          </option>
+                        ))}
                     </select>
                   ) : (
                     <div className="w-full border p-3 rounded-lg bg-slate-50 text-slate-700 max-w-full">
-                      {usuarioAtual?.nome || "Usuário atual"}
+                      {nomeUsuarioPorId(idResponsavelEscopo) ||
+                        usuarioAtual?.nome ||
+                        "Usuário atual"}
                     </div>
                   )}
                 </div>
