@@ -2859,6 +2859,18 @@ export default function App() {
   async function salvarObra(e: any) {
     e.preventDefault();
     setErroObra("");
+
+    if (
+      !isAdmin &&
+      usuarioAtual?.perfil !== "engenheiro" &&
+      usuarioAtual?.perfil !== "assistente"
+    ) {
+      setErroObra(
+        "O responsável por uma obra deve ser sempre um Engenheiro. Seu perfil não pode cadastrar obras.",
+      );
+      return;
+    }
+
     const responsavelObra = isAdmin
       ? novaObra.id_responsavel
       : idResponsavelEscopo;
@@ -8531,7 +8543,7 @@ export default function App() {
                     >
                       <option value="">Selecione...</option>
                       {listaUsuarios
-                        .filter((user) => ["admin", "engenheiro"].includes(user.perfil))
+                        .filter((user) => user.perfil === "engenheiro")
                         .map((user) => (
                           <option key={user.id} value={user.id}>
                             {user.nome}
