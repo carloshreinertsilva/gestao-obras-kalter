@@ -1,5 +1,52 @@
 import { useState, useEffect } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { fasesProjeto, perfisUsuario } from "./constants";
+import type {
+  Usuario,
+  Obra,
+  Tarefa,
+  ComentarioTarefa,
+  Faturamento,
+  ParcelaCliente,
+  DocumentoProjeto,
+  CronogramaObra,
+  ObraFaturamentoFamilia,
+  ObraFaturamentoGrupo,
+  ObraFaturamentoPrevisao,
+  ObraFaturamentoRealizado,
+} from "./types";
+import {
+  formatarDataSegura,
+  formatarDataHora,
+  formatarMoeda,
+  dataHojeISO,
+  competenciaParaData,
+  formatarCompetencia,
+  codigoGrupoFaturamento,
+  selecionarTextoAoFocar,
+  isoParaDataBR,
+  formatarEntradaDataBR,
+  dataBRParaISO,
+  calcularStatusParcela,
+  labelStatusParcelaCalculado,
+  classeStatusParcela,
+  labelFase,
+  labelPerfilUsuario,
+  labelStatusParcela,
+  labelStatusDocumento,
+  corIndicador,
+  indicadorPorStatusDocumento,
+  corIndicadorDocumento,
+  classeStatusDocumento,
+  classeStatusCronograma,
+  labelStatusCronograma,
+  labelStatusObra,
+  classeStatusObra,
+  formatarTamanhoArquivo,
+  normalizarNomeArquivo,
+  labelOcorrencia,
+} from "./utils";
 import {
   BarChart,
   Bar,
@@ -50,8 +97,8 @@ import {
 } from "lucide-react";
 
 export default function App() {
-  const [sessao, setSessao] = useState<any>(null);
-  const [usuarioAtual, setUsuarioAtual] = useState<any>(null);
+  const [sessao, setSessao] = useState<Session | null>(null);
+  const [usuarioAtual, setUsuarioAtual] = useState<Usuario | null>(null);
   const [carregandoAuth, setCarregandoAuth] = useState<boolean>(true);
   const [erroLogin, setErroLogin] = useState<string>("");
   const [mensagemSucesso, setMensagemSucesso] = useState<string>("");
@@ -85,7 +132,7 @@ export default function App() {
   const [statusProjetosPMIS, setStatusProjetosPMIS] = useState<any[]>([]);
   const [projetosCriticosPMIS, setProjetosCriticosPMIS] = useState<any[]>([]);
 
-  const [listaUsuarios, setListaUsuarios] = useState<any[]>([]);
+  const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
 
   // Obras com os valores de venda
   const [novoUsuario, setNovoUsuario] = useState<any>({
@@ -109,11 +156,11 @@ export default function App() {
     observacoes: "",
   });
   const [erroObra, setErroObra] = useState<string>("");
-  const [obrasLista, setObrasLista] = useState<any[]>([]);
+  const [obrasLista, setObrasLista] = useState<Obra[]>([]);
   const [ordenacaoMinhasObras, setOrdenacaoMinhasObras] = useState<
     "codigo" | "nome"
   >("codigo");
-  const [obrasCadastroLista, setObrasCadastroLista] = useState<any[]>([]);
+  const [obrasCadastroLista, setObrasCadastroLista] = useState<Obra[]>([]);
   const [filtroStatusCadastroObras, setFiltroStatusCadastroObras] = useState<
     "em_andamento" | "finalizada" | "cancelada" | "todas"
   >("em_andamento");
@@ -154,27 +201,27 @@ export default function App() {
   const [modalAtaAberto, setModalAtaAberto] = useState<boolean>(false);
   const [obrasNaAtaAtual, setObrasNaAtaAtual] = useState<any[]>([]);
 
-  const [tarefasKanban, setTarefasKanban] = useState<any[]>([]);
+  const [tarefasKanban, setTarefasKanban] = useState<Tarefa[]>([]);
   const [filtroObraKanban, setFiltroObraKanban] = useState<string>("todas");
-  const [minhasNotificacoes, setMinhasNotificacoes] = useState<any[]>([]);
+  const [minhasNotificacoes, setMinhasNotificacoes] = useState<Tarefa[]>([]);
   const [painelNotificacaoAberto, setPainelNotificacaoAberto] =
     useState<boolean>(false);
   const [menuMobileAberto, setMenuMobileAberto] = useState<boolean>(false);
 
-  const [tarefaSelecionada, setTarefaSelecionada] = useState<any>(null);
+  const [tarefaSelecionada, setTarefaSelecionada] = useState<Tarefa | null>(null);
 
-  const [obraEcoSelecionada, setObraEcoSelecionada] = useState<any>(null);
+  const [obraEcoSelecionada, setObraEcoSelecionada] = useState<Obra | null>(null);
   const [novoDiarioTexto, setNovoDiarioTexto] = useState<string>("");
-  const [comentariosTarefaAtual, setComentariosTarefaAtual] = useState<any[]>(
-    [],
-  );
+  const [comentariosTarefaAtual, setComentariosTarefaAtual] = useState<
+    ComentarioTarefa[]
+  >([]);
   const [novoComentarioTexto, setNovoComentarioTexto] = useState<string>("");
 
   const [diarioEmEdicao, setDiarioEmEdicao] = useState<any>(null);
   const [reuniaoEmEdicao, setReuniaoEmEdicao] = useState<any>(null);
 
   // ESTADOS DO FINANCEIRO
-  const [faturamentosObra, setFaturamentosObra] = useState<any[]>([]);
+  const [faturamentosObra, setFaturamentosObra] = useState<Faturamento[]>([]);
   const [novoFaturamento, setNovoFaturamento] = useState<any>({
     numero_nf: "",
     tipo: "produto",
@@ -183,9 +230,9 @@ export default function App() {
 
   // ESTADOS DO PMIS
   const [abaPainelObra, setAbaPainelObra] = useState<string>("resumo");
-  const [parcelasCliente, setParcelasCliente] = useState<any[]>([]);
-  const [documentosProjeto, setDocumentosProjeto] = useState<any[]>([]);
-  const [cronogramaObra, setCronogramaObra] = useState<any[]>([]);
+  const [parcelasCliente, setParcelasCliente] = useState<ParcelaCliente[]>([]);
+  const [documentosProjeto, setDocumentosProjeto] = useState<DocumentoProjeto[]>([]);
+  const [cronogramaObra, setCronogramaObra] = useState<CronogramaObra[]>([]);
   const [novaParcelaCliente, setNovaParcelaCliente] = useState<any>({
     descricao: "",
     data_prevista: "",
@@ -216,10 +263,18 @@ export default function App() {
   });
 
   // ESTADOS DO CONTROLE DE FATURAMENTO POR FAMÍLIA
-  const [familiasFaturamento, setFamiliasFaturamento] = useState<any[]>([]);
-  const [gruposFaturamentoObra, setGruposFaturamentoObra] = useState<any[]>([]);
-  const [previsoesFaturamento, setPrevisoesFaturamento] = useState<any[]>([]);
-  const [realizadosFaturamento, setRealizadosFaturamento] = useState<any[]>([]);
+  const [familiasFaturamento, setFamiliasFaturamento] = useState<
+    ObraFaturamentoFamilia[]
+  >([]);
+  const [gruposFaturamentoObra, setGruposFaturamentoObra] = useState<
+    ObraFaturamentoGrupo[]
+  >([]);
+  const [previsoesFaturamento, setPrevisoesFaturamento] = useState<
+    ObraFaturamentoPrevisao[]
+  >([]);
+  const [realizadosFaturamento, setRealizadosFaturamento] = useState<
+    ObraFaturamentoRealizado[]
+  >([]);
   const [familiaFaturamentoEmEdicao, setFamiliaFaturamentoEmEdicao] =
     useState<any>(null);
   const [formFamiliaFaturamento, setFormFamiliaFaturamento] = useState<any>({
@@ -281,76 +336,6 @@ export default function App() {
     cancelar_cronograma: true,
   });
 
-  const formatarDataSegura = (dataStr: any) => {
-    if (!dataStr) return "Sem prazo";
-    try {
-      const d = new Date(dataStr);
-      if (isNaN(d.getTime())) return "Data Inválida";
-      return d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
-    } catch (e) {
-      return "Data Inválida";
-    }
-  };
-
-  const formatarDataHora = (dataStr: any) => {
-    if (!dataStr) return "";
-    try {
-      const d = new Date(dataStr);
-      if (isNaN(d.getTime())) return "";
-      return d.toLocaleString("pt-BR", {
-        timeZone: "UTC",
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        day: "2-digit",
-        month: "2-digit",
-      });
-    } catch (e) {
-      return "";
-    }
-  };
-
-  const formatarMoeda = (valor: any) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(Number(valor) || 0);
-  };
-
-  const dataHojeISO = () => new Date().toISOString().split("T")[0];
-
-  const competenciaParaData = (competencia: string) => {
-    if (!competencia) return null;
-    if (/^\d{4}-\d{2}$/.test(competencia)) return `${competencia}-01`;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(competencia))
-      return competencia.slice(0, 7) + "-01";
-    return null;
-  };
-
-  const formatarCompetencia = (competencia: any) => {
-    if (!competencia) return "-";
-    const dataISO = String(competencia).slice(0, 10);
-    const data = new Date(`${dataISO}T00:00:00`);
-    if (isNaN(data.getTime())) return String(competencia);
-    const meses = [
-      "jan",
-      "fev",
-      "mar",
-      "abr",
-      "mai",
-      "jun",
-      "jul",
-      "ago",
-      "set",
-      "out",
-      "nov",
-      "dez",
-    ];
-    return `${meses[data.getUTCMonth()]}/${String(data.getUTCFullYear()).slice(-2)}`;
-  };
-
-  const codigoGrupoFaturamento = (valor: any) => String(valor || "").trim();
-
   const gruposFaturamentoAtivos = () =>
     gruposFaturamentoObra
       .filter((g) => g.ativo !== false)
@@ -398,234 +383,8 @@ export default function App() {
     );
   };
 
-  const selecionarTextoAoFocar = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.currentTarget.select();
-  };
-
-  const isoParaDataBR = (dataStr: any) => {
-    if (!dataStr) return "";
-    const dataLimpa = String(dataStr).split("T")[0];
-    const partes = dataLimpa.split("-");
-    if (partes.length !== 3) return "";
-    return `${partes[2]}/${partes[1]}/${partes[0]}`;
-  };
-
-  const formatarEntradaDataBR = (valor: string) => {
-    const somenteNumeros = valor.replace(/\D/g, "").slice(0, 8);
-    const dia = somenteNumeros.slice(0, 2);
-    const mes = somenteNumeros.slice(2, 4);
-    const ano = somenteNumeros.slice(4, 8);
-    if (somenteNumeros.length <= 2) return dia;
-    if (somenteNumeros.length <= 4) return `${dia}/${mes}`;
-    return `${dia}/${mes}/${ano}`;
-  };
-
-  const dataBRParaISO = (valor: string) => {
-    const partes = valor.split("/");
-    if (partes.length !== 3) return null;
-    const [dia, mes, ano] = partes;
-    if (dia.length !== 2 || mes.length !== 2 || ano.length !== 4) return null;
-    const data = new Date(`${ano}-${mes}-${dia}T00:00:00`);
-    if (isNaN(data.getTime())) return null;
-    if (
-      data.getFullYear() !== Number(ano) ||
-      data.getMonth() + 1 !== Number(mes) ||
-      data.getDate() !== Number(dia)
-    )
-      return null;
-    return `${ano}-${mes}-${dia}`;
-  };
-
-  const calcularStatusParcela = (parcela: any) => {
-    const previsto = Number(parcela?.valor_previsto || 0);
-    const realizado = Number(parcela?.valor_realizado || 0);
-    if (parcela?.status === "cancelado") return "cancelado";
-    if (realizado >= previsto && previsto > 0) return "pago";
-    if (realizado > 0) return "pago_parcial";
-    return "pendente";
-  };
-
-  const labelStatusParcelaCalculado = (parcela: any) => {
-    const statusCalculado = calcularStatusParcela(parcela);
-    const estaVencida =
-      statusCalculado === "pendente" &&
-      parcela?.data_prevista &&
-      parcela.data_prevista < dataHojeISO();
-    const mapa: any = {
-      pendente: estaVencida ? "Pendente (vencido)" : "Pendente",
-      pago_parcial: "Parcial",
-      pago: "Pago",
-      cancelado: "Cancelado",
-    };
-    return mapa[statusCalculado] || "Pendente";
-  };
-
-  const classeStatusParcela = (parcela: any) => {
-    const statusCalculado = calcularStatusParcela(parcela);
-    const estaVencida =
-      statusCalculado === "pendente" &&
-      parcela?.data_prevista &&
-      parcela.data_prevista < dataHojeISO();
-    if (statusCalculado === "pago")
-      return "bg-green-100 text-green-700 border-green-200";
-    if (statusCalculado === "pago_parcial")
-      return "bg-amber-100 text-amber-700 border-amber-200";
-    if (statusCalculado === "cancelado")
-      return "bg-slate-100 text-slate-500 border-slate-200";
-    if (estaVencida) return "bg-red-100 text-red-700 border-red-200";
-    return "bg-blue-50 text-blue-700 border-blue-100";
-  };
-
-  const fasesProjeto = [
-    { valor: "processo_inicial", label: "Processo Inicial" },
-    { valor: "engenharia", label: "Engenharia" },
-    { valor: "compras", label: "Compras" },
-    { valor: "fabricacao", label: "Fabricação" },
-    { valor: "montagem", label: "Montagem" },
-    { valor: "comissionamento", label: "Comissionamento" },
-    { valor: "start_up", label: "Start-up" },
-    { valor: "garantia", label: "Garantia" },
-  ];
-
-  const labelFase = (fase: string) =>
-    fasesProjeto.find((f) => f.valor === fase)?.label || fase;
-
-  const perfisUsuario = [
-    { valor: "admin", label: "Administrador" },
-    { valor: "engenheiro", label: "Engenheiro/Gestor" },
-    { valor: "assistente", label: "Assistente" },
-    { valor: "logistica", label: "Logística/Suprimentos" },
-  ];
-  const labelPerfilUsuario = (perfil: string) =>
-    perfisUsuario.find((p) => p.valor === perfil)?.label || perfil;
   const nomeUsuarioPorId = (id: any) =>
     listaUsuarios.find((u) => u.id === id)?.nome || "";
-
-  const labelStatusParcela = (status: string) => {
-    const mapa: any = {
-      a_vencer: "Pendente",
-      vencido: "Pendente (vencido)",
-      pago_parcial: "Parcial",
-      pago: "Pago",
-      cancelado: "Cancelado",
-    };
-    return mapa[status] || status;
-  };
-
-  const labelStatusDocumento = (status: string) => {
-    const mapa: any = {
-      nao_elaborado: "Não Elaborado",
-      em_andamento: "Em Andamento",
-      concluido: "Concluído",
-      nao_aplicavel: "Não Aplicável",
-    };
-    return mapa[status] || status;
-  };
-
-  const corIndicador = (indicador: string) => {
-    const mapa: any = {
-      verde: "bg-green-500",
-      amarelo: "bg-yellow-400",
-      vermelho: "bg-red-500",
-    };
-    return mapa[indicador] || "bg-slate-300";
-  };
-
-  const indicadorPorStatusDocumento = (status: string) => {
-    const mapa: any = {
-      concluido: "verde",
-      em_andamento: "amarelo",
-      nao_elaborado: "vermelho",
-      nao_aplicavel: "cinza",
-    };
-    return mapa[status] || "vermelho";
-  };
-
-  const corIndicadorDocumento = (status: string) => {
-    const mapa: any = {
-      concluido: "bg-green-500",
-      em_andamento: "bg-yellow-400",
-      nao_elaborado: "bg-red-500",
-      nao_aplicavel: "bg-slate-300",
-    };
-    return mapa[status] || "bg-red-500";
-  };
-
-  const classeStatusDocumento = (status: string) => {
-    const mapa: any = {
-      concluido: "bg-green-100 text-green-700 border-green-200",
-      em_andamento: "bg-amber-100 text-amber-700 border-amber-200",
-      nao_elaborado: "bg-red-100 text-red-700 border-red-200",
-      nao_aplicavel: "bg-slate-100 text-slate-500 border-slate-200",
-    };
-    return mapa[status] || "bg-red-100 text-red-700 border-red-200";
-  };
-
-  const classeStatusCronograma = (status: string) => {
-    const mapa: any = {
-      concluido: "bg-green-100 text-green-700 border-green-200",
-      em_andamento: "bg-amber-100 text-amber-700 border-amber-200",
-      nao_iniciado: "bg-blue-50 text-blue-700 border-blue-100",
-      atrasado: "bg-red-100 text-red-700 border-red-200",
-      cancelado: "bg-slate-100 text-slate-500 border-slate-200",
-    };
-    return mapa[status] || "bg-blue-50 text-blue-700 border-blue-100";
-  };
-
-  const labelStatusCronograma = (status: string) => {
-    const mapa: any = {
-      nao_iniciado: "Não Iniciado",
-      em_andamento: "Em Andamento",
-      concluido: "Concluído",
-      atrasado: "Atrasado",
-      cancelado: "Cancelado",
-    };
-    return mapa[status] || status;
-  };
-
-  const labelStatusObra = (status: string) => {
-    const mapa: any = {
-      em_andamento: "Em Andamento",
-      finalizada: "Finalizada",
-      cancelada: "Cancelada",
-      paralisada: "Paralisada",
-      pausada: "Pausada",
-    };
-    return mapa[status] || status;
-  };
-
-  const classeStatusObra = (status: string) => {
-    const mapa: any = {
-      em_andamento: "bg-blue-50 text-blue-700 border-blue-100",
-      finalizada: "bg-green-100 text-green-700 border-green-200",
-      cancelada: "bg-red-100 text-red-700 border-red-200",
-    };
-    return mapa[status] || "bg-slate-100 text-slate-500 border-slate-200";
-  };
-
-  const formatarTamanhoArquivo = (bytes: any) => {
-    const valor = Number(bytes) || 0;
-    if (valor < 1024) return `${valor} B`;
-    if (valor < 1024 * 1024) return `${(valor / 1024).toFixed(1)} KB`;
-    return `${(valor / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const normalizarNomeArquivo = (nome: string) => {
-    return nome
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-zA-Z0-9._-]/g, "_")
-      .toLowerCase();
-  };
-
-  const labelOcorrencia = (tipo: string) => {
-    const mapas: any = {
-      avanco: "Avanço",
-      atraso: "Atraso",
-      financeiro: "Financeiro",
-    };
-    return mapas[tipo] || tipo;
-  };
 
   const mostrarAviso = (mensagem: string, tipo: string = "sucesso") => {
     const id = Date.now();
@@ -2707,7 +2466,7 @@ export default function App() {
       const { error } = await supabase.from("comentarios_tarefa").insert([
         {
           id_tarefa: tarefaSelecionada.id,
-          id_usuario: usuarioAtual.id,
+          id_usuario: usuarioAtual?.id,
           texto: novoComentarioTexto,
         },
       ]);
@@ -2740,7 +2499,7 @@ export default function App() {
         const { error } = await supabase.from("diario_obra").insert([
           {
             id_obra: obraEcoSelecionada.id,
-            id_usuario: usuarioAtual.id,
+            id_usuario: usuarioAtual?.id,
             texto: novoDiarioTexto,
             data_registro: new Date().toISOString().split("T")[0],
           },
@@ -2789,7 +2548,7 @@ export default function App() {
       const { error } = await supabase.from("faturamentos").insert([
         {
           id_obra: obraEcoSelecionada.id,
-          id_usuario: usuarioAtual.id,
+          id_usuario: usuarioAtual?.id,
           numero_nf: novoFaturamento.numero_nf,
           tipo: novoFaturamento.tipo,
           valor: novoFaturamento.valor,
@@ -3099,7 +2858,8 @@ export default function App() {
         .from("tarefas")
         .update({ data_vencimento: novaData || null })
         .eq("id", idTarefa);
-      setTarefaSelecionada({ ...tarefaSelecionada, data_vencimento: novaData });
+      if (tarefaSelecionada)
+        setTarefaSelecionada({ ...tarefaSelecionada, data_vencimento: novaData });
       buscarTarefasKanban();
       mostrarAviso("Prazo atualizado!");
     } catch (error: any) {
@@ -3229,7 +2989,7 @@ export default function App() {
 
       const registroObraAta = {
         id_reuniao: reuniaoSalva.id,
-        id_obra: obraSelecionada.id,
+        id_obra: obraSelecionada?.id,
         data_reuniao: reuniaoForm.data_reuniao,
         nome_obra: obraSelecionada
           ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}`
@@ -3354,14 +3114,14 @@ export default function App() {
       : (tarefasKanban || []).filter((t) => t?.id_obra === filtroObraKanban);
   const tarefasPainelObra = tarefasFiltradas.filter((t) => {
     if (filtroTarefasObra === "todas") return true;
-    if (filtroTarefasObra === "abertas") return !["concluida", "cancelada"].includes(t.status);
+    if (filtroTarefasObra === "abertas") return !["concluida", "cancelada"].includes(t.status ?? "");
     if (filtroTarefasObra === "atrasadas")
       return isAtrasada(t.data_vencimento, t.status);
     return t.status === filtroTarefasObra;
   });
   const tarefasDashboard = tarefasKanban
     .filter(
-      (t) => !["concluida", "cancelada"].includes(t.status) && t.id_responsavel === usuarioAtual?.id,
+      (t) => !["concluida", "cancelada"].includes(t.status ?? "") && t.id_responsavel === usuarioAtual?.id,
     )
     .slice(0, 6);
 
@@ -3463,10 +3223,10 @@ export default function App() {
     familiasFaturamentoComEscopo.map((f) => f.id),
   );
   const previsoesFaturamentoDoEscopo = previsoesFaturamento.filter((p) =>
-    idsFamiliasFaturamentoComEscopo.has(p.id_obra_faturamento_familia),
+    idsFamiliasFaturamentoComEscopo.has(p.id_obra_faturamento_familia ?? ""),
   );
   const realizadosFaturamentoDoEscopo = realizadosFaturamento.filter((r) =>
-    idsFamiliasFaturamentoComEscopo.has(r.id_obra_faturamento_familia),
+    idsFamiliasFaturamentoComEscopo.has(r.id_obra_faturamento_familia ?? ""),
   );
   const totalEscopoFaturamento = familiasFaturamentoComEscopo.reduce(
     (acc, f) => acc + Number(f.valor_total_escopo || 0),
@@ -5064,7 +4824,7 @@ export default function App() {
                   <Check size={18} strokeWidth={3} /> Concluir Tarefa
                 </button>
               )}
-              {!["concluida", "cancelada"].includes(tarefaSelecionada.status) &&
+              {!["concluida", "cancelada"].includes(tarefaSelecionada.status ?? "") &&
                 (isAdmin || tarefaSelecionada.id_responsavel === usuarioAtual?.id || tarefaSelecionada.obras?.id_responsavel === idResponsavelEscopo) && (
                 <button
                   onClick={() => cancelarTarefa(tarefaSelecionada)}
@@ -6351,7 +6111,7 @@ export default function App() {
                   </span>
                 </div>
               </div>
-              {podeEditarObraSelecionada && !["finalizada", "cancelada"].includes(obraEcoSelecionada.status) && (
+              {podeEditarObraSelecionada && !["finalizada", "cancelada"].includes(obraEcoSelecionada.status ?? "") && (
                 <details className="relative self-start md:self-auto group">
                   <summary className="list-none cursor-pointer select-none bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition">
                     <Settings size={18} /> Ações da Obra
@@ -7633,7 +7393,7 @@ export default function App() {
                               className="border-t hover:bg-slate-50"
                             >
                               <td className="p-3 font-bold text-[#2A6377]">
-                                {labelFase(fase.fase)}
+                                {labelFase(fase.fase ?? "")}
                               </td>
                               <td className="p-3 text-center text-slate-700">
                                 {formatarDataSegura(inicioPrevisto)}
@@ -7653,9 +7413,9 @@ export default function App() {
                               </td>
                               <td className="p-3 text-center">
                                 <span
-                                  className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusCronograma(fase.status)}`}
+                                  className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusCronograma(fase.status ?? "")}`}
                                 >
-                                  {labelStatusCronograma(fase.status)}
+                                  {labelStatusCronograma(fase.status ?? "")}
                                 </span>
                               </td>
                               <td
@@ -7844,14 +7604,14 @@ export default function App() {
                               </td>
                               <td className="p-3 text-center">
                                 <span
-                                  className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusDocumento(doc.status)}`}
+                                  className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusDocumento(doc.status ?? "")}`}
                                 >
-                                  {labelStatusDocumento(doc.status)}
+                                  {labelStatusDocumento(doc.status ?? "")}
                                 </span>
                               </td>
                               <td className="p-3 text-center">
                                 <span
-                                  className={`inline-block w-5 h-5 rounded-full border-2 border-slate-800 ${corIndicadorDocumento(doc.status)}`}
+                                  className={`inline-block w-5 h-5 rounded-full border-2 border-slate-800 ${corIndicadorDocumento(doc.status ?? "")}`}
                                 ></span>
                               </td>
                               <td className="p-3 text-center text-slate-700">
@@ -8115,7 +7875,7 @@ export default function App() {
                         Crie e acompanhe tarefas avulsas da obra. Tarefas de reunião também aparecem aqui.
                       </p>
                     </div>
-                    {podeEditarObraSelecionada && !["finalizada", "cancelada"].includes(obraEcoSelecionada.status) && (
+                    {podeEditarObraSelecionada && !["finalizada", "cancelada"].includes(obraEcoSelecionada.status ?? "") && (
                       <button
                         onClick={abrirModalNovaTarefaObra}
                         className="bg-[#2A6377] hover:bg-[#1e4857] text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2"
@@ -8442,7 +8202,7 @@ export default function App() {
                         <p className="font-bold text-sm truncate max-w-full">
                           {user.nome}{" "}
                           <span className="text-[10px] ml-2 px-2 py-0.5 bg-gray-200 rounded uppercase inline-block">
-                            {labelPerfilUsuario(user.perfil)}
+                            {labelPerfilUsuario(user.perfil ?? "")}
                           </span>
                         </p>
                         <p className="text-xs text-slate-500 truncate max-w-full">
@@ -8762,9 +8522,9 @@ export default function App() {
                           </td>
                           <td className="p-3 max-w-full truncate">
                             <span
-                              className={`text-[10px] font-bold px-2 py-1 rounded border uppercase ${classeStatusObra(obra.status)}`}
+                              className={`text-[10px] font-bold px-2 py-1 rounded border uppercase ${classeStatusObra(obra.status ?? "")}`}
                             >
-                              {labelStatusObra(obra.status)}
+                              {labelStatusObra(obra.status ?? "")}
                             </span>
                             {obra.status === "finalizada" && obra.data_finalizacao && (
                               <p className="text-[10px] text-slate-400 mt-1">
