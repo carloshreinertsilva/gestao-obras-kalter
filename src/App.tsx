@@ -2765,11 +2765,27 @@ export default function App() {
     }
   }
 
-  const abrirPainelObra = (obra: any) => {
+  const abrirPainelObra = async (obra: any) => {
+    // Mostra o card clicado na hora (alguns lugares, ex: cards do Dashboard PMIS,
+    // trazem so um subconjunto de colunas), depois busca a linha completa da obra -
+    // sem isso, campos como "observacoes" (ex: alertas do robo) ficavam sempre vazios
+    // quando o painel era aberto a partir do Dashboard.
     setObraEcoSelecionada(obra);
     setFiltroObraKanban(obra.id);
     setAbaPainelObra("resumo");
     setTelaAtiva("painel_obra");
+    try {
+      const { data } = await supabase
+        .from("obras")
+        .select(
+          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, usuarios(nome)",
+        )
+        .eq("id", obra.id)
+        .single();
+      if (data) setObraEcoSelecionada(data);
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const editarObra = (obra: any) => {
