@@ -3514,19 +3514,26 @@ export default function App() {
       .reduce((acc, r) => acc + Number(r.valor_realizado || 0), 0);
 
   // Realizado por previsao: rateado proporcionalmente ao valor_previsto dentro do balde
-  // familia+competencia, em vez de depender do vinculo direto id_previsao (que so existe
-  // quando alguem clica "Realizar" na tela - o robo de sincronizacao nunca preenche esse
-  // vinculo). Sem isso, faturamento importado automaticamente via NF continuava aparecendo
-  // como "em aberto" aqui mesmo depois de ja constar no restante da aba Faturamento.
+  // por familia (ignora competencia de propósito - ver correcao abaixo), em vez de
+  // depender do vinculo direto id_previsao (que so existe quando alguem clica "Realizar"
+  // na tela - o robo de sincronizacao nunca preenche esse vinculo). Sem isso, faturamento
+  // importado automaticamente via NF continuava aparecendo como "em aberto" aqui mesmo
+  // depois de ja constar no restante da aba Faturamento.
+  //
+  // CORRECAO 2026-09-19: balde inicialmente era familia+competencia (mesmo par usado em
+  // "Previsao x Realizado"), mas a obra 1256 mostrou que isso e insuficiente - a previsao
+  // usa uma unica data estimada de entrega do pedido (ERP), enquanto o faturamento real
+  // fica espalhado por varios meses conforme as NFs vao saindo. Ex: familia "40/200" tinha
+  // previsao so pra marco/2026, mas o realizado estava em fev+mar+jun/2026 - casando por
+  // mes, so a fatia de marco aparecia como realizado. Balde por familia (sem mes) sempre
+  // bate com o total real da familia, igual a coluna "Faturado" da tabela de Escopo acima
+  // (que ja soma por familia sem filtro de mes).
   const previsoesComSaldo = (() => {
-    const chaveBalde = (
-      familiaId: string | undefined,
-      competencia: string | undefined,
-    ) => `${familiaId || ""}|${String(competencia || "").slice(0, 10)}`;
+    const chaveBalde = (familiaId: string | undefined) => familiaId || "";
 
     const realizadoPorBalde = new Map<string, number>();
     for (const r of realizadosFaturamentoDoEscopo) {
-      const chave = chaveBalde(r.id_obra_faturamento_familia, r.competencia);
+      const chave = chaveBalde(r.id_obra_faturamento_familia);
       realizadoPorBalde.set(
         chave,
         (realizadoPorBalde.get(chave) || 0) + Number(r.valor_realizado || 0),
@@ -3535,7 +3542,7 @@ export default function App() {
 
     const previstoPorBalde = new Map<string, number>();
     for (const p of previsoesFaturamentoDoEscopo) {
-      const chave = chaveBalde(p.id_obra_faturamento_familia, p.competencia);
+      const chave = chaveBalde(p.id_obra_faturamento_familia);
       previstoPorBalde.set(
         chave,
         (previstoPorBalde.get(chave) || 0) + Number(p.valor_previsto || 0),
@@ -3543,10 +3550,7 @@ export default function App() {
     }
 
     return previsoesFaturamentoDoEscopo.map((previsao) => {
-      const chave = chaveBalde(
-        previsao.id_obra_faturamento_familia,
-        previsao.competencia,
-      );
+      const chave = chaveBalde(previsao.id_obra_faturamento_familia);
       const previstoBalde = previstoPorBalde.get(chave) || 0;
       const realizadoBalde = realizadoPorBalde.get(chave) || 0;
       const proporcao =
