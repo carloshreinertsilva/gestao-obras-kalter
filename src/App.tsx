@@ -3513,16 +3513,52 @@ export default function App() {
       .filter((r) => r.id_obra_faturamento_familia === familiaId)
       .reduce((acc, r) => acc + Number(r.valor_realizado || 0), 0);
 
-  const previsoesComSaldo = previsoesFaturamentoDoEscopo.map((previsao) => {
-    const realizado = realizadosFaturamento
-      .filter((r) => r.id_previsao === previsao.id)
-      .reduce((acc, r) => acc + Number(r.valor_realizado || 0), 0);
-    return {
-      ...previsao,
-      realizado,
-      saldo: Math.max(Number(previsao.valor_previsto || 0) - realizado, 0),
-    };
-  });
+  // Realizado por previsao: rateado proporcionalmente ao valor_previsto dentro do balde
+  // familia+competencia, em vez de depender do vinculo direto id_previsao (que so existe
+  // quando alguem clica "Realizar" na tela - o robo de sincronizacao nunca preenche esse
+  // vinculo). Sem isso, faturamento importado automaticamente via NF continuava aparecendo
+  // como "em aberto" aqui mesmo depois de ja constar no restante da aba Faturamento.
+  const previsoesComSaldo = (() => {
+    const chaveBalde = (familiaId: string, competencia: string) =>
+      `${familiaId}|${String(competencia || "").slice(0, 10)}`;
+
+    const realizadoPorBalde = new Map<string, number>();
+    for (const r of realizadosFaturamentoDoEscopo) {
+      const chave = chaveBalde(r.id_obra_faturamento_familia, r.competencia);
+      realizadoPorBalde.set(
+        chave,
+        (realizadoPorBalde.get(chave) || 0) + Number(r.valor_realizado || 0),
+      );
+    }
+
+    const previstoPorBalde = new Map<string, number>();
+    for (const p of previsoesFaturamentoDoEscopo) {
+      const chave = chaveBalde(p.id_obra_faturamento_familia, p.competencia);
+      previstoPorBalde.set(
+        chave,
+        (previstoPorBalde.get(chave) || 0) + Number(p.valor_previsto || 0),
+      );
+    }
+
+    return previsoesFaturamentoDoEscopo.map((previsao) => {
+      const chave = chaveBalde(
+        previsao.id_obra_faturamento_familia,
+        previsao.competencia,
+      );
+      const previstoBalde = previstoPorBalde.get(chave) || 0;
+      const realizadoBalde = realizadoPorBalde.get(chave) || 0;
+      const proporcao =
+        previstoBalde > 0
+          ? Number(previsao.valor_previsto || 0) / previstoBalde
+          : 0;
+      const realizado = realizadoBalde * proporcao;
+      return {
+        ...previsao,
+        realizado,
+        saldo: Math.max(Number(previsao.valor_previsto || 0) - realizado, 0),
+      };
+    });
+  })();
 
   const estiloStatusPMIS = (status: string) => {
     const mapa: any = {
