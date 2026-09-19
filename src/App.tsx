@@ -3519,8 +3519,10 @@ export default function App() {
   // vinculo). Sem isso, faturamento importado automaticamente via NF continuava aparecendo
   // como "em aberto" aqui mesmo depois de ja constar no restante da aba Faturamento.
   const previsoesComSaldo = (() => {
-    const chaveBalde = (familiaId: string, competencia: string) =>
-      `${familiaId}|${String(competencia || "").slice(0, 10)}`;
+    const chaveBalde = (
+      familiaId: string | undefined,
+      competencia: string | undefined,
+    ) => `${familiaId || ""}|${String(competencia || "").slice(0, 10)}`;
 
     const realizadoPorBalde = new Map<string, number>();
     for (const r of realizadosFaturamentoDoEscopo) {
