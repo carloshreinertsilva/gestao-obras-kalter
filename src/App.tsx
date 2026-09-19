@@ -3216,8 +3216,17 @@ export default function App() {
       ? Math.round((fasesConcluidas / cronogramaObra.length) * 100)
       : 0;
 
+  // "Relevante" = tem escopo hoje OU tem historico de previsao/realizado (mesmo que o
+  // escopo tenha sido zerado depois, ex: pedido reestruturado no ERP). Filtrar so por
+  // escopo > 0 esconderia faturamento ja realizado e lancado manualmente no passado.
+  const idsFamiliaComPrevisaoOuRealizado = new Set([
+    ...previsoesFaturamento.map((p) => p.id_obra_faturamento_familia),
+    ...realizadosFaturamento.map((r) => r.id_obra_faturamento_familia),
+  ]);
   const familiasFaturamentoComEscopo = familiasFaturamento.filter(
-    (f) => Number(f.valor_total_escopo || 0) > 0,
+    (f) =>
+      Number(f.valor_total_escopo || 0) > 0 ||
+      idsFamiliaComPrevisaoOuRealizado.has(f.id),
   );
   const idsFamiliasFaturamentoComEscopo = new Set(
     familiasFaturamentoComEscopo.map((f) => f.id),
