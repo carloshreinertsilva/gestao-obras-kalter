@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { fasesProjeto, perfisUsuario } from "./constants";
 import TimelineObra from "./TimelineObra";
+import AnexosObra from "./AnexosObra";
 import type {
   Usuario,
   Obra,
@@ -235,6 +236,9 @@ export default function App() {
 
   // ESTADOS DO PMIS
   const [abaPainelObra, setAbaPainelObra] = useState<string>("resumo");
+  const [subAbaDiario, setSubAbaDiario] = useState<
+    "historico" | "anexos" | "tarefas"
+  >("historico");
   const [parcelasCliente, setParcelasCliente] = useState<ParcelaCliente[]>([]);
   const [documentosProjeto, setDocumentosProjeto] = useState<DocumentoProjeto[]>([]);
   const [cronogramaObra, setCronogramaObra] = useState<CronogramaObra[]>([]);
@@ -7926,13 +7930,41 @@ export default function App() {
 
             {abaPainelObra === "diario_tarefas" && (
               <div className="flex flex-col gap-6 flex-1 items-start w-full">
-                <TimelineObra
-                  idObra={obraEcoSelecionada.id}
-                  usuarioAtualId={usuarioAtual?.id}
-                  podeGerenciar={podeEditarObraSelecionada}
-                  onAviso={mostrarAviso}
-                />
+                <div className="flex gap-2 border-b w-full">
+                  {[
+                    { id: "historico", label: "Histórico" },
+                    { id: "anexos", label: "Anexos" },
+                    { id: "tarefas", label: "Tarefas" },
+                  ].map((sub) => (
+                    <button
+                      key={sub.id}
+                      onClick={() => setSubAbaDiario(sub.id as any)}
+                      className={`px-4 py-2.5 text-sm font-bold border-b-2 transition ${subAbaDiario === sub.id ? "border-[#2A6377] text-[#2A6377]" : "border-transparent text-slate-500 hover:text-[#2A6377]"}`}
+                    >
+                      {sub.label}
+                    </button>
+                  ))}
+                </div>
 
+                {subAbaDiario === "historico" && (
+                  <TimelineObra
+                    idObra={obraEcoSelecionada.id}
+                    usuarioAtualId={usuarioAtual?.id}
+                    podeGerenciar={podeEditarObraSelecionada}
+                    onAviso={mostrarAviso}
+                  />
+                )}
+
+                {subAbaDiario === "anexos" && (
+                  <AnexosObra
+                    idObra={obraEcoSelecionada.id}
+                    usuarioAtualId={usuarioAtual?.id}
+                    podeGerenciar={podeEditarObraSelecionada}
+                    onAviso={mostrarAviso}
+                  />
+                )}
+
+                {subAbaDiario === "tarefas" && (
                 <div className="flex flex-col bg-white p-5 rounded-xl shadow-sm border w-full">
                   <div className="border-b pb-3 mb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div>
@@ -8120,6 +8152,7 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             )}
           </div>
