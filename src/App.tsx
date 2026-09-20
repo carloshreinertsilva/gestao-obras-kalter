@@ -208,6 +208,12 @@ export default function App() {
   const [contextoObraAta, setContextoObraAta] = useState<any>(null);
   const [carregandoContextoAta, setCarregandoContextoAta] =
     useState<boolean>(false);
+  const [enviandoEmailAta, setEnviandoEmailAta] = useState<boolean>(false);
+  const [statusEnvioEmailAta, setStatusEnvioEmailAta] = useState<{
+    ok: boolean;
+    erro?: string;
+    destinatarios?: string[];
+  } | null>(null);
 
   const [tarefasKanban, setTarefasKanban] = useState<Tarefa[]>([]);
   const [filtroObraKanban, setFiltroObraKanban] = useState<string>("todas");
@@ -430,14 +436,7 @@ export default function App() {
     );
   };
 
-  const gerarVisualPDF = (listaObrasParaPDF: any[], dataAta: string) => {
-    const janela = window.open("", "", "width=900,height=900");
-    if (!janela)
-      return mostrarAviso(
-        "Seu navegador bloqueou o PDF. Permita os pop-ups!",
-        "erro",
-      );
-
+  const montarHtmlAta = (listaObrasParaAta: any[], dataAta: string) => {
     let html = `
       <!DOCTYPE html>
       <html>
@@ -468,7 +467,7 @@ export default function App() {
           </div>
     `;
 
-    agruparObrasPorGestor(listaObrasParaPDF).forEach(({ nomeGestor, obras }) => {
+    agruparObrasPorGestor(listaObrasParaAta).forEach(({ nomeGestor, obras }) => {
       html += `<div class="gestor-title">GESTOR: ${nomeGestor.toUpperCase()}</div>`;
       obras.forEach((obra: any) => {
         html += `
@@ -504,12 +503,27 @@ export default function App() {
 
     html += `
           <div class="footer">Gerado via Kalter Sistema de Gestão de Obras</div>
-          <script>
-            window.onload = function() { setTimeout(function(){ window.print(); }, 300); }
-          </script>
         </body>
       </html>
     `;
+    return html;
+  };
+
+  const gerarVisualPDF = (listaObrasParaPDF: any[], dataAta: string) => {
+    const janela = window.open("", "", "width=900,height=900");
+    if (!janela)
+      return mostrarAviso(
+        "Seu navegador bloqueou o PDF. Permita os pop-ups!",
+        "erro",
+      );
+
+    const html = montarHtmlAta(listaObrasParaPDF, dataAta).replace(
+      "</body>",
+      `<script>
+            window.onload = function() { setTimeout(function(){ window.print(); }, 300); }
+          </script>
+        </body>`,
+    );
 
     janela.document.write(html);
     janela.document.close();
@@ -2961,21 +2975,35 @@ export default function App() {
 
     setCarregando(true);
     try {
-      const { error } = await supabase.from("tarefas").insert([
-        {
-          id_obra: obraEcoSelecionada.id,
-          id_reuniao_origem: null,
-          titulo: novaTarefaObra.titulo,
-          descricao: novaTarefaObra.descricao || null,
-          data_vencimento: novaTarefaObra.data_vencimento || null,
-          id_responsavel: novaTarefaObra.id_responsavel,
-          prioridade: novaTarefaObra.prioridade || "normal",
-          origem: "avulsa",
-          status: "pendente",
-        },
-      ]);
+      const { data: tarefaCriada, error } = await supabase
+        .from("tarefas")
+        .insert([
+          {
+            id_obra: obraEcoSelecionada.id,
+            id_reuniao_origem: null,
+            titulo: novaTarefaObra.titulo,
+            descricao: novaTarefaObra.descricao || null,
+            data_vencimento: novaTarefaObra.data_vencimento || null,
+            id_responsavel: novaTarefaObra.id_responsavel,
+            prioridade: novaTarefaObra.prioridade || "normal",
+            origem: "avulsa",
+            status: "pendente",
+          },
+        ])
+        .select()
+        .single();
 
       if (error) throw error;
+
+      if (tarefaCriada) {
+        enviarEmailAtribuicaoTarefa(tarefaCriada.id, {
+          titulo: novaTarefaObra.titulo,
+          descricao: novaTarefaObra.descricao,
+          data_vencimento: novaTarefaObra.data_vencimento || null,
+          id_responsavel: novaTarefaObra.id_responsavel,
+          nome_obra: `${obraEcoSelecionada.codigo_externo} - ${obraEcoSelecionada.nome}`,
+        });
+      }
 
       mostrarAviso("Tarefa criada na obra!");
       setModalNovaTarefaObraAberto(false);
@@ -3043,20 +3071,36 @@ export default function App() {
             descricao: o.descricao,
           })),
         );
-      if (listaTarefas.length > 0)
-        await supabase.from("tarefas").insert(
-          listaTarefas.map((t) => ({
-            id_obra: reuniaoForm.id_obra,
-            id_reuniao_origem: reuniaoSalva.id,
-            titulo: t.titulo,
-            descricao: t.descricao || null,
-            data_vencimento: t.data_vencimento || null,
-            id_responsavel: t.id_responsavel,
-            prioridade: t.prioridade || "normal",
-            origem: "reuniao",
-            status: "pendente",
-          })),
-        );
+      if (listaTarefas.length > 0) {
+        const { data: tarefasCriadas } = await supabase
+          .from("tarefas")
+          .insert(
+            listaTarefas.map((t) => ({
+              id_obra: reuniaoForm.id_obra,
+              id_reuniao_origem: reuniaoSalva.id,
+              titulo: t.titulo,
+              descricao: t.descricao || null,
+              data_vencimento: t.data_vencimento || null,
+              id_responsavel: t.id_responsavel,
+              prioridade: t.prioridade || "normal",
+              origem: "reuniao",
+              status: "pendente",
+            })),
+          )
+          .select();
+
+        (tarefasCriadas || []).forEach((tarefaCriada: any) => {
+          enviarEmailAtribuicaoTarefa(tarefaCriada.id, {
+            titulo: tarefaCriada.titulo,
+            descricao: tarefaCriada.descricao,
+            data_vencimento: tarefaCriada.data_vencimento,
+            id_responsavel: tarefaCriada.id_responsavel,
+            nome_obra: obraSelecionada
+              ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}`
+              : undefined,
+          });
+        });
+      }
 
       const registroObraAta = {
         id_reuniao: reuniaoSalva.id,
@@ -3148,6 +3192,99 @@ export default function App() {
       .map(([nomeGestor, obras]) => ({ nomeGestor, obras }));
   };
 
+  const enviarEmailAtribuicaoTarefa = async (
+    idTarefa: string,
+    dados: {
+      titulo: string;
+      descricao?: string | null;
+      data_vencimento?: string | null;
+      id_responsavel: string;
+      nome_obra?: string;
+    },
+  ) => {
+    try {
+      const responsavel = listaUsuarios.find(
+        (u) => u.id === dados.id_responsavel,
+      );
+      if (!responsavel?.email) return;
+
+      const html = `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; max-width: 560px; margin: 0 auto;">
+          <h2 style="color: #2A6377;">Nova tarefa atribuída a você</h2>
+          <p><strong>${dados.titulo}</strong></p>
+          ${dados.descricao ? `<p style="color:#475569;">${dados.descricao}</p>` : ""}
+          ${dados.nome_obra ? `<p><strong>Obra:</strong> ${dados.nome_obra}</p>` : ""}
+          ${dados.data_vencimento ? `<p><strong>Prazo:</strong> ${formatarDataSegura(dados.data_vencimento)}</p>` : ""}
+          <p style="margin-top:24px; font-size:12px; color:#94a3b8;">Gerado via Kalter Sistema de Gestão de Obras</p>
+        </div>
+      `;
+
+      const { data, error } = await supabase.functions.invoke("enviar-email", {
+        body: {
+          to: [responsavel.email],
+          subject: `Nova tarefa: ${dados.titulo}`,
+          html,
+        },
+      });
+      if (!error && !data?.error) {
+        await supabase
+          .from("tarefas")
+          .update({ email_atribuicao_enviado: true })
+          .eq("id", idTarefa);
+      }
+    } catch (error) {
+      console.error("Erro ao enviar e-mail de atribuição de tarefa:", error);
+    }
+  };
+
+  const destinatariosAta = () => {
+    const emails = listaUsuarios
+      .filter((u) =>
+        ["admin", "engenheiro", "gestor", "logistica"].includes(
+          u.perfil || "",
+        ),
+      )
+      .map((u) => u.email)
+      .filter(Boolean);
+    return [...new Set(emails)] as string[];
+  };
+
+  const enviarAtaPorEmailResend = async (
+    listaObras: any[],
+    dataAta: string,
+  ) => {
+    const destinatarios = destinatariosAta();
+    if (destinatarios.length === 0)
+      return { ok: false, erro: "Nenhum destinatário com e-mail cadastrado." };
+    try {
+      const html = montarHtmlAta(listaObras, dataAta);
+      const { data, error } = await supabase.functions.invoke(
+        "enviar-email",
+        {
+          body: {
+            to: destinatarios,
+            subject: `Ata de Reunião de Obras - ${dataAta}`,
+            html,
+          },
+        },
+      );
+      if (error) throw error;
+      if (data?.error)
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : JSON.stringify(data.error),
+        );
+      return { ok: true, destinatarios };
+    } catch (error: any) {
+      return {
+        ok: false,
+        erro: error.message || "Erro ao enviar e-mail.",
+        destinatarios,
+      };
+    }
+  };
+
   const gerarAtaFinal = async () => {
     if (obrasNaAtaAtual.length === 0)
       return mostrarAviso("Você não salvou obras.", "erro");
@@ -3178,6 +3315,7 @@ export default function App() {
     });
     setAtaGerada(textoAta);
     setModalAtaAberto(true);
+    setStatusEnvioEmailAta(null);
 
     if (idSessaoAtaAtual) {
       await supabase
@@ -3185,26 +3323,39 @@ export default function App() {
         .update({ status: "fechada", fechada_at: new Date().toISOString() })
         .eq("id", idSessaoAtaAtual);
     }
+
+    setEnviandoEmailAta(true);
+    const resultado = await enviarAtaPorEmailResend(obrasNaAtaAtual, dataHj);
+    setEnviandoEmailAta(false);
+    setStatusEnvioEmailAta(resultado);
+    if (resultado.ok) {
+      mostrarAviso("Ata enviada por e-mail automaticamente!");
+    } else {
+      mostrarAviso(
+        `Ata gerada, mas o envio automático falhou: ${resultado.erro}`,
+        "erro",
+      );
+    }
   };
 
-  const enviarPorEmailAplicativo = () => {
-    const emailsParticipantes = listaUsuarios
-      .filter((u) =>
-        ["admin", "engenheiro", "gestor", "logistica"].includes(
-          u.perfil || "",
-        ),
-      )
-      .map((u) => u.email)
-      .filter(Boolean);
-    const destinatarios = [...new Set(emailsParticipantes)].join(",");
-    const assunto = encodeURIComponent(
-      `Ata de Reunião de Obras - ${formatarDataSegura(new Date().toISOString())}`,
+  const reenviarAtaPorEmail = async () => {
+    setEnviandoEmailAta(true);
+    const dataHj = formatarDataSegura(reuniaoForm.data_reuniao);
+    const resultado = await enviarAtaPorEmailResend(obrasNaAtaAtual, dataHj);
+    setEnviandoEmailAta(false);
+    setStatusEnvioEmailAta(resultado);
+    mostrarAviso(
+      resultado.ok ? "Ata reenviada!" : `Falha ao reenviar: ${resultado.erro}`,
+      resultado.ok ? "sucesso" : "erro",
     );
-    window.location.href = `mailto:${destinatarios}?subject=${assunto}&body=${encodeURIComponent(ataGerada)}`;
+  };
+
+  const fecharModalAta = () => {
     setModalAtaAberto(false);
     setObrasNaAtaAtual([]);
     setIdSessaoAtaAtual(null);
     setGestorSelecionadoAta("");
+    setStatusEnvioEmailAta(null);
   };
 
   const isAtrasada = (dataVencimento: any, status: any) => {
@@ -5651,18 +5802,38 @@ export default function App() {
               <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
                 <Mail className="text-[#2A6377]" /> Enviar Ata de Reunião
               </h2>
-              <button onClick={() => setModalAtaAberto(false)}>
+              <button onClick={fecharModalAta}>
                 <X size={24} />
               </button>
             </div>
             <div className="p-4 md:p-6 flex-1 overflow-y-auto bg-slate-50">
+              {enviandoEmailAta ? (
+                <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 mb-4 text-sm flex items-center gap-2">
+                  <Loader2 className="animate-spin" size={16} /> Enviando
+                  e-mail automaticamente...
+                </div>
+              ) : statusEnvioEmailAta?.ok ? (
+                <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 mb-4 text-sm">
+                  ✅ E-mail enviado para: {statusEnvioEmailAta.destinatarios?.join(", ")}
+                </div>
+              ) : statusEnvioEmailAta && !statusEnvioEmailAta.ok ? (
+                <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm flex flex-col gap-2">
+                  <span>❌ Falha ao enviar e-mail: {statusEnvioEmailAta.erro}</span>
+                  <button
+                    onClick={reenviarAtaPorEmail}
+                    className="self-start bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
+                  >
+                    <Send size={12} /> Tentar novamente
+                  </button>
+                </div>
+              ) : null}
               <pre className="text-sm font-mono whitespace-pre-wrap">
                 {ataGerada}
               </pre>
             </div>
             <div className="p-4 md:p-6 border-t border-gray-100 flex flex-wrap justify-end gap-3">
               <button
-                onClick={() => setModalAtaAberto(false)}
+                onClick={fecharModalAta}
                 className="px-6 py-2 rounded-lg font-medium bg-slate-100 flex-1 md:flex-none hover:bg-slate-200"
               >
                 Fechar
@@ -5677,12 +5848,6 @@ export default function App() {
                 className="bg-white border border-[#2A6377] text-[#2A6377] hover:bg-[#2A6377] hover:text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none transition"
               >
                 <FileText size={18} /> Baixar PDF
-              </button>
-              <button
-                onClick={enviarPorEmailAplicativo}
-                className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none w-full md:w-auto hover:bg-[#1e4857] transition"
-              >
-                <Send size={18} /> Enviar por E-mail
               </button>
             </div>
           </div>
