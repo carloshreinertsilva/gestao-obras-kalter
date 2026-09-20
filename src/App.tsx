@@ -7925,17 +7925,15 @@ export default function App() {
             )}
 
             {abaPainelObra === "diario_tarefas" && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 items-start">
-                <div className="lg:col-span-1">
-                  <TimelineObra
-                    idObra={obraEcoSelecionada.id}
-                    usuarioAtualId={usuarioAtual?.id}
-                    podeGerenciar={podeEditarObraSelecionada}
-                    onAviso={mostrarAviso}
-                  />
-                </div>
+              <div className="flex flex-col gap-6 flex-1 items-start w-full">
+                <TimelineObra
+                  idObra={obraEcoSelecionada.id}
+                  usuarioAtualId={usuarioAtual?.id}
+                  podeGerenciar={podeEditarObraSelecionada}
+                  onAviso={mostrarAviso}
+                />
 
-                <div className="lg:col-span-2 flex flex-col bg-white p-5 rounded-xl shadow-sm border h-full min-h-[600px]">
+                <div className="flex flex-col bg-white p-5 rounded-xl shadow-sm border w-full">
                   <div className="border-b pb-3 mb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-bold flex items-center gap-2">
