@@ -277,6 +277,9 @@ export const labelOcorrencia = (tipo: string) => {
     avanco: "Avanço",
     atraso: "Atraso",
     financeiro: "Financeiro",
+    fornecedor: "Fornecedor",
+    acidente: "Acidente",
+    outros: "Outros",
   };
   return mapas[tipo] || tipo;
 };

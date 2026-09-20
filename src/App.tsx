@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { fasesProjeto, perfisUsuario } from "./constants";
+import TimelineObra from "./TimelineObra";
 import type {
   Usuario,
   Obra,
@@ -195,8 +196,6 @@ export default function App() {
     prioridade: "normal",
   });
 
-  const [historicoObra, setHistoricoObra] = useState<any[]>([]);
-
   const [ataGerada, setAtaGerada] = useState<string>("");
   const [modalAtaAberto, setModalAtaAberto] = useState<boolean>(false);
   const [obrasNaAtaAtual, setObrasNaAtaAtual] = useState<any[]>([]);
@@ -219,13 +218,11 @@ export default function App() {
   const [tarefaSelecionada, setTarefaSelecionada] = useState<Tarefa | null>(null);
 
   const [obraEcoSelecionada, setObraEcoSelecionada] = useState<Obra | null>(null);
-  const [novoDiarioTexto, setNovoDiarioTexto] = useState<string>("");
   const [comentariosTarefaAtual, setComentariosTarefaAtual] = useState<
     ComentarioTarefa[]
   >([]);
   const [novoComentarioTexto, setNovoComentarioTexto] = useState<string>("");
 
-  const [diarioEmEdicao, setDiarioEmEdicao] = useState<any>(null);
   const [reuniaoEmEdicao, setReuniaoEmEdicao] = useState<any>(null);
 
   // ESTADOS DO FINANCEIRO
@@ -1055,78 +1052,6 @@ export default function App() {
 
     buscarDadosDashboard();
   }, [telaAtiva, usuarioAtual]);
-
-  const buscarHistoricoUnificado = async (idDaObra: any) => {
-    if (!idDaObra) return;
-    try {
-      const { data: reunioesData } = await supabase
-        .from("reunioes")
-        .select(
-          `id, data_reuniao, resumo_geral, ocorrencias(id, tipo, descricao), tarefas(id, titulo, data_vencimento, id_responsavel, usuarios(nome))`,
-        )
-        .eq("id_obra", idDaObra);
-      let diariosData: any[] = [];
-      try {
-        const { data } = await supabase
-          .from("diario_obra")
-          .select(
-            "id, data_registro, texto, created_at, id_usuario, usuarios(nome)",
-          )
-          .eq("id_obra", idDaObra);
-        if (data) diariosData = data;
-      } catch (e) {
-        console.log("Tabela diario_obra ausente.");
-      }
-
-      const historicoAgrupado = (reunioesData || []).reduce(
-        (acc: any, curr: any) => {
-          const dataFormatada = formatarDataSegura(curr.data_reuniao);
-          if (!acc[dataFormatada])
-            acc[dataFormatada] = {
-              dataFormatada,
-              dataReal: curr.data_reuniao,
-              resumos: [],
-              ocorrencias: [],
-              tarefas: [],
-              diarios: [],
-            };
-          if (curr.resumo_geral)
-            acc[dataFormatada].resumos.push({
-              id: curr.id,
-              texto: curr.resumo_geral,
-            });
-          if (curr.ocorrencias?.length > 0)
-            acc[dataFormatada].ocorrencias.push(...curr.ocorrencias);
-          if (curr.tarefas?.length > 0)
-            acc[dataFormatada].tarefas.push(...curr.tarefas);
-          return acc;
-        },
-        {},
-      );
-
-      diariosData.forEach((diario: any) => {
-        const dataFormatada = formatarDataSegura(diario.data_registro);
-        if (!historicoAgrupado[dataFormatada])
-          historicoAgrupado[dataFormatada] = {
-            dataFormatada,
-            dataReal: diario.data_registro,
-            resumos: [],
-            ocorrencias: [],
-            tarefas: [],
-            diarios: [],
-          };
-        historicoAgrupado[dataFormatada].diarios.push(diario);
-      });
-
-      const historicoArray = Object.values(historicoAgrupado).sort(
-        (a: any, b: any) =>
-          new Date(b.dataReal).getTime() - new Date(a.dataReal).getTime(),
-      );
-      setHistoricoObra(historicoArray);
-    } catch (error) {
-      console.error(error);
-    }
-  };
 
   const buscarContextoObraAta = async (idDaObra: any) => {
     if (!idDaObra) return setContextoObraAta(null);
@@ -2522,11 +2447,9 @@ export default function App() {
 
   useEffect(() => {
     if (telaAtiva === "reunioes" && reuniaoForm.id_obra) {
-      buscarHistoricoUnificado(reuniaoForm.id_obra);
       buscarContextoObraAta(reuniaoForm.id_obra);
     }
     if (telaAtiva === "painel_obra" && obraEcoSelecionada) {
-      buscarHistoricoUnificado(obraEcoSelecionada.id);
       buscarFaturamentosDaObra(obraEcoSelecionada.id);
       buscarParcelasCliente(obraEcoSelecionada.id);
       buscarDocumentosProjeto(obraEcoSelecionada.id);
@@ -2627,39 +2550,6 @@ export default function App() {
     }
   };
 
-  const adicionarDiarioObra = async () => {
-    if (!novoDiarioTexto.trim() || !obraEcoSelecionada) return;
-    setCarregando(true);
-    try {
-      if (diarioEmEdicao) {
-        const { error } = await supabase
-          .from("diario_obra")
-          .update({ texto: novoDiarioTexto })
-          .eq("id", diarioEmEdicao.id);
-        if (error) throw error;
-        mostrarAviso("Diário atualizado com sucesso!");
-        setDiarioEmEdicao(null);
-      } else {
-        const { error } = await supabase.from("diario_obra").insert([
-          {
-            id_obra: obraEcoSelecionada.id,
-            id_usuario: usuarioAtual?.id,
-            texto: novoDiarioTexto,
-            data_registro: new Date().toISOString().split("T")[0],
-          },
-        ]);
-        if (error) throw error;
-        mostrarAviso("Registro salvo no Diário!");
-      }
-      setNovoDiarioTexto("");
-      buscarHistoricoUnificado(obraEcoSelecionada.id);
-    } catch (error: any) {
-      mostrarAviso(error.message, "erro");
-    } finally {
-      setCarregando(false);
-    }
-  };
-
   const salvarEdicaoReuniao = async () => {
     setCarregando(true);
     try {
@@ -2672,7 +2562,6 @@ export default function App() {
       if (error) throw error;
       mostrarAviso("Resumo atualizado com sucesso!");
       setReuniaoEmEdicao(null);
-      buscarHistoricoUnificado(obraEcoSelecionada?.id || reuniaoForm.id_obra);
     } catch (error: any) {
       mostrarAviso(error.message, "erro");
     } finally {
@@ -2730,7 +2619,6 @@ export default function App() {
       if (error) throw error;
 
       mostrarAviso(`Excluído com sucesso!`);
-      buscarHistoricoUnificado(obraEcoSelecionada?.id || reuniaoForm.id_obra);
       if (tabela === "tarefas") buscarTarefasKanban();
       if (tabela === "faturamentos")
         buscarFaturamentosDaObra(obraEcoSelecionada?.id);
@@ -3146,6 +3034,7 @@ export default function App() {
         await supabase.from("ocorrencias").insert(
           listaOcorrencias.map((o) => ({
             id_reuniao: reuniaoSalva.id,
+            id_obra: reuniaoForm.id_obra,
             tipo: o.tipo,
             descricao: o.descricao,
           })),
@@ -8037,104 +7926,13 @@ export default function App() {
 
             {abaPainelObra === "diario_tarefas" && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 items-start">
-                <div className="lg:col-span-1 space-y-6">
-                  <div className="bg-white p-5 rounded-xl shadow-sm border border-blue-200">
-                    <h3 className="font-bold text-blue-900 flex items-center gap-2 mb-3">
-                      <BookOpen size={18} />{" "}
-                      {diarioEmEdicao
-                        ? "Editar Registro"
-                        : "Registrar no Diário"}
-                    </h3>
-                    <textarea
-                      rows={3}
-                      placeholder="Houve alguma alteração no projeto hoje? Registre aqui..."
-                      value={novoDiarioTexto}
-                      onChange={(e) => setNovoDiarioTexto(e.target.value)}
-                      className="w-full border border-blue-100 bg-blue-50/30 rounded-lg p-3 outline-none focus:border-blue-400 text-sm mb-3"
-                    ></textarea>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={adicionarDiarioObra}
-                        disabled={!novoDiarioTexto.trim() || carregando}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-bold transition flex justify-center items-center gap-2 disabled:opacity-50"
-                      >
-                        {carregando ? (
-                          <Loader2 className="animate-spin" size={16} />
-                        ) : (
-                          <Save size={16} />
-                        )}{" "}
-                        {diarioEmEdicao ? "Atualizar" : "Salvar no Diário"}
-                      </button>
-                      {diarioEmEdicao && (
-                        <button
-                          onClick={() => {
-                            setDiarioEmEdicao(null);
-                            setNovoDiarioTexto("");
-                          }}
-                          className="px-4 bg-slate-200 text-slate-700 rounded-lg font-bold hover:bg-slate-300"
-                        >
-                          Cancelar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 p-4 md:p-6 rounded-xl border w-full flex flex-col items-start max-h-[600px] overflow-y-auto">
-                    <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-                      <Clock size={20} className="text-slate-500" /> Histórico
-                      da Obra
-                    </h3>
-                    {historicoObra.length === 0 ? (
-                      <p className="text-sm text-gray-500">Sem histórico.</p>
-                    ) : (
-                      historicoObra.map((hist, idx) => (
-                        <div
-                          key={idx}
-                          className="w-full border-l-2 border-slate-200 pl-4 pb-5"
-                        >
-                          <h4 className="font-bold text-[#2A6377] mb-2">
-                            {hist.dataFormatada}
-                          </h4>
-                          <div className="space-y-2">
-                            {hist.diarios?.map((diario: any) => (
-                              <div
-                                key={`d-${diario.id}`}
-                                className="bg-white p-3 rounded border text-sm"
-                              >
-                                <p className="text-slate-700 whitespace-pre-wrap">
-                                  {diario.texto}
-                                </p>
-                              </div>
-                            ))}
-                            {hist.resumos?.map((res: any) => (
-                              <div
-                                key={`r-${res.id}`}
-                                className="bg-white p-3 rounded border text-sm"
-                              >
-                                <p className="font-bold text-slate-800 mb-1">
-                                  Resumo da Reunião
-                                </p>
-                                <p className="text-slate-700 whitespace-pre-wrap">
-                                  {res.texto}
-                                </p>
-                              </div>
-                            ))}
-                            {hist.ocorrencias?.map((oc: any, i: number) => (
-                              <div
-                                key={`oc-${i}`}
-                                className="bg-white p-3 rounded border text-sm"
-                              >
-                                <span className="font-bold text-[#2A6377]">
-                                  {labelOcorrencia(oc.tipo)}:
-                                </span>{" "}
-                                {oc.descricao}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                <div className="lg:col-span-1">
+                  <TimelineObra
+                    idObra={obraEcoSelecionada.id}
+                    usuarioAtualId={usuarioAtual?.id}
+                    podeGerenciar={podeEditarObraSelecionada}
+                    onAviso={mostrarAviso}
+                  />
                 </div>
 
                 <div className="lg:col-span-2 flex flex-col bg-white p-5 rounded-xl shadow-sm border h-full min-h-[600px]">
@@ -9060,6 +8858,24 @@ export default function App() {
                   </div>
                 </div>
 
+                {reuniaoForm.id_obra && (
+                  <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start">
+                    <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">
+                      Histórico da Obra (última(s) reunião(ões), pendências e
+                      diário)
+                    </h3>
+                    <TimelineObra
+                      idObra={reuniaoForm.id_obra}
+                      usuarioAtualId={usuarioAtual?.id}
+                      podeGerenciar={podeEditarObra(
+                        obrasLista.find((o) => o.id === reuniaoForm.id_obra),
+                      )}
+                      mostrarFormularios={false}
+                      onAviso={mostrarAviso}
+                    />
+                  </div>
+                )}
+
                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start">
                   <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">
                     4. Ocorrências
@@ -9078,6 +8894,9 @@ export default function App() {
                       <option value="avanco">Avanço</option>
                       <option value="atraso">Atraso</option>
                       <option value="financeiro">Financeiro</option>
+                      <option value="fornecedor">Fornecedor</option>
+                      <option value="acidente">Acidente</option>
+                      <option value="outros">Outros</option>
                     </select>
                     <input
                       type="text"
