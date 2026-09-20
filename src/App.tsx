@@ -200,6 +200,14 @@ export default function App() {
   const [ataGerada, setAtaGerada] = useState<string>("");
   const [modalAtaAberto, setModalAtaAberto] = useState<boolean>(false);
   const [obrasNaAtaAtual, setObrasNaAtaAtual] = useState<any[]>([]);
+  const [idSessaoAtaAtual, setIdSessaoAtaAtual] = useState<string | null>(
+    null,
+  );
+  const [gestorSelecionadoAta, setGestorSelecionadoAta] =
+    useState<string>("");
+  const [contextoObraAta, setContextoObraAta] = useState<any>(null);
+  const [carregandoContextoAta, setCarregandoContextoAta] =
+    useState<boolean>(false);
 
   const [tarefasKanban, setTarefasKanban] = useState<Tarefa[]>([]);
   const [filtroObraKanban, setFiltroObraKanban] = useState<string>("todas");
@@ -439,6 +447,8 @@ export default function App() {
             .header { text-align: center; border-bottom: 2px solid #2A6377; padding-bottom: 20px; margin-bottom: 30px; }
             .header h1 { color: #2A6377; margin: 0 0 10px 0; font-size: 24px; letter-spacing: 1px; }
             .data { font-size: 14px; color: #64748b; font-weight: bold; text-transform: uppercase; }
+            .gestor-title { color: #2A6377; font-size: 19px; font-weight: bold; margin: 35px 0 15px 0; border-bottom: 3px solid #2A6377; padding-bottom: 8px; }
+            .gestor-title:first-of-type { margin-top: 0; }
             .obra-section { margin-bottom: 40px; page-break-inside: avoid; }
             .obra-title { background: #2A6377; color: white; padding: 12px 15px; font-size: 16px; font-weight: bold; margin-bottom: 15px; border-radius: 4px; }
             .info-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
@@ -457,35 +467,38 @@ export default function App() {
           </div>
     `;
 
-    listaObrasParaPDF.forEach((obra) => {
-      html += `
-        <div class="obra-section">
-          <div class="obra-title">OBRA: ${obra.nome_obra.toUpperCase()}</div>
-          <div class="info-box">
-            <p><strong>Resumo da Reunião:</strong><br/>${obra.resumo ? obra.resumo.replace(/\n/g, "<br/>") : "Nenhum resumo registrado."}</p>
-          </div>
-      `;
-
-      if (obra.ocorrencias && obra.ocorrencias.length > 0) {
+    agruparObrasPorGestor(listaObrasParaPDF).forEach(({ nomeGestor, obras }) => {
+      html += `<div class="gestor-title">GESTOR: ${nomeGestor.toUpperCase()}</div>`;
+      obras.forEach((obra: any) => {
         html += `
-          <h4>Ocorrências Registradas</h4>
-          <table>
-            <tr><th width="20%">Tipo</th><th>Descrição</th></tr>
-            ${obra.ocorrencias.map((o: any) => `<tr><td><strong>${labelOcorrencia(o.tipo).toUpperCase()}</strong></td><td>${o.descricao}</td></tr>`).join("")}
-          </table>
+          <div class="obra-section">
+            <div class="obra-title">OBRA: ${obra.nome_obra.toUpperCase()}</div>
+            <div class="info-box">
+              <p><strong>Resumo da Reunião:</strong><br/>${obra.resumo ? obra.resumo.replace(/\n/g, "<br/>") : "Nenhum resumo registrado."}</p>
+            </div>
         `;
-      }
 
-      if (obra.tarefas && obra.tarefas.length > 0) {
-        html += `
-          <h4>Tarefas e Prazos Definidos</h4>
-          <table>
-            <tr><th width="45%">Tarefa</th><th width="30%">Responsável</th><th width="25%">Prazo</th></tr>
-            ${obra.tarefas.map((t: any) => `<tr><td>${t.titulo}</td><td>${t.nome_responsavel || t.usuarios?.nome || "Geral"}</td><td>${formatarDataSegura(t.data_vencimento)}</td></tr>`).join("")}
-          </table>
-        `;
-      }
-      html += `</div>`;
+        if (obra.ocorrencias && obra.ocorrencias.length > 0) {
+          html += `
+            <h4>Ocorrências Registradas</h4>
+            <table>
+              <tr><th width="20%">Tipo</th><th>Descrição</th></tr>
+              ${obra.ocorrencias.map((o: any) => `<tr><td><strong>${labelOcorrencia(o.tipo).toUpperCase()}</strong></td><td>${o.descricao}</td></tr>`).join("")}
+            </table>
+          `;
+        }
+
+        if (obra.tarefas && obra.tarefas.length > 0) {
+          html += `
+            <h4>Tarefas e Prazos Definidos</h4>
+            <table>
+              <tr><th width="45%">Tarefa</th><th width="30%">Responsável</th><th width="25%">Prazo</th></tr>
+              ${obra.tarefas.map((t: any) => `<tr><td>${t.titulo}</td><td>${t.nome_responsavel || t.usuarios?.nome || "Geral"}</td><td>${formatarDataSegura(t.data_vencimento)}</td></tr>`).join("")}
+            </table>
+          `;
+        }
+        html += `</div>`;
+      });
     });
 
     html += `
@@ -1110,6 +1123,124 @@ export default function App() {
           new Date(b.dataReal).getTime() - new Date(a.dataReal).getTime(),
       );
       setHistoricoObra(historicoArray);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const buscarContextoObraAta = async (idDaObra: any) => {
+    if (!idDaObra) return setContextoObraAta(null);
+    setCarregandoContextoAta(true);
+    try {
+      const hoje = dataHojeISO();
+      const [tarefasResp, parcelasResp, cronogramaResp] = await Promise.all([
+        supabase
+          .from("tarefas")
+          .select("id, titulo, data_vencimento, status")
+          .eq("id_obra", idDaObra)
+          .not("status", "in", "(concluida,cancelada)"),
+        supabase
+          .from("parcelas_cliente")
+          .select("valor_previsto, valor_realizado, data_prevista")
+          .eq("id_obra", idDaObra),
+        supabase
+          .from("cronograma_obra")
+          .select("fase, status, fim_previsto")
+          .eq("id_obra", idDaObra),
+      ]);
+
+      const tarefasAtrasadas = (tarefasResp.data || []).filter(
+        (t: any) =>
+          t.data_vencimento &&
+          String(t.data_vencimento).split("T")[0] < hoje,
+      );
+      const valorVencido = (parcelasResp.data || []).reduce(
+        (acc: number, p: any) => {
+          const saldo = Math.max(
+            Number(p.valor_previsto || 0) - Number(p.valor_realizado || 0),
+            0,
+          );
+          if (saldo > 0 && p.data_prevista && p.data_prevista < hoje)
+            return acc + saldo;
+          return acc;
+        },
+        0,
+      );
+      const fasesAtrasadas = (cronogramaResp.data || []).filter(
+        (f: any) =>
+          f.status !== "concluido" &&
+          f.status !== "cancelado" &&
+          f.fim_previsto &&
+          f.fim_previsto < hoje,
+      );
+
+      setContextoObraAta({
+        tarefasAtrasadas,
+        valorVencido,
+        fasesAtrasadas,
+      });
+    } catch (error) {
+      console.error(error);
+      setContextoObraAta(null);
+    } finally {
+      setCarregandoContextoAta(false);
+    }
+  };
+
+  const iniciarOuRetomarSessaoAta = async () => {
+    try {
+      const { data: sessaoAberta } = await supabase
+        .from("reunioes_sessoes")
+        .select("id, data_reuniao")
+        .eq("status", "em_andamento")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!sessaoAberta) return;
+
+      const { data: reunioesDaSessao } = await supabase
+        .from("reunioes")
+        .select(
+          `id, id_obra, data_reuniao, resumo_geral, obras(codigo_externo, nome, id_responsavel, usuarios(nome)), ocorrencias(id, tipo, descricao), tarefas(id, titulo, descricao, data_vencimento, id_responsavel, prioridade, usuarios(nome))`,
+        )
+        .eq("id_sessao", sessaoAberta.id);
+
+      if (!reunioesDaSessao || reunioesDaSessao.length === 0) {
+        setIdSessaoAtaAtual(sessaoAberta.id);
+        setReuniaoForm((prev: any) => ({
+          ...prev,
+          data_reuniao: sessaoAberta.data_reuniao,
+        }));
+        return;
+      }
+
+      const obrasRecuperadas = reunioesDaSessao.map((r: any) => ({
+        id_reuniao: r.id,
+        id_obra: r.id_obra,
+        id_gestor: r.obras?.id_responsavel || null,
+        nome_gestor: r.obras?.usuarios?.nome || "Sem gestor definido",
+        data_reuniao: r.data_reuniao,
+        nome_obra: r.obras
+          ? `${r.obras.codigo_externo} - ${r.obras.nome}`
+          : "Obra Não Identificada",
+        resumo: r.resumo_geral,
+        ocorrencias: r.ocorrencias || [],
+        tarefas: (r.tarefas || []).map((t: any) => ({
+          ...t,
+          nome_responsavel: t.usuarios?.nome || "Geral",
+        })),
+      }));
+
+      setIdSessaoAtaAtual(sessaoAberta.id);
+      setReuniaoForm((prev: any) => ({
+        ...prev,
+        data_reuniao: sessaoAberta.data_reuniao,
+      }));
+      setObrasNaAtaAtual(obrasRecuperadas);
+      mostrarAviso(
+        `Retomando ata em andamento (${obrasRecuperadas.length} obra(s) já registrada(s)).`,
+      );
     } catch (error) {
       console.error(error);
     }
@@ -2390,8 +2521,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (telaAtiva === "reunioes" && reuniaoForm.id_obra)
+    if (telaAtiva === "reunioes" && reuniaoForm.id_obra) {
       buscarHistoricoUnificado(reuniaoForm.id_obra);
+      buscarContextoObraAta(reuniaoForm.id_obra);
+    }
     if (telaAtiva === "painel_obra" && obraEcoSelecionada) {
       buscarHistoricoUnificado(obraEcoSelecionada.id);
       buscarFaturamentosDaObra(obraEcoSelecionada.id);
@@ -2404,6 +2537,17 @@ export default function App() {
       buscarRealizadosFaturamento(obraEcoSelecionada.id);
     }
   }, [reuniaoForm.id_obra, telaAtiva, obraEcoSelecionada]);
+
+  useEffect(() => {
+    if (
+      telaAtiva === "reunioes" &&
+      usuarioAtual &&
+      !idSessaoAtaAtual &&
+      obrasNaAtaAtual.length === 0
+    )
+      iniciarOuRetomarSessaoAta();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telaAtiva, usuarioAtual]);
 
   const buscarTarefasKanban = async () => {
     if (!usuarioAtual) return;
@@ -2967,11 +3111,29 @@ export default function App() {
         (o) => o.id === reuniaoForm.id_obra,
       );
 
+      let idSessao = idSessaoAtaAtual;
+      if (!idSessao) {
+        const { data: sessaoCriada, error: errSessao } = await supabase
+          .from("reunioes_sessoes")
+          .insert([
+            {
+              data_reuniao: reuniaoForm.data_reuniao,
+              id_criador: usuarioAtual?.id,
+            },
+          ])
+          .select()
+          .single();
+        if (errSessao) throw errSessao;
+        idSessao = sessaoCriada.id;
+        setIdSessaoAtaAtual(sessaoCriada.id);
+      }
+
       const { data: reuniaoSalva, error: errReuniao } = await supabase
         .from("reunioes")
         .insert([
           {
             id_obra: reuniaoForm.id_obra,
+            id_sessao: idSessao,
             data_reuniao: reuniaoForm.data_reuniao,
             resumo_geral: reuniaoForm.resumo_geral,
           },
@@ -3006,6 +3168,8 @@ export default function App() {
       const registroObraAta = {
         id_reuniao: reuniaoSalva.id,
         id_obra: obraSelecionada?.id,
+        id_gestor: obraSelecionada?.id_responsavel || null,
+        nome_gestor: obraSelecionada?.usuarios?.nome || "Sem gestor definido",
         data_reuniao: reuniaoForm.data_reuniao,
         nome_obra: obraSelecionada
           ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}`
@@ -3026,6 +3190,7 @@ export default function App() {
       }));
       setListaOcorrencias([]);
       setListaTarefas([]);
+      setContextoObraAta(null);
       setTelaAtiva("reunioes");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error: any) {
@@ -3058,6 +3223,7 @@ export default function App() {
         prev.filter((_: any, i: number) => i !== index),
       );
 
+      setGestorSelecionadoAta(registro.id_gestor || "");
       setReuniaoForm({
         id_obra: registro.id_obra,
         data_reuniao:
@@ -3077,47 +3243,75 @@ export default function App() {
     }
   };
 
-  const gerarAtaFinal = () => {
+  const agruparObrasPorGestor = (lista: any[]) => {
+    const grupos = new Map<string, any[]>();
+    lista.forEach((obra) => {
+      const chave = obra.nome_gestor || "Sem gestor definido";
+      if (!grupos.has(chave)) grupos.set(chave, []);
+      grupos.get(chave)!.push(obra);
+    });
+    return Array.from(grupos.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+      .map(([nomeGestor, obras]) => ({ nomeGestor, obras }));
+  };
+
+  const gerarAtaFinal = async () => {
     if (obrasNaAtaAtual.length === 0)
       return mostrarAviso("Você não salvou obras.", "erro");
     const dataHj = formatarDataSegura(reuniaoForm.data_reuniao);
     let textoAta = `ATA DE REUNIÃO DE OBRAS - KALTER\nData: ${dataHj}\n\n`;
-    obrasNaAtaAtual.forEach((obra) => {
-      textoAta += `==========================================\nOBRA: ${obra.nome_obra.toUpperCase()}\n==========================================\n`;
-      if (obra.resumo) textoAta += `Resumo: ${obra.resumo}\n\n`;
-      if (obra.ocorrencias.length > 0) {
-        textoAta += `[ Ocorrências ]\n`;
-        obra.ocorrencias.forEach(
-          (oc: any) =>
-            (textoAta += `- (${labelOcorrencia(oc.tipo).toUpperCase()}): ${oc.descricao}\n`),
-        );
-        textoAta += `\n`;
-      }
-      if (obra.tarefas.length > 0) {
-        textoAta += `[ Tarefas ]\n`;
-        obra.tarefas.forEach(
-          (t: any) =>
-            (textoAta += `- ${t.titulo} (Resp: ${t.nome_responsavel} | Prazo: ${formatarDataSegura(t.data_vencimento)})\n`),
-        );
-        textoAta += `\n`;
-      }
-      textoAta += `\n`;
+    agruparObrasPorGestor(obrasNaAtaAtual).forEach(({ nomeGestor, obras }) => {
+      textoAta += `\n##########################################\nGESTOR: ${nomeGestor.toUpperCase()}\n##########################################\n`;
+      obras.forEach((obra) => {
+        textoAta += `\n==========================================\nOBRA: ${obra.nome_obra.toUpperCase()}\n==========================================\n`;
+        if (obra.resumo) textoAta += `Resumo: ${obra.resumo}\n\n`;
+        if (obra.ocorrencias.length > 0) {
+          textoAta += `[ Ocorrências ]\n`;
+          obra.ocorrencias.forEach(
+            (oc: any) =>
+              (textoAta += `- (${labelOcorrencia(oc.tipo).toUpperCase()}): ${oc.descricao}\n`),
+          );
+          textoAta += `\n`;
+        }
+        if (obra.tarefas.length > 0) {
+          textoAta += `[ Tarefas ]\n`;
+          obra.tarefas.forEach(
+            (t: any) =>
+              (textoAta += `- ${t.titulo} (Resp: ${t.nome_responsavel} | Prazo: ${formatarDataSegura(t.data_vencimento)})\n`),
+          );
+          textoAta += `\n`;
+        }
+      });
     });
     setAtaGerada(textoAta);
     setModalAtaAberto(true);
+
+    if (idSessaoAtaAtual) {
+      await supabase
+        .from("reunioes_sessoes")
+        .update({ status: "fechada", fechada_at: new Date().toISOString() })
+        .eq("id", idSessaoAtaAtual);
+    }
   };
 
   const enviarPorEmailAplicativo = () => {
-    const emailsAdmins = listaUsuarios
-      .filter((u) => u.perfil === "admin")
-      .map((u) => u.email);
-    const destinatarios = [...new Set([...emailsAdmins])].join(",");
+    const emailsParticipantes = listaUsuarios
+      .filter((u) =>
+        ["admin", "engenheiro", "gestor", "logistica"].includes(
+          u.perfil || "",
+        ),
+      )
+      .map((u) => u.email)
+      .filter(Boolean);
+    const destinatarios = [...new Set(emailsParticipantes)].join(",");
     const assunto = encodeURIComponent(
       `Ata de Reunião de Obras - ${formatarDataSegura(new Date().toISOString())}`,
     );
     window.location.href = `mailto:${destinatarios}?subject=${assunto}&body=${encodeURIComponent(ataGerada)}`;
     setModalAtaAberto(false);
     setObrasNaAtaAtual([]);
+    setIdSessaoAtaAtual(null);
+    setGestorSelecionadoAta("");
   };
 
   const isAtrasada = (dataVencimento: any, status: any) => {
@@ -3156,6 +3350,17 @@ export default function App() {
       { sensitivity: "base" },
     );
   });
+
+  const gestoresComObrasAta: [string, string][] = Array.from(
+    new Map(
+      obrasLista
+        .filter((o: any) => o.id_responsavel)
+        .map((o: any) => [
+          o.id_responsavel as string,
+          (o.usuarios?.nome || "Sem nome") as string,
+        ]),
+    ).entries(),
+  ).sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
 
   // CÁLCULOS DO FINANCEIRO
   const totalVendaProduto = Number(obraEcoSelecionada?.valor_produto) || 0;
@@ -8641,41 +8846,73 @@ export default function App() {
             </h2>
             <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border mb-2 border-l-4 border-l-[#2A6377] w-full max-w-full">
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 max-w-full">
-                <div className="flex-1 max-w-full">
-                  <label className="block text-sm font-medium mb-2 max-w-full">
-                    1. Selecione a Obra para a Reunião
-                  </label>
-                  <select
-                    className="w-full max-w-lg border rounded-lg p-3 outline-none font-bold bg-gray-50 max-w-full"
-                    value={reuniaoForm.id_obra}
-                    onChange={(e) =>
-                      setReuniaoForm({
-                        ...reuniaoForm,
-                        id_obra: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="">A carregar...</option>
-                    {obrasLista.map((obra) => {
-                      const jaSalva = obrasNaAtaAtual.some(
-                        (ob: any) => ob.id_obra === obra.id,
-                      );
-                      return (
-                        <option key={obra.id} value={obra.id}>
-                          {jaSalva ? "✅ [SALVA] " : ""}
-                          {obra.codigo_externo} - {obra.nome}
+                <div className="flex-1 max-w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2 max-w-full">
+                      1. Selecione o Gestor
+                    </label>
+                    <select
+                      className="w-full border rounded-lg p-3 outline-none font-bold bg-gray-50 max-w-full"
+                      value={gestorSelecionadoAta}
+                      onChange={(e) => {
+                        setGestorSelecionadoAta(e.target.value);
+                        setReuniaoForm({ ...reuniaoForm, id_obra: "" });
+                      }}
+                    >
+                      <option value="">Todos os gestores</option>
+                      {gestoresComObrasAta.map(([id, nome]) => (
+                        <option key={id} value={id}>
+                          {nome}
                         </option>
-                      );
-                    })}
-                  </select>
-                  {obrasNaAtaAtual.some(
-                    (ob: any) => ob.id_obra === reuniaoForm.id_obra,
-                  ) && (
-                    <p className="text-amber-600 text-[10px] sm:text-xs mt-1 font-bold w-full">
-                      ⚠️ Esta obra já foi registrada. Para alterar, clique no
-                      botão de edição na tag abaixo.
-                    </p>
-                  )}
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 max-w-full">
+                      2. Selecione a Obra
+                    </label>
+                    <select
+                      className="w-full border rounded-lg p-3 outline-none font-bold bg-gray-50 max-w-full"
+                      value={reuniaoForm.id_obra}
+                      onChange={(e) =>
+                        setReuniaoForm({
+                          ...reuniaoForm,
+                          id_obra: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">
+                        {gestorSelecionadoAta
+                          ? "Selecione..."
+                          : "Selecione um gestor primeiro (ou escolha aqui)"}
+                      </option>
+                      {obrasLista
+                        .filter(
+                          (obra) =>
+                            !gestorSelecionadoAta ||
+                            obra.id_responsavel === gestorSelecionadoAta,
+                        )
+                        .map((obra) => {
+                          const jaSalva = obrasNaAtaAtual.some(
+                            (ob: any) => ob.id_obra === obra.id,
+                          );
+                          return (
+                            <option key={obra.id} value={obra.id}>
+                              {jaSalva ? "✅ [SALVA] " : ""}
+                              {obra.codigo_externo} - {obra.nome}
+                            </option>
+                          );
+                        })}
+                    </select>
+                    {obrasNaAtaAtual.some(
+                      (ob: any) => ob.id_obra === reuniaoForm.id_obra,
+                    ) && (
+                      <p className="text-amber-600 text-[10px] sm:text-xs mt-1 font-bold w-full">
+                        ⚠️ Esta obra já foi registrada. Para alterar, clique
+                        no botão de edição na tag abaixo.
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto max-w-full">
                   <button
@@ -8717,8 +8954,9 @@ export default function App() {
                     <span
                       key={idx}
                       className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 max-w-full truncate shadow-sm border border-green-200"
+                      title={`Gestor: ${ob.nome_gestor}`}
                     >
-                      <CheckCheck size={14} /> {ob.nome_obra}
+                      <CheckCheck size={14} /> {ob.nome_gestor} · {ob.nome_obra}
                       <button
                         onClick={() => editarRegistroAta(ob, idx)}
                         className="ml-2 hover:bg-green-200 hover:text-green-900 bg-green-100 rounded-full p-1 transition-colors"
@@ -8736,7 +8974,7 @@ export default function App() {
               <div className="max-w-full flex flex-col items-start gap-6 w-full">
                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start">
                   <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">
-                    2. Resumo
+                    3. Resumo
                   </h3>
                   <div className="grid grid-cols-1 gap-4 mb-4 max-w-full w-full items-start">
                     <div>
@@ -8756,6 +8994,54 @@ export default function App() {
                       />
                     </div>
                   </div>
+                  {reuniaoForm.id_obra && (
+                    <div className="w-full max-w-full mb-4 bg-slate-50 border rounded-lg p-3">
+                      {carregandoContextoAta ? (
+                        <p className="text-xs text-slate-400 flex items-center gap-2">
+                          <Loader2 className="animate-spin" size={14} />{" "}
+                          Carregando contexto da obra...
+                        </p>
+                      ) : contextoObraAta &&
+                        (contextoObraAta.tarefasAtrasadas.length > 0 ||
+                          contextoObraAta.valorVencido > 0 ||
+                          contextoObraAta.fasesAtrasadas.length > 0) ? (
+                        <div className="flex flex-col gap-1.5">
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                            Contexto para a conversa
+                          </p>
+                          {contextoObraAta.valorVencido > 0 && (
+                            <p className="text-xs text-red-600 font-semibold">
+                              🔴 Financeiro vencido:{" "}
+                              {formatarMoeda(contextoObraAta.valorVencido)}
+                            </p>
+                          )}
+                          {contextoObraAta.fasesAtrasadas.length > 0 && (
+                            <p className="text-xs text-red-600 font-semibold">
+                              🔴 {contextoObraAta.fasesAtrasadas.length}{" "}
+                              fase(s) de cronograma atrasada(s):{" "}
+                              {contextoObraAta.fasesAtrasadas
+                                .map((f: any) => labelFase(f.fase))
+                                .join(", ")}
+                            </p>
+                          )}
+                          {contextoObraAta.tarefasAtrasadas.length > 0 && (
+                            <p className="text-xs text-amber-600 font-semibold">
+                              🟡 {contextoObraAta.tarefasAtrasadas.length}{" "}
+                              tarefa(s) atrasada(s):{" "}
+                              {contextoObraAta.tarefasAtrasadas
+                                .map((t: any) => t.titulo)
+                                .join(", ")}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-green-600 font-semibold">
+                          🟢 Nenhum ponto de atenção (financeiro, cronograma
+                          ou tarefas) para esta obra.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <div className="w-full max-w-full flex flex-col items-start">
                     <label className="block text-sm mb-1 max-w-full">
                       Resumo Geral
@@ -8776,7 +9062,7 @@ export default function App() {
 
                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start">
                   <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">
-                    3. Ocorrências
+                    4. Ocorrências
                   </h3>
                   <div className="flex flex-col sm:flex-row gap-3 mb-4 w-full items-start">
                     <select
@@ -8841,7 +9127,7 @@ export default function App() {
                 </div>
                 <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start">
                   <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">
-                    4. Gerar Tarefas
+                    5. Gerar Tarefas
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 w-full max-w-full">
                     <input

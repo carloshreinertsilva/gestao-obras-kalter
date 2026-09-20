@@ -93,11 +93,21 @@ export interface Tarefa {
 export interface Reuniao {
   id: string;
   id_obra?: string;
+  id_sessao?: string | null;
   data_reuniao?: string;
   clima_semana?: "ensolarado" | "chuvoso" | "misto" | null;
   resumo_geral?: string | null;
   id_criador?: string | null;
   created_at?: string;
+}
+
+export interface ReuniaoSessao {
+  id: string;
+  data_reuniao?: string;
+  status?: "em_andamento" | "fechada";
+  id_criador?: string | null;
+  created_at?: string;
+  fechada_at?: string | null;
 }
 
 export type TipoOcorrencia =
