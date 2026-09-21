@@ -101,6 +101,7 @@ import {
   ClipboardList,
   DollarSign,
   Receipt,
+  Mic,
 } from "lucide-react";
 
 export default function App() {
@@ -210,6 +211,12 @@ export default function App() {
   );
   const [gestorSelecionadoAta, setGestorSelecionadoAta] =
     useState<string>("");
+  const [gravacaoAta, setGravacaoAta] = useState<{
+    resumo: string;
+    duracaoSeg: number | null;
+  } | null>(null);
+  const [resumoGravacaoAberto, setResumoGravacaoAberto] =
+    useState<boolean>(false);
   const [contextoObraAta, setContextoObraAta] = useState<any>(null);
   const [carregandoContextoAta, setCarregandoContextoAta] =
     useState<boolean>(false);
@@ -432,7 +439,11 @@ export default function App() {
     );
   };
 
-  const montarHtmlAta = (listaObrasParaAta: any[], dataAta: string) => {
+  const montarHtmlAta = (
+    listaObrasParaAta: any[],
+    dataAta: string,
+    resumoGravacao?: string | null,
+  ) => {
     let html = `
       <!DOCTYPE html>
       <html>
@@ -497,6 +508,20 @@ export default function App() {
       });
     });
 
+    if (resumoGravacao) {
+      const textoSeguro = resumoGravacao
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\n/g, "<br/>");
+      html += `
+          <div class="obra-section">
+            <div class="obra-title">RESUMO DA GRAVAÇÃO DA REUNIÃO</div>
+            <div class="info-box">${textoSeguro}</div>
+          </div>
+      `;
+    }
+
     html += `
           <div class="footer">Gerado via Kalter Sistema de Gestão de Obras</div>
         </body>
@@ -505,7 +530,11 @@ export default function App() {
     return html;
   };
 
-  const gerarVisualPDF = (listaObrasParaPDF: any[], dataAta: string) => {
+  const gerarVisualPDF = (
+    listaObrasParaPDF: any[],
+    dataAta: string,
+    resumoGravacao?: string | null,
+  ) => {
     const janela = window.open("", "", "width=900,height=900");
     if (!janela)
       return mostrarAviso(
@@ -513,7 +542,11 @@ export default function App() {
         "erro",
       );
 
-    const html = montarHtmlAta(listaObrasParaPDF, dataAta).replace(
+    const html = montarHtmlAta(
+      listaObrasParaPDF,
+      dataAta,
+      resumoGravacao,
+    ).replace(
       "</body>",
       `<script>
             window.onload = function() { setTimeout(function(){ window.print(); }, 300); }
@@ -2377,6 +2410,33 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [telaAtiva, usuarioAtual]);
 
+  useEffect(() => {
+    if (telaAtiva !== "reunioes" || !reuniaoForm.data_reuniao) return;
+    let cancelado = false;
+    supabase
+      .from("reunioes_sessoes")
+      .select("resumo_gravacao, gravacao_duracao_seg")
+      .eq("data_reuniao", reuniaoForm.data_reuniao)
+      .not("resumo_gravacao", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelado) return;
+        setGravacaoAta(
+          data?.resumo_gravacao
+            ? {
+                resumo: data.resumo_gravacao,
+                duracaoSeg: data.gravacao_duracao_seg ?? null,
+              }
+            : null,
+        );
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [telaAtiva, reuniaoForm.data_reuniao]);
+
   const buscarTarefasKanban = async () => {
     if (!usuarioAtual) return;
     try {
@@ -3144,7 +3204,7 @@ export default function App() {
     if (destinatarios.length === 0)
       return { ok: false, erro: "Nenhum destinatário com e-mail cadastrado." };
     try {
-      const html = montarHtmlAta(listaObras, dataAta);
+      const html = montarHtmlAta(listaObras, dataAta, gravacaoAta?.resumo);
       const { data, error } = await supabase.functions.invoke(
         "enviar-email",
         {
@@ -5603,6 +5663,7 @@ export default function App() {
                   gerarVisualPDF(
                     obrasNaAtaAtual,
                     formatarDataSegura(new Date().toISOString()),
+                    gravacaoAta?.resumo,
                   )
                 }
                 className="bg-white border border-[#2A6377] text-[#2A6377] hover:bg-[#2A6377] hover:text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none transition"
@@ -8660,6 +8721,39 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {gravacaoAta && (
+              <div className="w-full bg-white border border-l-4 border-l-violet-500 rounded-xl shadow-sm shrink-0">
+                <button
+                  onClick={() => setResumoGravacaoAberto((aberto) => !aberto)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left"
+                >
+                  <span className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-700">
+                    <Mic size={16} className="text-violet-600" />
+                    Resumo da gravação da reunião (Plaud)
+                    {gravacaoAta.duracaoSeg ? (
+                      <span className="text-xs font-normal text-slate-400">
+                        · {Math.floor(gravacaoAta.duracaoSeg / 3600)}h
+                        {String(
+                          Math.floor((gravacaoAta.duracaoSeg % 3600) / 60),
+                        ).padStart(2, "0")}
+                        min
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="text-xs text-violet-700 font-semibold shrink-0">
+                    {resumoGravacaoAberto ? "Ocultar" : "Ver resumo"}
+                  </span>
+                </button>
+                {resumoGravacaoAberto && (
+                  <div className="px-4 pb-3 border-t">
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap max-h-72 overflow-y-auto pt-3">
+                      {gravacaoAta.resumo}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="w-full grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(380px,500px)] gap-4 items-start xl:flex-1 xl:min-h-0 xl:items-stretch">
               <div className="flex flex-col gap-4 min-w-0 xl:overflow-y-auto xl:min-h-0 xl:pr-1">

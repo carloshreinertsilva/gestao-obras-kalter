@@ -108,6 +108,10 @@ export interface ReuniaoSessao {
   id_criador?: string | null;
   created_at?: string;
   fechada_at?: string | null;
+  resumo_gravacao?: string | null;
+  gravacao_plaud_id?: string | null;
+  gravacao_duracao_seg?: number | null;
+  resumo_gravacao_em?: string | null;
 }
 
 export type TipoOcorrencia =
