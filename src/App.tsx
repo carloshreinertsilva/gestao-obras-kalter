@@ -4,6 +4,7 @@ import { supabase } from "./supabase";
 import { fasesProjeto, perfisUsuario } from "./constants";
 import TimelineObra from "./TimelineObra";
 import FaturamentosRealizados from "./FaturamentosRealizados";
+import ReunioesHistorico from "./ReunioesHistorico";
 import AnexosObra from "./AnexosObra";
 import type {
   Usuario,
@@ -211,6 +212,11 @@ export default function App() {
   );
   const [gestorSelecionadoAta, setGestorSelecionadoAta] =
     useState<string>("");
+  const [abaReunioes, setAbaReunioes] = useState<"historico" | "nova">(
+    "historico",
+  );
+  const [versaoHistoricoReunioes, setVersaoHistoricoReunioes] =
+    useState<number>(0);
   const [gravacaoAta, setGravacaoAta] = useState<{
     resumo: string;
     duracaoSeg: number | null;
@@ -1170,6 +1176,8 @@ export default function App() {
         .maybeSingle();
 
       if (!sessaoAberta) return;
+      if (String(sessaoAberta.data_reuniao).slice(0, 10) === new Date().toLocaleDateString("sv-SE"))
+        setAbaReunioes("nova");
 
       const { data: reunioesDaSessao } = await supabase
         .from("reunioes")
@@ -3199,12 +3207,17 @@ export default function App() {
   const enviarAtaPorEmailResend = async (
     listaObras: any[],
     dataAta: string,
+    resumoGravacao?: string | null,
   ) => {
     const destinatarios = destinatariosAta();
     if (destinatarios.length === 0)
       return { ok: false, erro: "Nenhum destinatário com e-mail cadastrado." };
     try {
-      const html = montarHtmlAta(listaObras, dataAta, gravacaoAta?.resumo);
+      const html = montarHtmlAta(
+        listaObras,
+        dataAta,
+        resumoGravacao === undefined ? gravacaoAta?.resumo : resumoGravacao,
+      );
       const { data, error } = await supabase.functions.invoke(
         "enviar-email",
         {
@@ -3303,6 +3316,8 @@ export default function App() {
     setIdSessaoAtaAtual(null);
     setGestorSelecionadoAta("");
     setStatusEnvioEmailAta(null);
+    setAbaReunioes("historico");
+    setVersaoHistoricoReunioes((v) => v + 1);
   };
 
   const isAtrasada = (dataVencimento: any, status: any) => {
@@ -5746,7 +5761,7 @@ export default function App() {
                   }}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === "reunioes" ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
                 >
-                  <ClipboardList size={20} /> Gerar Ata
+                  <ClipboardList size={20} /> Reuniões
                 </button>
               </div>
             </div>
@@ -8593,9 +8608,37 @@ export default function App() {
 
         {telaAtiva === "reunioes" && (
           <div className="animate-in fade-in dash-main-wrapper max-w-full flex flex-col items-start gap-4 xl:h-full xl:min-h-0">
-            <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
-              Gerador de Ata de Reunião
-            </h2>
+            <div className="w-full flex flex-wrap items-end justify-between gap-3 shrink-0">
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
+                Reuniões
+              </h2>
+              <div className="inline-flex rounded-lg border overflow-hidden text-sm bg-white">
+                {(
+                  [
+                    ["historico", "Reuniões anteriores"],
+                    ["nova", "Nova reunião"],
+                  ] as const
+                ).map(([valor, rotulo]) => (
+                  <button
+                    key={valor}
+                    onClick={() => setAbaReunioes(valor)}
+                    className={`px-4 py-2 font-semibold transition ${abaReunioes === valor ? "bg-[#2A6377] text-white" : "text-slate-600 hover:bg-slate-50"}`}
+                  >
+                    {rotulo}
+                    {valor === "nova" && idSessaoAtaAtual ? " •" : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {abaReunioes === "historico" ? (
+              <ReunioesHistorico
+                recarregar={versaoHistoricoReunioes}
+                onBaixarPdf={gerarVisualPDF}
+                onReenviarEmail={enviarAtaPorEmailResend}
+                onAviso={mostrarAviso}
+              />
+            ) : (
+              <>
             <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border mb-2 border-l-4 border-l-[#2A6377] w-full max-w-full">
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 max-w-full">
                 <div className="flex-1 max-w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -9074,6 +9117,8 @@ export default function App() {
                 )}
               </div>
             </div>
+              </>
+            )}
           </div>
         )}
 
