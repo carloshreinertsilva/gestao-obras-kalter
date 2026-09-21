@@ -30,6 +30,18 @@ export const formatarDataHora = (dataStr: any) => {
   }
 };
 
+export const compararCodigoFamilia = (
+  a?: string | null,
+  b?: string | null,
+) => {
+  const semGrupoA = a === "SEM-GRUPO";
+  const semGrupoB = b === "SEM-GRUPO";
+  if (semGrupoA !== semGrupoB) return semGrupoA ? 1 : -1;
+  return String(a || "").localeCompare(String(b || ""), "pt-BR", {
+    numeric: true,
+  });
+};
+
 export const formatarMoeda = (valor: any) => {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",

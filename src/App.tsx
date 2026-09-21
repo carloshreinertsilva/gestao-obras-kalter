@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { fasesProjeto, perfisUsuario } from "./constants";
 import TimelineObra from "./TimelineObra";
+import FaturamentosRealizados from "./FaturamentosRealizados";
 import AnexosObra from "./AnexosObra";
 import type {
   Usuario,
@@ -48,6 +49,7 @@ import {
   formatarTamanhoArquivo,
   normalizarNomeArquivo,
   labelOcorrencia,
+  compararCodigoFamilia,
 } from "./utils";
 import {
   BarChart,
@@ -1381,7 +1383,11 @@ export default function App() {
         .eq("id_obra", idDaObra)
         .order("ordem", { ascending: true });
       if (error) throw error;
-      setFamiliasFaturamento(data || []);
+      setFamiliasFaturamento(
+        (data || []).sort((a, b) =>
+          compararCodigoFamilia(a.codigo_familia, b.codigo_familia),
+        ),
+      );
     } catch (error) {
       console.error("Erro ao buscar famílias de faturamento:", error);
     }
@@ -2474,6 +2480,7 @@ export default function App() {
       buscarArquivosDocumentos(obraEcoSelecionada.id);
       buscarCronogramaObra(obraEcoSelecionada.id);
       buscarFamiliasFaturamento(obraEcoSelecionada.id);
+      buscarGruposFaturamentoObra(obraEcoSelecionada.id);
       buscarPrevisoesFaturamento(obraEcoSelecionada.id);
       buscarRealizadosFaturamento(obraEcoSelecionada.id);
     }
@@ -3798,21 +3805,39 @@ export default function App() {
       );
     }
 
-    return previsoesFaturamentoDoEscopo.map((previsao) => {
-      const chave = chaveBalde(previsao.id_obra_faturamento_familia);
-      const previstoBalde = previstoPorBalde.get(chave) || 0;
-      const realizadoBalde = realizadoPorBalde.get(chave) || 0;
-      const proporcao =
-        previstoBalde > 0
-          ? Number(previsao.valor_previsto || 0) / previstoBalde
-          : 0;
-      const realizado = realizadoBalde * proporcao;
-      return {
-        ...previsao,
-        realizado,
-        saldo: Math.max(Number(previsao.valor_previsto || 0) - realizado, 0),
-      };
-    });
+    const codigoFamiliaPorId = new Map(
+      familiasFaturamento.map((f) => [f.id, f.codigo_familia]),
+    );
+
+    return previsoesFaturamentoDoEscopo
+      .map((previsao) => {
+        const chave = chaveBalde(previsao.id_obra_faturamento_familia);
+        const previstoBalde = previstoPorBalde.get(chave) || 0;
+        const realizadoBalde = realizadoPorBalde.get(chave) || 0;
+        const proporcao =
+          previstoBalde > 0
+            ? Number(previsao.valor_previsto || 0) / previstoBalde
+            : 0;
+        const realizado = realizadoBalde * proporcao;
+        return {
+          ...previsao,
+          realizado,
+          saldo: Math.max(Number(previsao.valor_previsto || 0) - realizado, 0),
+        };
+      })
+      .sort(
+        (a, b) =>
+          compararCodigoFamilia(
+            codigoFamiliaPorId.get(a.id_obra_faturamento_familia ?? ""),
+            codigoFamiliaPorId.get(b.id_obra_faturamento_familia ?? ""),
+          ) ||
+          String(a.grupo_faturamento || "").localeCompare(
+            String(b.grupo_faturamento || ""),
+            "pt-BR",
+            { numeric: true },
+          ) ||
+          String(a.competencia || "").localeCompare(String(b.competencia || "")),
+      );
   })();
 
   const estiloStatusPMIS = (status: string) => {
@@ -7596,84 +7621,13 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
-                  <div className="p-4 border-b">
-                    <h3 className="font-bold text-lg">
-                      Faturamentos Realizados
-                    </h3>
-                  </div>
-                  <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-sm min-w-[900px]">
-                      <thead className="bg-slate-50 text-slate-600">
-                        <tr>
-                          <th className="p-3 text-left">Família</th>
-                          <th className="p-3">Competência</th>
-                          <th className="p-3">Data</th>
-                          <th className="p-3">NF</th>
-                          <th className="p-3 text-right">Valor</th>
-                          {podeEditarObraSelecionada && <th className="p-3">Ações</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {realizadosFaturamentoDoEscopo.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={podeEditarObraSelecionada ? 6 : 5}
-                              className="p-6 text-center text-slate-500"
-                            >
-                              Nenhum faturamento realizado registrado.
-                            </td>
-                          </tr>
-                        ) : (
-                          realizadosFaturamentoDoEscopo.map((realizado) => {
-                            const familia = familiasFaturamento.find(
-                              (f) =>
-                                f.id === realizado.id_obra_faturamento_familia,
-                            );
-                            return (
-                              <tr
-                                key={realizado.id}
-                                className="border-t hover:bg-slate-50"
-                              >
-                                <td className="p-3 font-bold text-[#2A6377]">
-                                  {familia
-                                    ? `${familia.codigo_familia} - ${familia.descricao_familia}`
-                                    : "-"}
-                                </td>
-                                <td className="p-3 text-center">
-                                  {formatarCompetencia(realizado.competencia)}
-                                </td>
-                                <td className="p-3 text-center">
-                                  {formatarDataSegura(
-                                    realizado.data_faturamento,
-                                  )}
-                                </td>
-                                <td className="p-3 text-center">
-                                  {realizado.numero_nf || "-"}
-                                </td>
-                                <td className="p-3 text-right font-bold text-emerald-700">
-                                  {formatarMoeda(realizado.valor_realizado)}
-                                </td>
-                                {podeEditarObraSelecionada && (
-                                  <td className="p-3 text-center">
-                                    <button
-                                      onClick={() =>
-                                        excluirRealizacaoFaturamento(realizado)
-                                      }
-                                      className="text-red-400 hover:text-red-600"
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </td>
-                                )}
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <FaturamentosRealizados
+                  realizados={realizadosFaturamentoDoEscopo}
+                  familias={familiasFaturamento}
+                  grupos={gruposFaturamentoObra}
+                  podeEditar={podeEditarObraSelecionada}
+                  onExcluir={excluirRealizacaoFaturamento}
+                />
               </div>
             )}
 
