@@ -483,7 +483,7 @@ export default function App() {
             <h4>Ocorrências Registradas</h4>
             <table>
               <tr><th width="20%">Tipo</th><th>Descrição</th></tr>
-              ${obra.ocorrencias.map((o: any) => `<tr><td><strong>${labelOcorrencia(o.tipo).toUpperCase()}</strong></td><td>${o.descricao}</td></tr>`).join("")}
+              ${obra.ocorrencias.map((o: any) => `<tr><td><strong>${labelOcorrencia(o.tipo).toUpperCase()}</strong></td><td style="white-space:pre-wrap">${o.descricao}</td></tr>`).join("")}
             </table>
           `;
         }
@@ -9053,28 +9053,32 @@ export default function App() {
                     <h3 className="text-base font-bold mb-3 border-b pb-2 w-full">
                       4. Ocorrências
                     </h3>
-                    <div className="flex flex-wrap gap-2 mb-2 w-full items-start">
-                      <select
-                        className="border rounded-lg p-2 w-[130px] shrink-0 outline-none text-sm"
-                        value={novaOcorrencia.tipo}
-                        onChange={(e) =>
-                          setNovaOcorrencia({
-                            ...novaOcorrencia,
-                            tipo: e.target.value,
-                          })
-                        }
-                      >
-                        <option value="avanco">Avanço</option>
-                        <option value="atraso">Atraso</option>
-                        <option value="financeiro">Financeiro</option>
-                        <option value="fornecedor">Fornecedor</option>
-                        <option value="acidente">Acidente</option>
-                        <option value="outros">Outros</option>
-                      </select>
-                      <input
-                        type="text"
-                        className="border rounded-lg p-2 flex-1 min-w-[160px] outline-none text-sm"
-                        placeholder="Ex: Chegou o material..."
+                    <div className="flex flex-col gap-2 w-full flex-1 min-h-0">
+                      <div className="flex items-center gap-2 w-full">
+                        <label className="text-xs text-slate-500 shrink-0">
+                          Tipo
+                        </label>
+                        <select
+                          className="border rounded-lg p-2 flex-1 outline-none text-sm"
+                          value={novaOcorrencia.tipo}
+                          onChange={(e) =>
+                            setNovaOcorrencia({
+                              ...novaOcorrencia,
+                              tipo: e.target.value,
+                            })
+                          }
+                        >
+                          <option value="avanco">Avanço</option>
+                          <option value="atraso">Atraso</option>
+                          <option value="financeiro">Financeiro</option>
+                          <option value="fornecedor">Fornecedor</option>
+                          <option value="acidente">Acidente</option>
+                          <option value="outros">Outros</option>
+                        </select>
+                      </div>
+                      <textarea
+                        className="border rounded-lg p-3 w-full flex-1 min-h-[110px] outline-none text-sm resize-none"
+                        placeholder="Descreva a ocorrência... (Ctrl+Enter para adicionar)"
                         value={novaOcorrencia.descricao}
                         onChange={(e) =>
                           setNovaOcorrencia({
@@ -9082,15 +9086,17 @@ export default function App() {
                             descricao: e.target.value,
                           })
                         }
-                        onKeyPress={(e) =>
-                          e.key === "Enter" && adicionarOcorrencia()
+                        onKeyDown={(e) =>
+                          e.key === "Enter" &&
+                          (e.ctrlKey || e.metaKey) &&
+                          adicionarOcorrencia()
                         }
                       />
                       <button
                         onClick={adicionarOcorrencia}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm transition"
+                        className="self-end bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm transition"
                       >
-                        Add
+                        Adicionar
                       </button>
                     </div>
                     {listaOcorrencias.map((oc, idx) => (
@@ -9098,7 +9104,7 @@ export default function App() {
                         key={idx}
                         className="flex justify-between items-center bg-slate-50 p-2 mt-2 rounded border text-sm w-full"
                       >
-                        <div className="min-w-0">
+                        <div className="min-w-0 whitespace-pre-wrap">
                           <span className="font-semibold text-[#2A6377] capitalize">
                             {labelOcorrencia(oc.tipo)}:
                           </span>{" "}
