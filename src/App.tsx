@@ -50,6 +50,7 @@ import {
   normalizarNomeArquivo,
   labelOcorrencia,
   compararCodigoFamilia,
+  formatarPercentual,
 } from "./utils";
 import {
   BarChart,
@@ -325,14 +326,6 @@ export default function App() {
     competencia: "",
     valor_previsto: "",
     grupo_faturamento: "",
-    observacao: "",
-  });
-  const [previsaoParaRealizar, setPrevisaoParaRealizar] = useState<any>(null);
-  const [realizacaoFaturamento, setRealizacaoFaturamento] = useState<any>({
-    competencia: "",
-    data_faturamento: "",
-    numero_nf: "",
-    valor_realizado: "",
     observacao: "",
   });
 
@@ -1903,101 +1896,6 @@ export default function App() {
       mostrarAviso("Previsão de faturamento salva!");
     } catch (error: any) {
       mostrarAviso(error.message || "Erro ao salvar previsão.", "erro");
-    }
-  };
-
-  const abrirRealizacaoFaturamento = (previsao: any) => {
-    const familia = familiasFaturamento.find(
-      (f) => f.id === previsao.id_obra_faturamento_familia,
-    );
-    const jaRealizado = realizadosFaturamento
-      .filter((r) => r.id_previsao === previsao.id)
-      .reduce((acc, r) => acc + Number(r.valor_realizado || 0), 0);
-    const saldo = Math.max(
-      (Number(previsao.valor_previsto) || 0) - jaRealizado,
-      0,
-    );
-    setPrevisaoParaRealizar({ ...previsao, familia });
-    setRealizacaoFaturamento({
-      competencia: String(previsao.competencia || "").slice(0, 7),
-      data_faturamento: isoParaDataBR(dataHojeISO()),
-      numero_nf: "",
-      valor_realizado: String(
-        (saldo || Number(previsao.valor_previsto) || 0).toFixed(2),
-      ),
-      observacao: "",
-    });
-  };
-
-  const confirmarRealizacaoFaturamento = async () => {
-    if (!obraEcoSelecionada || !previsaoParaRealizar) return;
-    const competencia = competenciaParaData(
-      realizacaoFaturamento.competencia || "",
-    );
-    const dataFaturamentoISO = dataBRParaISO(
-      realizacaoFaturamento.data_faturamento || "",
-    );
-    if (
-      !competencia ||
-      !dataFaturamentoISO ||
-      !realizacaoFaturamento.valor_realizado
-    ) {
-      return mostrarAviso(
-        "Preencha competência, data de faturamento e valor realizado.",
-        "erro",
-      );
-    }
-    try {
-      const { error } = await supabase
-        .from("obra_faturamento_realizados")
-        .insert([
-          {
-            id_obra: obraEcoSelecionada.id,
-            id_obra_faturamento_familia:
-              previsaoParaRealizar.id_obra_faturamento_familia,
-            id_previsao: previsaoParaRealizar.id,
-            competencia,
-            data_faturamento: dataFaturamentoISO,
-            grupo_faturamento:
-              previsaoParaRealizar.grupo_faturamento ||
-              previsaoParaRealizar.familia?.grupo_faturamento ||
-              null,
-            numero_nf: realizacaoFaturamento.numero_nf || null,
-            valor_realizado: Number(realizacaoFaturamento.valor_realizado) || 0,
-            observacao: realizacaoFaturamento.observacao || null,
-          },
-        ]);
-      if (error) throw error;
-      setPrevisaoParaRealizar(null);
-      setRealizacaoFaturamento({
-        competencia: "",
-        data_faturamento: "",
-        numero_nf: "",
-        valor_realizado: "",
-        observacao: "",
-      });
-      buscarRealizadosFaturamento(obraEcoSelecionada.id);
-      mostrarAviso("Faturamento realizado registrado!");
-    } catch (error: any) {
-      mostrarAviso(
-        error.message || "Erro ao registrar faturamento realizado.",
-        "erro",
-      );
-    }
-  };
-
-  const excluirPrevisaoFaturamento = async (previsao: any) => {
-    if (!window.confirm("Deseja excluir esta previsão de faturamento?")) return;
-    try {
-      const { error } = await supabase
-        .from("obra_faturamento_previsoes")
-        .delete()
-        .eq("id", previsao.id);
-      if (error) throw error;
-      if (obraEcoSelecionada) buscarPrevisoesFaturamento(obraEcoSelecionada.id);
-      mostrarAviso("Previsão excluída!");
-    } catch (error: any) {
-      mostrarAviso(error.message || "Erro ao excluir previsão.", "erro");
     }
   };
 
@@ -4619,151 +4517,6 @@ export default function App() {
         </div>
       )}
 
-      {previsaoParaRealizar && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[85] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
-            <div className="p-5 border-b flex justify-between items-start gap-4">
-              <div>
-                <h2 className="font-bold text-xl text-[#2A6377]">
-                  Realizar faturamento
-                </h2>
-                <p className="text-sm text-slate-500 mt-1">
-                  {previsaoParaRealizar.familia?.codigo_familia} -{" "}
-                  {previsaoParaRealizar.familia?.descricao_familia}
-                </p>
-              </div>
-              <button
-                onClick={() => setPrevisaoParaRealizar(null)}
-                className="text-slate-400 hover:text-red-500 bg-slate-100 rounded-full p-2"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3 bg-slate-50 border rounded-lg p-3 text-sm">
-                <div>
-                  <p className="text-xs text-slate-400 font-bold uppercase">
-                    Previsto
-                  </p>
-                  <p className="font-bold">
-                    {formatarMoeda(previsaoParaRealizar.valor_previsto)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400 font-bold uppercase">
-                    Competência
-                  </p>
-                  <p className="font-bold">
-                    {formatarCompetencia(previsaoParaRealizar.competencia)}
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">
-                    Competência
-                  </label>
-                  <input
-                    type="month"
-                    value={realizacaoFaturamento.competencia}
-                    onChange={(e) =>
-                      setRealizacaoFaturamento({
-                        ...realizacaoFaturamento,
-                        competencia: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">
-                    Data faturamento
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={10}
-                    value={realizacaoFaturamento.data_faturamento}
-                    onFocus={selecionarTextoAoFocar}
-                    onChange={(e) =>
-                      setRealizacaoFaturamento({
-                        ...realizacaoFaturamento,
-                        data_faturamento: formatarEntradaDataBR(e.target.value),
-                      })
-                    }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">
-                    Número NF
-                  </label>
-                  <input
-                    value={realizacaoFaturamento.numero_nf}
-                    onChange={(e) =>
-                      setRealizacaoFaturamento({
-                        ...realizacaoFaturamento,
-                        numero_nf: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">
-                    Valor realizado
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={realizacaoFaturamento.valor_realizado}
-                    onChange={(e) =>
-                      setRealizacaoFaturamento({
-                        ...realizacaoFaturamento,
-                        valor_realizado: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">
-                  Observação
-                </label>
-                <textarea
-                  rows={3}
-                  value={realizacaoFaturamento.observacao}
-                  onChange={(e) =>
-                    setRealizacaoFaturamento({
-                      ...realizacaoFaturamento,
-                      observacao: e.target.value,
-                    })
-                  }
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                />
-              </div>
-            </div>
-            <div className="p-4 border-t bg-slate-50 flex justify-end gap-3">
-              <button
-                onClick={() => setPrevisaoParaRealizar(null)}
-                className="px-5 py-2 bg-white border rounded-lg font-bold text-slate-600"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmarRealizacaoFaturamento}
-                className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-bold"
-              >
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* HEADER MOBILE */}
       <div className="md:hidden bg-[#2A6377] text-white p-4 flex justify-between items-center shadow-md z-30">
@@ -7074,28 +6827,20 @@ export default function App() {
                     )}
                   </div>
                   <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-sm min-w-[980px]">
+                    <table className="w-full text-sm">
                       <thead className="bg-slate-50 text-slate-600">
                         <tr>
-                          <th className="p-3 text-left min-w-[220px]">
+                          <th className="p-3 text-left">
                             Grupo de Faturamento
                           </th>
-                          <th className="p-3 text-left min-w-[300px]">
-                            Família
-                          </th>
-                          <th className="p-3 text-right min-w-[150px]">
-                            Valor Total Escopo
-                          </th>
-                          <th className="p-3 text-right min-w-[140px]">
-                            Faturado
-                          </th>
-                          <th className="p-3 text-right min-w-[140px]">
-                            À Faturar
-                          </th>
+                          <th className="p-3 text-left">Família</th>
+                          <th className="p-3 text-right">Valor Total Escopo</th>
+                          <th className="p-3 text-right">Faturado</th>
+                          <th className="p-3 text-right">% Faturado</th>
+                          <th className="p-3 text-right">À Faturar</th>
+                          <th className="p-3 text-right">% À Faturar</th>
                           {podeEditarObraSelecionada && (
-                            <th className="p-3 text-center min-w-[110px]">
-                              Ações
-                            </th>
+                            <th className="p-3 text-center">Ações</th>
                           )}
                         </tr>
                       </thead>
@@ -7103,7 +6848,7 @@ export default function App() {
                         {familiasFaturamento.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={podeEditarObraSelecionada ? 6 : 5}
+                              colSpan={podeEditarObraSelecionada ? 8 : 7}
                               className="p-6 text-center text-slate-500"
                             >
                               Nenhuma família criada para esta obra. Verifique
@@ -7113,7 +6858,7 @@ export default function App() {
                         ) : familiasFaturamentoComEscopo.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={podeEditarObraSelecionada ? 6 : 5}
+                              colSpan={podeEditarObraSelecionada ? 8 : 7}
                               className="p-6 text-center text-slate-500"
                             >
                               Nenhum item de escopo informado. Clique em
@@ -7126,9 +6871,12 @@ export default function App() {
                             const faturadoFamilia = valorRealizadoFamilia(
                               familia.id,
                             );
+                            const escopoFamilia = Number(
+                              familia.valor_total_escopo || 0,
+                            );
                             const saldoFamilia =
-                              Number(familia.valor_total_escopo || 0) -
-                              faturadoFamilia;
+                              Math.round((escopoFamilia - faturadoFamilia) * 100) /
+                                100 || 0;
                             return (
                               <tr
                                 key={familia.id}
@@ -7154,10 +6902,21 @@ export default function App() {
                                 <td className="p-3 text-right font-bold text-emerald-700 whitespace-nowrap">
                                   {formatarMoeda(faturadoFamilia)}
                                 </td>
+                                <td className="p-3 text-right font-semibold text-emerald-700 whitespace-nowrap">
+                                  {formatarPercentual(
+                                    faturadoFamilia,
+                                    escopoFamilia,
+                                  )}
+                                </td>
                                 <td
                                   className={`p-3 text-right font-bold whitespace-nowrap ${saldoFamilia < 0 ? "text-red-600" : "text-amber-700"}`}
                                 >
                                   {formatarMoeda(saldoFamilia)}
+                                </td>
+                                <td
+                                  className={`p-3 text-right font-semibold whitespace-nowrap ${saldoFamilia < 0 ? "text-red-600" : "text-amber-700"}`}
+                                >
+                                  {formatarPercentual(saldoFamilia, escopoFamilia)}
                                 </td>
                                 {podeEditarObraSelecionada && (
                                   <td className="p-3 text-center">
@@ -7532,26 +7291,28 @@ export default function App() {
 
                 <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
                   <div className="p-4 border-b">
-                    <h3 className="font-bold text-lg">Previsões em Aberto</h3>
+                    <h3 className="font-bold text-lg">
+                      Pedido de Venda - Saldos
+                    </h3>
                   </div>
                   <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-sm min-w-[980px]">
+                    <table className="w-full text-sm">
                       <thead className="bg-slate-50 text-slate-600">
                         <tr>
                           <th className="p-3 text-left">Família</th>
                           <th className="p-3 text-left">Grupo</th>
-                          <th className="p-3">Competência</th>
                           <th className="p-3 text-right">Previsto</th>
                           <th className="p-3 text-right">Realizado</th>
+                          <th className="p-3 text-right">% Realizado</th>
                           <th className="p-3 text-right">Saldo</th>
-                          {podeEditarObraSelecionada && <th className="p-3">Ações</th>}
+                          <th className="p-3 text-right">% Saldo</th>
                         </tr>
                       </thead>
                       <tbody>
                         {previsoesComSaldo.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={podeEditarObraSelecionada ? 7 : 6}
+                              colSpan={7}
                               className="p-6 text-center text-slate-500"
                             >
                               Nenhuma previsão cadastrada.
@@ -7578,40 +7339,27 @@ export default function App() {
                                     familia?.grupo_faturamento ||
                                     "-"}
                                 </td>
-                                <td className="p-3 text-center">
-                                  {formatarCompetencia(previsao.competencia)}
-                                </td>
-                                <td className="p-3 text-right font-bold">
+                                <td className="p-3 text-right font-bold whitespace-nowrap">
                                   {formatarMoeda(previsao.valor_previsto)}
                                 </td>
-                                <td className="p-3 text-right text-emerald-700 font-bold">
+                                <td className="p-3 text-right text-emerald-700 font-bold whitespace-nowrap">
                                   {formatarMoeda(previsao.realizado)}
                                 </td>
-                                <td className="p-3 text-right font-bold text-amber-700">
+                                <td className="p-3 text-right text-emerald-700 font-semibold whitespace-nowrap">
+                                  {formatarPercentual(
+                                    previsao.realizado,
+                                    Number(previsao.valor_previsto || 0),
+                                  )}
+                                </td>
+                                <td className="p-3 text-right font-bold text-amber-700 whitespace-nowrap">
                                   {formatarMoeda(previsao.saldo)}
                                 </td>
-                                {podeEditarObraSelecionada && (
-                                  <td className="p-3">
-                                    <div className="flex justify-center gap-2">
-                                      <button
-                                        onClick={() =>
-                                          abrirRealizacaoFaturamento(previsao)
-                                        }
-                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition"
-                                      >
-                                        Realizar
-                                      </button>
-                                      <button
-                                        onClick={() =>
-                                          excluirPrevisaoFaturamento(previsao)
-                                        }
-                                        className="text-red-400 hover:text-red-600"
-                                      >
-                                        <Trash2 size={16} />
-                                      </button>
-                                    </div>
-                                  </td>
-                                )}
+                                <td className="p-3 text-right text-amber-700 font-semibold whitespace-nowrap">
+                                  {formatarPercentual(
+                                    previsao.saldo,
+                                    Number(previsao.valor_previsto || 0),
+                                  )}
+                                </td>
                               </tr>
                             );
                           })
@@ -7623,6 +7371,7 @@ export default function App() {
 
                 <FaturamentosRealizados
                   realizados={realizadosFaturamentoDoEscopo}
+                  previsoes={previsoesFaturamentoDoEscopo}
                   familias={familiasFaturamento}
                   grupos={gruposFaturamentoObra}
                   podeEditar={podeEditarObraSelecionada}

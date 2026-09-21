@@ -42,6 +42,11 @@ export const compararCodigoFamilia = (
   });
 };
 
+export const formatarPercentual = (parte: number, base: number) =>
+  base > 0
+    ? `${((parte / base) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`
+    : "-";
+
 export const formatarMoeda = (valor: any) => {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",

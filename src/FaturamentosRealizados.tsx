@@ -1,14 +1,21 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Search, Trash2 } from "lucide-react";
-import { compararCodigoFamilia, formatarDataSegura, formatarMoeda } from "./utils";
+import {
+  compararCodigoFamilia,
+  formatarDataSegura,
+  formatarMoeda,
+  formatarPercentual,
+} from "./utils";
 import type {
   ObraFaturamentoFamilia,
   ObraFaturamentoGrupo,
+  ObraFaturamentoPrevisao,
   ObraFaturamentoRealizado,
 } from "./types";
 
 interface Props {
   realizados: ObraFaturamentoRealizado[];
+  previsoes: ObraFaturamentoPrevisao[];
   familias: ObraFaturamentoFamilia[];
   grupos: ObraFaturamentoGrupo[];
   podeEditar: boolean;
@@ -43,13 +50,11 @@ const BadgeTipo = ({ tipo }: { tipo: TipoNF }) => (
 
 const valor = (r: ObraFaturamentoRealizado) => Number(r.valor_realizado || 0);
 
-const pct = (parte: number, base: number) =>
-  base > 0
-    ? `${((parte / base) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`
-    : "-";
+const pct = formatarPercentual;
 
 export default function FaturamentosRealizados({
   realizados,
+  previsoes,
   familias,
   grupos,
   podeEditar,
@@ -68,15 +73,21 @@ export default function FaturamentosRealizados({
     () => new Map(grupos.map((g) => [g.codigo || "", g.descricao || ""])),
     [grupos],
   );
-  const valorGrupoNoPedido = useMemo(
-    () => new Map(grupos.map((g) => [g.codigo || "", Number(g.valor_total_grupo || 0)])),
-    [grupos],
-  );
+  // Valor do pedido por grupo = soma das previsões (itens do pedido no ERP). Não usar
+  // valor_total_grupo: fica inflado quando uma família concentra vários grupos.
+  const valorGrupoNoPedido = useMemo(() => {
+    const mapa = new Map<string, number>();
+    for (const p of previsoes) {
+      const codigo = p.grupo_faturamento || "";
+      mapa.set(codigo, (mapa.get(codigo) || 0) + Number(p.valor_previsto || 0));
+    }
+    return mapa;
+  }, [previsoes]);
   const pedidoPorTipo = useMemo(() => {
     const total: Record<Tipo, number> = { material: 0, servico: 0 };
-    for (const g of grupos) total[tipoDoGrupo(g.codigo)] += Number(g.valor_total_grupo || 0);
+    for (const [codigo, valorGrupo] of valorGrupoNoPedido) total[tipoDoGrupo(codigo)] += valorGrupo;
     return total;
-  }, [grupos]);
+  }, [valorGrupoNoPedido]);
 
   const alternar = (chave: string) =>
     setAbertos((atual) => {
