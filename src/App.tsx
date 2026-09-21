@@ -8834,7 +8834,7 @@ export default function App() {
         )}
 
         {telaAtiva === "reunioes" && (
-          <div className="animate-in fade-in dash-main-wrapper max-w-full flex flex-col items-start gap-6">
+          <div className="animate-in fade-in dash-main-wrapper max-w-full flex flex-col items-start gap-4 xl:h-full xl:min-h-0">
             <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
               Gerador de Ata de Reunião
             </h2>
@@ -8964,20 +8964,18 @@ export default function App() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-6 w-full max-w-4xl mx-auto items-start">
-              <div className="max-w-full flex flex-col items-start gap-6 w-full">
-                <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start">
-                  <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">
-                    3. Resumo
-                  </h3>
-                  <div className="grid grid-cols-1 gap-4 mb-4 max-w-full w-full items-start">
-                    <div>
-                      <label className="block text-sm mb-1 max-w-full">
+            <div className="w-full grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(380px,500px)] gap-4 items-start xl:flex-1 xl:min-h-0 xl:items-stretch">
+              <div className="flex flex-col gap-4 min-w-0 xl:overflow-y-auto xl:min-h-0 xl:pr-1">
+                <div className="bg-white p-4 rounded-xl shadow-sm border w-full flex flex-col items-start">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 mb-3 w-full">
+                    <h3 className="text-base font-bold">3. Resumo</h3>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-slate-500">
                         Data da Reunião
                       </label>
                       <input
                         type="date"
-                        className="w-full sm:w-[200px] border rounded-lg p-2 outline-none max-w-full"
+                        className="border rounded-lg p-1.5 text-sm outline-none"
                         value={reuniaoForm.data_reuniao}
                         onChange={(e) =>
                           setReuniaoForm({
@@ -8989,7 +8987,7 @@ export default function App() {
                     </div>
                   </div>
                   {reuniaoForm.id_obra && (
-                    <div className="w-full max-w-full mb-4 bg-slate-50 border rounded-lg p-3">
+                    <div className="w-full mb-3 bg-slate-50 border rounded-lg p-2.5">
                       {carregandoContextoAta ? (
                         <p className="text-xs text-slate-400 flex items-center gap-2">
                           <Loader2 className="animate-spin" size={14} />{" "}
@@ -8999,7 +8997,7 @@ export default function App() {
                         (contextoObraAta.tarefasAtrasadas.length > 0 ||
                           contextoObraAta.valorVencido > 0 ||
                           contextoObraAta.fasesAtrasadas.length > 0) ? (
-                        <div className="flex flex-col gap-1.5">
+                        <div className="flex flex-col gap-1">
                           <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">
                             Contexto para a conversa
                           </p>
@@ -9036,229 +9034,247 @@ export default function App() {
                       )}
                     </div>
                   )}
-                  <div className="w-full max-w-full flex flex-col items-start">
-                    <label className="block text-sm mb-1 max-w-full">
-                      Resumo Geral
-                    </label>
-                    <textarea
-                      rows={3}
-                      className="w-full border rounded-lg p-3 outline-none max-w-full"
-                      value={reuniaoForm.resumo_geral}
-                      onChange={(e) =>
-                        setReuniaoForm({
-                          ...reuniaoForm,
-                          resumo_geral: e.target.value,
-                        })
-                      }
-                    ></textarea>
-                  </div>
+                  <label className="block text-sm mb-1">Resumo Geral</label>
+                  <textarea
+                    rows={5}
+                    className="w-full border rounded-lg p-3 outline-none"
+                    value={reuniaoForm.resumo_geral}
+                    onChange={(e) =>
+                      setReuniaoForm({
+                        ...reuniaoForm,
+                        resumo_geral: e.target.value,
+                      })
+                    }
+                  ></textarea>
                 </div>
 
-                {reuniaoForm.id_obra && (
-                  <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start">
-                    <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">
-                      Histórico da Obra (última(s) reunião(ões), pendências e
-                      diário)
+                <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4 items-stretch">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border w-full flex flex-col items-start min-w-0">
+                    <h3 className="text-base font-bold mb-3 border-b pb-2 w-full">
+                      4. Ocorrências
                     </h3>
-                    <TimelineObra
-                      idObra={reuniaoForm.id_obra}
-                      usuarioAtualId={usuarioAtual?.id}
-                      podeGerenciar={podeEditarObra(
-                        obrasLista.find((o) => o.id === reuniaoForm.id_obra),
-                      )}
-                      mostrarFormularios={false}
-                      onAviso={mostrarAviso}
-                    />
+                    <div className="flex flex-wrap gap-2 mb-2 w-full items-start">
+                      <select
+                        className="border rounded-lg p-2 w-[130px] shrink-0 outline-none text-sm"
+                        value={novaOcorrencia.tipo}
+                        onChange={(e) =>
+                          setNovaOcorrencia({
+                            ...novaOcorrencia,
+                            tipo: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="avanco">Avanço</option>
+                        <option value="atraso">Atraso</option>
+                        <option value="financeiro">Financeiro</option>
+                        <option value="fornecedor">Fornecedor</option>
+                        <option value="acidente">Acidente</option>
+                        <option value="outros">Outros</option>
+                      </select>
+                      <input
+                        type="text"
+                        className="border rounded-lg p-2 flex-1 min-w-[160px] outline-none text-sm"
+                        placeholder="Ex: Chegou o material..."
+                        value={novaOcorrencia.descricao}
+                        onChange={(e) =>
+                          setNovaOcorrencia({
+                            ...novaOcorrencia,
+                            descricao: e.target.value,
+                          })
+                        }
+                        onKeyPress={(e) =>
+                          e.key === "Enter" && adicionarOcorrencia()
+                        }
+                      />
+                      <button
+                        onClick={adicionarOcorrencia}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm transition"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {listaOcorrencias.map((oc, idx) => (
+                      <div
+                        key={idx}
+                        className="flex justify-between items-center bg-slate-50 p-2 mt-2 rounded border text-sm w-full"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-semibold text-[#2A6377] capitalize">
+                            {labelOcorrencia(oc.tipo)}:
+                          </span>{" "}
+                          {oc.descricao}
+                        </div>
+                        <button
+                          onClick={() =>
+                            setListaOcorrencias(
+                              listaOcorrencias.filter((_, i) => i !== idx),
+                            )
+                          }
+                          className="text-red-400 hover:text-red-600 ml-2 shrink-0"
+                        >
+                          <Trash2 size={16} className="shrink-0" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                )}
 
-                <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start">
-                  <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">
-                    4. Ocorrências
-                  </h3>
-                  <div className="flex flex-col sm:flex-row gap-3 mb-4 w-full items-start">
-                    <select
-                      className="border rounded-lg p-2 w-full sm:w-[150px] shrink-0 outline-none"
-                      value={novaOcorrencia.tipo}
+                  <div className="bg-white p-4 rounded-xl shadow-sm border w-full flex flex-col items-start min-w-0">
+                    <h3 className="text-base font-bold mb-3 border-b pb-2 w-full">
+                      5. Gerar Tarefas
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-2 mb-2 w-full">
+                      <input
+                        type="text"
+                        className="border rounded-lg p-2 w-full outline-none text-sm"
+                        placeholder="O que precisa ser feito..."
+                        value={novaTarefa.titulo}
+                        onChange={(e) =>
+                          setNovaTarefa({
+                            ...novaTarefa,
+                            titulo: e.target.value,
+                          })
+                        }
+                      />
+                      <input
+                        type="date"
+                        className="border rounded-lg p-2 w-full outline-none text-sm"
+                        value={novaTarefa.data_vencimento}
+                        onChange={(e) =>
+                          setNovaTarefa({
+                            ...novaTarefa,
+                            data_vencimento: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <textarea
+                      rows={2}
+                      className="border rounded-lg p-2 w-full outline-none text-sm mb-2"
+                      placeholder="Descrição / contexto da tarefa..."
+                      value={novaTarefa.descricao}
                       onChange={(e) =>
-                        setNovaOcorrencia({
-                          ...novaOcorrencia,
-                          tipo: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="avanco">Avanço</option>
-                      <option value="atraso">Atraso</option>
-                      <option value="financeiro">Financeiro</option>
-                      <option value="fornecedor">Fornecedor</option>
-                      <option value="acidente">Acidente</option>
-                      <option value="outros">Outros</option>
-                    </select>
-                    <input
-                      type="text"
-                      className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full"
-                      placeholder="Ex: Chegou o material..."
-                      value={novaOcorrencia.descricao}
-                      onChange={(e) =>
-                        setNovaOcorrencia({
-                          ...novaOcorrencia,
+                        setNovaTarefa({
+                          ...novaTarefa,
                           descricao: e.target.value,
                         })
                       }
-                      onKeyPress={(e) =>
-                        e.key === "Enter" && adicionarOcorrencia()
-                      }
                     />
-                    <button
-                      onClick={adicionarOcorrencia}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold w-full sm:w-auto max-w-full sm:ml-auto transition"
-                    >
-                      Add
-                    </button>
-                  </div>
-                  {listaOcorrencias.map((oc, idx) => (
-                    <div
-                      key={idx}
-                      className="flex justify-between items-center bg-slate-50 p-2 mt-2 rounded border text-sm max-w-full w-full"
-                    >
-                      <div>
-                        <span className="font-semibold text-[#2A6377] capitalize max-w-full truncate">
-                          {labelOcorrencia(oc.tipo)}:
-                        </span>{" "}
-                        {oc.descricao}
-                      </div>
-                      <button
-                        onClick={() =>
-                          setListaOcorrencias(
-                            listaOcorrencias.filter((_, i) => i !== idx),
-                          )
+                    <div className="flex flex-wrap gap-2 w-full items-start">
+                      <select
+                        className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none text-sm"
+                        value={novaTarefa.id_responsavel}
+                        onChange={(e) =>
+                          setNovaTarefa({
+                            ...novaTarefa,
+                            id_responsavel: e.target.value,
+                          })
                         }
-                        className="text-red-400 hover:text-red-600 ml-2 shrink-0"
                       >
-                        <Trash2 size={16} className="shrink-0" />
+                        <option value="">Atribuir a...</option>
+                        {listaUsuarios.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.nome}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none text-sm"
+                        value={novaTarefa.prioridade}
+                        onChange={(e) =>
+                          setNovaTarefa({
+                            ...novaTarefa,
+                            prioridade: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="baixa">Prioridade baixa</option>
+                        <option value="normal">Prioridade normal</option>
+                        <option value="alta">Prioridade alta</option>
+                        <option value="critica">Prioridade crítica</option>
+                      </select>
+                      <button
+                        onClick={adicionarTarefa}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm transition"
+                      >
+                        Adicionar
                       </button>
                     </div>
-                  ))}
-                </div>
-                <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border w-full max-w-full flex flex-col items-start">
-                  <h3 className="text-lg font-bold mb-4 border-b pb-2 max-w-full w-full">
-                    5. Gerar Tarefas
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 w-full max-w-full">
-                    <input
-                      type="text"
-                      className="border rounded-lg p-2 w-full outline-none max-w-full"
-                      placeholder="O que precisa ser feito..."
-                      value={novaTarefa.titulo}
-                      onChange={(e) =>
-                        setNovaTarefa({ ...novaTarefa, titulo: e.target.value })
-                      }
-                    />
-                    <input
-                      type="date"
-                      className="border rounded-lg p-2 w-full outline-none max-w-full"
-                      value={novaTarefa.data_vencimento}
-                      onChange={(e) =>
-                        setNovaTarefa({
-                          ...novaTarefa,
-                          data_vencimento: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <textarea
-                    rows={2}
-                    className="border rounded-lg p-2 w-full outline-none max-w-full mb-3"
-                    placeholder="Descrição / contexto da tarefa..."
-                    value={novaTarefa.descricao}
-                    onChange={(e) =>
-                      setNovaTarefa({
-                        ...novaTarefa,
-                        descricao: e.target.value,
-                      })
-                    }
-                  />
-                  <div className="flex flex-col sm:flex-row gap-3 mb-4 w-full max-w-full items-start">
-                    <select
-                      className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full"
-                      value={novaTarefa.id_responsavel}
-                      onChange={(e) =>
-                        setNovaTarefa({
-                          ...novaTarefa,
-                          id_responsavel: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="">Atribuir a...</option>
-                      {listaUsuarios.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.nome}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="border rounded-lg p-2 flex-1 w-full outline-none max-w-full"
-                      value={novaTarefa.prioridade}
-                      onChange={(e) =>
-                        setNovaTarefa({
-                          ...novaTarefa,
-                          prioridade: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="baixa">Prioridade baixa</option>
-                      <option value="normal">Prioridade normal</option>
-                      <option value="alta">Prioridade alta</option>
-                      <option value="critica">Prioridade crítica</option>
-                    </select>
-                    <button
-                      onClick={adicionarTarefa}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold w-full sm:w-auto max-w-full sm:ml-auto transition"
-                    >
-                      Adicionar
-                    </button>
-                  </div>
-                  {listaTarefas.map((tar, idx) => (
-                    <div
-                      key={idx}
-                      className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50 p-3 mt-2 rounded border text-sm gap-2 max-w-full w-full"
-                    >
-                      <div>
-                        <span className="font-semibold block max-w-full truncate">
-                          {tar.titulo}
-                        </span>
-                        <div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1 max-w-full">
-                          <span className="flex items-center gap-1 max-w-full truncate">
-                            <User size={12} className="shrink-0" />{" "}
-                            {tar.nome_responsavel}
+                    {listaTarefas.map((tar, idx) => (
+                      <div
+                        key={idx}
+                        className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50 p-2.5 mt-2 rounded border text-sm gap-2 w-full"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-semibold block truncate">
+                            {tar.titulo}
                           </span>
-                          <span className="flex items-center gap-1 max-w-full truncate uppercase">
-                            Origem: reunião
-                          </span>
-                          <span className="flex items-center gap-1 max-w-full truncate uppercase">
-                            Prioridade: {tar.prioridade || "normal"}
-                          </span>
-                          {tar.data_vencimento && (
-                            <span className="flex items-center gap-1 max-w-full truncate">
-                              <Clock size={12} className="shrink-0" /> Prazo:{" "}
-                              {formatarDataSegura(tar.data_vencimento)}
+                          <div className="flex flex-wrap gap-2 text-xs text-gray-500 mt-1">
+                            <span className="flex items-center gap-1 truncate">
+                              <User size={12} className="shrink-0" />{" "}
+                              {tar.nome_responsavel}
                             </span>
-                          )}
+                            <span className="flex items-center gap-1 truncate uppercase">
+                              Origem: reunião
+                            </span>
+                            <span className="flex items-center gap-1 truncate uppercase">
+                              Prioridade: {tar.prioridade || "normal"}
+                            </span>
+                            {tar.data_vencimento && (
+                              <span className="flex items-center gap-1 truncate">
+                                <Clock size={12} className="shrink-0" /> Prazo:{" "}
+                                {formatarDataSegura(tar.data_vencimento)}
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        <button
+                          onClick={() =>
+                            setListaTarefas(
+                              listaTarefas.filter((_, i) => i !== idx),
+                            )
+                          }
+                          className="text-red-400 hover:text-red-600 bg-white p-2 rounded shadow-sm border self-end sm:self-auto shrink-0 ml-auto sm:ml-0"
+                        >
+                          <Trash2 size={16} className="shrink-0" />
+                        </button>
                       </div>
-                      <button
-                        onClick={() =>
-                          setListaTarefas(
-                            listaTarefas.filter((_, i) => i !== idx),
-                          )
-                        }
-                        className="text-red-400 hover:text-red-600 bg-white p-2 rounded shadow-sm border self-end sm:self-auto shrink-0 ml-auto sm:ml-0"
-                      >
-                        <Trash2 size={16} className="shrink-0" />
-                      </button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl shadow-sm border flex flex-col min-w-0 xl:min-h-0 xl:h-full">
+                {reuniaoForm.id_obra ? (
+                  <>
+                    <p className="text-xs text-slate-500 mb-2 truncate">
+                      Obra:{" "}
+                      {(() => {
+                        const o = obrasLista.find(
+                          (ob) => ob.id === reuniaoForm.id_obra,
+                        );
+                        return o ? `${o.codigo_externo} - ${o.nome}` : "";
+                      })()}
+                    </p>
+                    <div className="flex flex-col xl:flex-1 xl:min-h-0">
+                      <TimelineObra
+                        idObra={reuniaoForm.id_obra}
+                        usuarioAtualId={usuarioAtual?.id}
+                        podeGerenciar={podeEditarObra(
+                          obrasLista.find((o) => o.id === reuniaoForm.id_obra),
+                        )}
+                        mostrarFormularios={false}
+                        preencherAltura
+                        onAviso={mostrarAviso}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-slate-400 flex flex-col items-center justify-center gap-2 py-16 text-center xl:flex-1">
+                    <Clock size={28} />
+                    Selecione uma obra para ver o histórico (últimas reuniões,
+                    pendências e diário).
+                  </div>
+                )}
               </div>
             </div>
           </div>

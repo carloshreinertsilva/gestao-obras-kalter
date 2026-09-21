@@ -16,6 +16,7 @@ interface TimelineObraProps {
   usuarioAtualId?: string;
   podeGerenciar: boolean;
   mostrarFormularios?: boolean;
+  preencherAltura?: boolean;
   onAviso?: (mensagem: string, tipo?: "sucesso" | "erro") => void;
 }
 
@@ -33,6 +34,7 @@ export default function TimelineObra({
   usuarioAtualId,
   podeGerenciar,
   mostrarFormularios = true,
+  preencherAltura = false,
   onAviso,
 }: TimelineObraProps) {
   const [carregando, setCarregando] = useState(false);
@@ -202,9 +204,13 @@ export default function TimelineObra({
   };
 
   return (
-    <div className="flex flex-col gap-4 w-full">
+    <div
+      className={`flex flex-col gap-4 w-full ${preencherAltura ? "xl:flex-1 xl:min-h-0" : ""}`}
+    >
       {ocorrenciasAbertas.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <div
+          className={`bg-amber-50 border border-amber-200 rounded-xl p-4 ${preencherAltura ? "shrink-0 xl:max-h-[40%] overflow-y-auto" : ""}`}
+        >
           <h4 className="font-bold text-amber-800 flex items-center gap-2 mb-3 text-sm">
             <AlertTriangle size={16} /> Pendências em Aberto (
             {ocorrenciasAbertas.length})
@@ -317,7 +323,9 @@ export default function TimelineObra({
         </div>
       )}
 
-      <div className="bg-slate-50 p-4 rounded-xl border w-full max-h-[600px] overflow-y-auto">
+      <div
+        className={`bg-slate-50 p-4 rounded-xl border w-full overflow-y-auto ${preencherAltura ? "max-h-[520px] xl:max-h-none xl:flex-1 xl:min-h-0" : "max-h-[600px]"}`}
+      >
         <h4 className="font-bold mb-4 flex items-center gap-2 text-sm text-slate-600">
           <Clock size={16} /> Histórico da Obra
         </h4>
