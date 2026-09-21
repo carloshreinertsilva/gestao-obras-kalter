@@ -51,6 +51,8 @@ import {
   labelOcorrencia,
   compararCodigoFamilia,
   formatarPercentual,
+  grupoBaseFaturamento,
+  sufixoItemGrupo,
 } from "./utils";
 import {
   BarChart,
@@ -352,15 +354,14 @@ export default function App() {
       .sort((a, b) => String(a.codigo || "").localeCompare(String(b.codigo || "")));
 
   const labelGrupoFaturamento = (codigo: any) => {
-    const codigoLimpo = codigoGrupoFaturamento(codigo);
-    if (!codigoLimpo) return "Sem grupo";
+    const base = grupoBaseFaturamento(codigo);
+    if (!base) return "Sem grupo";
 
     const grupo = gruposFaturamentoObra.find(
-      (g) => codigoGrupoFaturamento(g.codigo) === codigoLimpo,
+      (g) => codigoGrupoFaturamento(g.codigo) === base,
     );
 
-    if (!grupo) return codigoLimpo;
-    return grupo.descricao ? `${grupo.codigo} - ${grupo.descricao}` : grupo.codigo;
+    return grupo?.descricao ? `${base} - ${grupo.descricao}` : base;
   };
 
   const grupoFaturamentoPorId = (idGrupo: any) =>
@@ -1896,25 +1897,6 @@ export default function App() {
       mostrarAviso("Previsão de faturamento salva!");
     } catch (error: any) {
       mostrarAviso(error.message || "Erro ao salvar previsão.", "erro");
-    }
-  };
-
-  const excluirRealizacaoFaturamento = async (realizado: any) => {
-    if (!window.confirm("Deseja excluir este faturamento realizado?")) return;
-    try {
-      const { error } = await supabase
-        .from("obra_faturamento_realizados")
-        .delete()
-        .eq("id", realizado.id);
-      if (error) throw error;
-      if (obraEcoSelecionada)
-        buscarRealizadosFaturamento(obraEcoSelecionada.id);
-      mostrarAviso("Faturamento realizado excluído!");
-    } catch (error: any) {
-      mostrarAviso(
-        error.message || "Erro ao excluir faturamento realizado.",
-        "erro",
-      );
     }
   };
 
@@ -3561,7 +3543,7 @@ export default function App() {
   ).sort();
 
   const nomeGrupoFaturamento = (familia: any) =>
-    codigoGrupoFaturamento(familia?.grupo_faturamento) || "Sem grupo";
+    grupoBaseFaturamento(familia?.grupo_faturamento) || "Sem grupo";
 
   const valorTotalGrupoCadastrado = (codigoGrupo: string) => {
     const grupo = gruposFaturamentoObra.find(
@@ -7335,9 +7317,23 @@ export default function App() {
                                     : "-"}
                                 </td>
                                 <td className="p-3">
-                                  {previsao.grupo_faturamento ||
-                                    familia?.grupo_faturamento ||
-                                    "-"}
+                                  {grupoBaseFaturamento(
+                                    previsao.grupo_faturamento ||
+                                      familia?.grupo_faturamento,
+                                  ) || "-"}
+                                  {sufixoItemGrupo(
+                                    previsao.grupo_faturamento ||
+                                      familia?.grupo_faturamento,
+                                  ) && (
+                                    <span className="text-xs text-slate-400">
+                                      {" "}
+                                      · item{" "}
+                                      {sufixoItemGrupo(
+                                        previsao.grupo_faturamento ||
+                                          familia?.grupo_faturamento,
+                                      )}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="p-3 text-right font-bold whitespace-nowrap">
                                   {formatarMoeda(previsao.valor_previsto)}
@@ -7374,8 +7370,6 @@ export default function App() {
                   previsoes={previsoesFaturamentoDoEscopo}
                   familias={familiasFaturamento}
                   grupos={gruposFaturamentoObra}
-                  podeEditar={podeEditarObraSelecionada}
-                  onExcluir={excluirRealizacaoFaturamento}
                 />
               </div>
             )}

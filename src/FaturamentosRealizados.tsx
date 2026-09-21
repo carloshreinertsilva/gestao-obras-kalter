@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Search, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import {
   compararCodigoFamilia,
   formatarDataSegura,
   formatarMoeda,
   formatarPercentual,
+  grupoBaseFaturamento,
+  sufixoItemGrupo,
 } from "./utils";
 import type {
   ObraFaturamentoFamilia,
@@ -18,8 +20,6 @@ interface Props {
   previsoes: ObraFaturamentoPrevisao[];
   familias: ObraFaturamentoFamilia[];
   grupos: ObraFaturamentoGrupo[];
-  podeEditar: boolean;
-  onExcluir: (realizado: ObraFaturamentoRealizado) => void;
 }
 
 type Tipo = "material" | "servico";
@@ -57,8 +57,6 @@ export default function FaturamentosRealizados({
   previsoes,
   familias,
   grupos,
-  podeEditar,
-  onExcluir,
 }: Props) {
   const [aba, setAba] = useState<"nf" | "familia">("nf");
   const [filtroTipo, setFiltroTipo] = useState<"todos" | Tipo>("todos");
@@ -69,17 +67,20 @@ export default function FaturamentosRealizados({
     () => new Map(familias.map((f) => [f.id, f])),
     [familias],
   );
+  // Descrição por código exato: a do grupo base (XX.XXX.XXXX) quando ele existe; senão a do
+  // próprio item (".01/.02").
   const descricaoGrupo = useMemo(
     () => new Map(grupos.map((g) => [g.codigo || "", g.descricao || ""])),
     [grupos],
   );
-  // Valor do pedido por grupo = soma das previsões (itens do pedido no ERP). Não usar
-  // valor_total_grupo: fica inflado quando uma família concentra vários grupos.
+  // Valor do pedido por grupo base = soma das previsões (itens do pedido no ERP), somando
+  // os itens ".01/.02". Não usar valor_total_grupo: fica inflado quando uma família
+  // concentra vários grupos.
   const valorGrupoNoPedido = useMemo(() => {
     const mapa = new Map<string, number>();
     for (const p of previsoes) {
-      const codigo = p.grupo_faturamento || "";
-      mapa.set(codigo, (mapa.get(codigo) || 0) + Number(p.valor_previsto || 0));
+      const base = grupoBaseFaturamento(p.grupo_faturamento);
+      mapa.set(base, (mapa.get(base) || 0) + Number(p.valor_previsto || 0));
     }
     return mapa;
   }, [previsoes]);
@@ -112,7 +113,8 @@ export default function FaturamentosRealizados({
       return [
         r.numero_nf,
         r.grupo_faturamento,
-        descricaoGrupo.get(r.grupo_faturamento || ""),
+        descricaoGrupo.get(grupoBaseFaturamento(r.grupo_faturamento)) ||
+          descricaoGrupo.get(r.grupo_faturamento || ""),
         f?.codigo_familia,
         f?.descricao_familia,
       ].some((t) => (t || "").toLowerCase().includes(termo));
@@ -176,16 +178,18 @@ export default function FaturamentosRealizados({
   const totalServico = totalGeral - totalMaterial;
   const qtdNotas = new Set(linhas.map((r) => r.numero_nf)).size;
 
-  const botaoExcluir = (r: ObraFaturamentoRealizado) =>
-    podeEditar && (
-      <button
-        onClick={() => onExcluir(r)}
-        className="text-red-400 hover:text-red-600"
-        title="Excluir este lançamento"
-      >
-        <Trash2 size={15} />
-      </button>
+  const rotuloGrupo = (codigo?: string | null) => {
+    const base = grupoBaseFaturamento(codigo);
+    const item = sufixoItemGrupo(codigo);
+    const descricao = descricaoGrupo.get(base) || descricaoGrupo.get(codigo || "");
+    return (
+      <>
+        <span className="font-semibold text-slate-700">{base}</span>
+        {descricao && <span className="text-slate-500"> · {descricao}</span>}
+        {item && <span className="text-slate-400"> · item {item}</span>}
+      </>
     );
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
@@ -319,18 +323,12 @@ export default function FaturamentosRealizados({
                             <th className="py-1.5 px-2 text-right">Valor</th>
                             <th className="py-1.5 px-2 text-right">% da NF</th>
                             <th className="py-1.5 px-2 text-right">% do grupo no pedido</th>
-                            {podeEditar && <th className="py-1.5 px-2 w-8"></th>}
                           </tr>
                         </thead>
                         <tbody>
                           {n.itens.map((i) => (
                             <tr key={i.id} className="border-t border-slate-200">
-                              <td className="py-1.5 px-2">
-                                <span className="font-semibold text-slate-700">{i.grupo_faturamento}</span>
-                                {descricaoGrupo.get(i.grupo_faturamento || "") && (
-                                  <span className="text-slate-500"> · {descricaoGrupo.get(i.grupo_faturamento || "")}</span>
-                                )}
-                              </td>
+                              <td className="py-1.5 px-2">{rotuloGrupo(i.grupo_faturamento)}</td>
                               <td className="py-1.5 px-2 text-[#2A6377]">{nomeFamilia(i)}</td>
                               <td className="py-1.5 px-2 text-center">
                                 <BadgeTipo tipo={tipoDoGrupo(i.grupo_faturamento)} />
@@ -342,12 +340,11 @@ export default function FaturamentosRealizados({
                                 {pct(valor(i), n.total)}
                               </td>
                               <td
-                                className={`py-1.5 px-2 text-right font-semibold ${valor(i) > (valorGrupoNoPedido.get(i.grupo_faturamento || "") || 0) + 0.05 ? "text-red-600" : "text-slate-700"}`}
-                                title={`Grupo no pedido: ${formatarMoeda(valorGrupoNoPedido.get(i.grupo_faturamento || "") || 0)}`}
+                                className={`py-1.5 px-2 text-right font-semibold ${valor(i) > (valorGrupoNoPedido.get(grupoBaseFaturamento(i.grupo_faturamento)) || 0) + 0.05 ? "text-red-600" : "text-slate-700"}`}
+                                title={`Grupo ${grupoBaseFaturamento(i.grupo_faturamento)} no pedido: ${formatarMoeda(valorGrupoNoPedido.get(grupoBaseFaturamento(i.grupo_faturamento)) || 0)}`}
                               >
-                                {pct(valor(i), valorGrupoNoPedido.get(i.grupo_faturamento || "") || 0)}
+                                {pct(valor(i), valorGrupoNoPedido.get(grupoBaseFaturamento(i.grupo_faturamento)) || 0)}
                               </td>
-                              {podeEditar && <td className="py-1.5 px-2 text-center">{botaoExcluir(i)}</td>}
                             </tr>
                           ))}
                         </tbody>
@@ -401,7 +398,6 @@ export default function FaturamentosRealizados({
                             <th className="py-1.5 px-2 text-center">Tipo</th>
                             <th className="py-1.5 px-2 text-left">Grupo (material)</th>
                             <th className="py-1.5 px-2 text-right">Valor</th>
-                            {podeEditar && <th className="py-1.5 px-2 w-8"></th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -412,16 +408,10 @@ export default function FaturamentosRealizados({
                               <td className="py-1.5 px-2 text-center">
                                 <BadgeTipo tipo={tipoDoGrupo(i.grupo_faturamento)} />
                               </td>
-                              <td className="py-1.5 px-2">
-                                <span className="text-slate-700">{i.grupo_faturamento}</span>
-                                {descricaoGrupo.get(i.grupo_faturamento || "") && (
-                                  <span className="text-slate-500"> · {descricaoGrupo.get(i.grupo_faturamento || "")}</span>
-                                )}
-                              </td>
+                              <td className="py-1.5 px-2">{rotuloGrupo(i.grupo_faturamento)}</td>
                               <td className="py-1.5 px-2 text-right font-semibold text-emerald-700">
                                 {formatarMoeda(valor(i))}
                               </td>
-                              {podeEditar && <td className="py-1.5 px-2 text-center">{botaoExcluir(i)}</td>}
                             </tr>
                           ))}
                         </tbody>
