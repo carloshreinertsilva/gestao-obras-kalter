@@ -86,8 +86,6 @@ export const formatarCompetencia = (competencia: any) => {
   return `${meses[data.getUTCMonth()]}/${String(data.getUTCFullYear()).slice(-2)}`;
 };
 
-export const codigoGrupoFaturamento = (valor: any) => String(valor || "").trim();
-
 export const selecionarTextoAoFocar = (e: FocusEvent<HTMLInputElement>) => {
   e.currentTarget.select();
 };
