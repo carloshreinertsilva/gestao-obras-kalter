@@ -5198,7 +5198,7 @@ export default function App() {
                       <div className="flex justify-between items-center border-b pb-2">
                         <span>Saldo a receber</span>
                         <span className="font-bold text-amber-700">
-                          {formatarMoeda(saldoReceberParcelas)}
+                          {formatarMoeda(Math.max(saldoReceberParcelas, 0))}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
@@ -5239,7 +5239,7 @@ export default function App() {
                       Saldo a Receber
                     </p>
                     <p className="text-2xl font-bold text-amber-700">
-                      {formatarMoeda(saldoReceberParcelas)}
+                      {formatarMoeda(Math.max(saldoReceberParcelas, 0))}
                     </p>
                   </div>
                   <div
@@ -5524,7 +5524,7 @@ export default function App() {
                       À Faturar
                     </p>
                     <p className="text-2xl font-bold text-amber-700">
-                      {formatarMoeda(saldoFaturarFamilias)}
+                      {formatarMoeda(saldoFaturarFamiliasPositivo)}
                     </p>
                   </div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
@@ -5580,10 +5580,12 @@ export default function App() {
                           </tr>
                         ) : (
                           gruposFaturamentoResumo.map((linha) => {
-                            const saldoGrupo =
+                            const saldoGrupo = Math.max(
+                              0,
                               Math.round(
                                 (linha.valorEscopo - linha.valorFaturado) * 100,
-                              ) / 100 || 0;
+                              ) / 100 || 0,
+                            );
                             return (
                               <tr
                                 key={linha.grupo.id}
@@ -5614,14 +5616,10 @@ export default function App() {
                                     linha.valorEscopo,
                                   )}
                                 </td>
-                                <td
-                                  className={`p-3 text-right font-bold whitespace-nowrap ${saldoGrupo < 0 ? "text-red-600" : "text-amber-700"}`}
-                                >
+                                <td className="p-3 text-right font-bold whitespace-nowrap text-amber-700">
                                   {formatarMoeda(saldoGrupo)}
                                 </td>
-                                <td
-                                  className={`p-3 text-right font-semibold whitespace-nowrap ${saldoGrupo < 0 ? "text-red-600" : "text-amber-700"}`}
-                                >
+                                <td className="p-3 text-right font-semibold whitespace-nowrap text-amber-700">
                                   {formatarPercentual(saldoGrupo, linha.valorEscopo)}
                                 </td>
                               </tr>
