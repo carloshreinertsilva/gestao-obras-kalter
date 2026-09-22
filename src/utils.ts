@@ -88,14 +88,6 @@ export const formatarCompetencia = (competencia: any) => {
 
 export const codigoGrupoFaturamento = (valor: any) => String(valor || "").trim();
 
-// O grupo de faturamento tem sempre a máscara XX.XXX.XXXX (ex: 40.180.1256). Sufixos
-// como ".01" e ".02" só indicam itens em que o faturamento do grupo foi dividido.
-export const grupoBaseFaturamento = (valor: any) =>
-  codigoGrupoFaturamento(valor).split(".").slice(0, 3).join(".");
-
-export const sufixoItemGrupo = (valor: any) =>
-  codigoGrupoFaturamento(valor).split(".").slice(3).join(".");
-
 export const selecionarTextoAoFocar = (e: FocusEvent<HTMLInputElement>) => {
   e.currentTarget.select();
 };

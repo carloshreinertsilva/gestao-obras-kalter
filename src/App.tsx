@@ -51,7 +51,6 @@ import {
   labelOcorrencia,
   compararCodigoFamilia,
   formatarPercentual,
-  grupoBaseFaturamento,
 } from "./utils";
 import {
   BarChart,
@@ -355,17 +354,6 @@ export default function App() {
     gruposFaturamentoObra
       .filter((g) => g.ativo !== false)
       .sort((a, b) => String(a.codigo || "").localeCompare(String(b.codigo || "")));
-
-  const labelGrupoFaturamento = (codigo: any) => {
-    const base = grupoBaseFaturamento(codigo);
-    if (!base) return "Sem grupo";
-
-    const grupo = gruposFaturamentoObra.find(
-      (g) => codigoGrupoFaturamento(g.codigo) === base,
-    );
-
-    return grupo?.descricao ? `${base} - ${grupo.descricao}` : base;
-  };
 
   const grupoFaturamentoPorId = (idGrupo: any) =>
     gruposFaturamentoObra.find((g) => String(g.id) === String(idGrupo));
@@ -3556,73 +3544,60 @@ export default function App() {
     ),
   ).sort();
 
-  const nomeGrupoFaturamento = (familia: any) =>
-    grupoBaseFaturamento(familia?.grupo_faturamento) || "Sem grupo";
+  // Uma família pode abranger vários materiais/grupos do pedido (ex: obra 1256, família
+  // 40/180, tem 3 materiais). obra_faturamento_familias so guarda 1 grupo por linha, entao
+  // usamos as previsões (1 linha por material, ja granular como no ERP) para achar a
+  // família REAL de cada grupo, em vez do campo unico e as vezes desatualizado da família.
+  const familiaPorGrupoFaturamento = (() => {
+    const mapa = new Map<string, any>();
+    for (const p of previsoesFaturamento) {
+      if (p.grupo_faturamento && !mapa.has(p.grupo_faturamento)) {
+        const familia = familiasFaturamento.find(
+          (f) => f.id === p.id_obra_faturamento_familia,
+        );
+        if (familia) mapa.set(p.grupo_faturamento, familia);
+      }
+    }
+    for (const f of familiasFaturamento) {
+      const grupo = grupoFaturamentoPorId(f.id_grupo_faturamento);
+      if (grupo?.codigo && !mapa.has(grupo.codigo)) mapa.set(grupo.codigo, f);
+    }
+    return mapa;
+  })();
 
-  const valorTotalGrupoCadastrado = (codigoGrupo: string) => {
-    const grupo = gruposFaturamentoObra.find(
-      (g) => codigoGrupoFaturamento(g.codigo) === codigoGrupoFaturamento(codigoGrupo),
-    );
-    return Number(grupo?.valor_total_grupo || 0);
-  };
-
-  const gruposFaturamentoResumo = Array.from(
-    familiasFaturamentoComEscopo
-      .reduce((mapa: Map<string, any>, familia: any) => {
-        const grupo = nomeGrupoFaturamento(familia);
-        const atual = mapa.get(grupo) || {
-          nome: grupo,
-          label: labelGrupoFaturamento(grupo),
-          valorGrupo: valorTotalGrupoCadastrado(grupo),
-          quantidadeFamilias: 0,
-          valorEscopo: 0,
-          valorFaturado: 0,
-        };
-
-        atual.quantidadeFamilias += 1;
-        atual.valorEscopo += Number(familia.valor_total_escopo || 0);
-        atual.valorFaturado += realizadosFaturamentoDoEscopo
-          .filter((realizado: any) => realizado.id_obra_faturamento_familia === familia.id)
-          .reduce((acc, realizado: any) => acc + Number(realizado.valor_realizado || 0), 0);
-
-        mapa.set(grupo, atual);
-        return mapa;
-      }, new Map<string, any>())
-      .values(),
-  ).sort((a: any, b: any) => String(a.nome).localeCompare(String(b.nome)));
-
-  const familiasDoGrupoFaturamento = (grupo: string) =>
-    familiasFaturamentoComEscopo.filter(
-      (familia: any) => nomeGrupoFaturamento(familia) === grupo,
+  const gruposFaturamentoResumo = gruposFaturamentoAtivos()
+    .filter((g) => Number(g.valor_total_grupo || 0) > 0)
+    .map((g) => ({
+      grupo: g,
+      familia: familiaPorGrupoFaturamento.get(g.codigo || ""),
+      valorEscopo: Number(g.valor_total_grupo || 0),
+      valorFaturado: realizadosFaturamentoDoEscopo
+        .filter((r) => r.grupo_faturamento === g.codigo)
+        .reduce((acc, r) => acc + Number(r.valor_realizado || 0), 0),
+    }))
+    .sort((a, b) =>
+      String(a.grupo.codigo).localeCompare(String(b.grupo.codigo), "pt-BR", {
+        numeric: true,
+      }),
     );
 
-  const valorPrevistoGrupoCompetencia = (grupo: string, competencia: string) => {
-    const idsFamiliasDoGrupo = new Set(
-      familiasDoGrupoFaturamento(grupo).map((familia: any) => familia.id),
-    );
-
-    return previsoesFaturamentoDoEscopo
+  const valorPrevistoGrupoCompetencia = (grupoCodigo: string, competencia: string) =>
+    previsoesFaturamentoDoEscopo
       .filter(
         (previsao: any) =>
-          idsFamiliasDoGrupo.has(previsao.id_obra_faturamento_familia) &&
+          previsao.grupo_faturamento === grupoCodigo &&
           String(previsao.competencia || "").slice(0, 10) === competencia,
       )
       .reduce((acc, previsao: any) => acc + Number(previsao.valor_previsto || 0), 0);
-  };
 
-  const valorRealizadoGrupoCompetencia = (grupo: string, competencia: string) => {
-    const idsFamiliasDoGrupo = new Set(
-      familiasDoGrupoFaturamento(grupo).map((familia: any) => familia.id),
-    );
-
-    return realizadosFaturamentoDoEscopo
+  const valorRealizadoGrupoCompetencia = (grupoCodigo: string, competencia: string) =>
+    realizadosFaturamentoDoEscopo
       .filter(
         (realizado: any) =>
-          idsFamiliasDoGrupo.has(realizado.id_obra_faturamento_familia) &&
+          realizado.grupo_faturamento === grupoCodigo &&
           String(realizado.competencia || "").slice(0, 10) === competencia,
       )
       .reduce((acc, realizado: any) => acc + Number(realizado.valor_realizado || 0), 0);
-  };
 
   const totalPrevistoCompetencia = (competencia: string) =>
     previsoesFaturamentoDoEscopo
@@ -3632,11 +3607,6 @@ export default function App() {
   const totalRealizadoCompetencia = (competencia: string) =>
     realizadosFaturamentoDoEscopo
       .filter((r) => String(r.competencia || "").slice(0, 10) === competencia)
-      .reduce((acc, r) => acc + Number(r.valor_realizado || 0), 0);
-
-  const valorRealizadoFamilia = (familiaId: string) =>
-    realizadosFaturamento
-      .filter((r) => r.id_obra_faturamento_familia === familiaId)
       .reduce((acc, r) => acc + Number(r.valor_realizado || 0), 0);
 
   const estiloStatusPMIS = (status: string) => {
@@ -6662,7 +6632,7 @@ export default function App() {
                               se a função de regularização foi executada.
                             </td>
                           </tr>
-                        ) : familiasFaturamentoComEscopo.length === 0 ? (
+                        ) : gruposFaturamentoResumo.length === 0 ? (
                           <tr>
                             <td
                               colSpan={podeEditarObraSelecionada ? 8 : 7}
@@ -6674,67 +6644,70 @@ export default function App() {
                             </td>
                           </tr>
                         ) : (
-                          familiasFaturamentoComEscopo.map((familia) => {
-                            const faturadoFamilia = valorRealizadoFamilia(
-                              familia.id,
-                            );
-                            const escopoFamilia = Number(
-                              familia.valor_total_escopo || 0,
-                            );
-                            const saldoFamilia =
-                              Math.round((escopoFamilia - faturadoFamilia) * 100) /
-                                100 || 0;
+                          gruposFaturamentoResumo.map((linha) => {
+                            const saldoGrupo =
+                              Math.round(
+                                (linha.valorEscopo - linha.valorFaturado) * 100,
+                              ) / 100 || 0;
                             return (
                               <tr
-                                key={familia.id}
+                                key={linha.grupo.id}
                                 className="border-t hover:bg-slate-50"
                               >
                                 <td className="p-3 font-medium text-slate-700">
-                                  {labelGrupoFaturamento(familia.grupo_faturamento)}
+                                  {linha.grupo.codigo}
+                                  {linha.grupo.descricao
+                                    ? ` - ${linha.grupo.descricao}`
+                                    : ""}
                                 </td>
                                 <td className="p-3 font-bold text-[#2A6377]">
                                   <div>
-                                    {familia.codigo_familia} -{" "}
-                                    {familia.descricao_familia}
+                                    {linha.familia
+                                      ? `${linha.familia.codigo_familia} - ${linha.familia.descricao_familia}`
+                                      : "Sem família"}
                                   </div>
-                                  {familia.observacao && (
+                                  {linha.familia?.observacao && (
                                     <div className="text-[10px] text-slate-400 font-normal mt-1">
-                                      {familia.observacao}
+                                      {linha.familia.observacao}
                                     </div>
                                   )}
                                 </td>
                                 <td className="p-3 text-right font-bold whitespace-nowrap">
-                                  {formatarMoeda(familia.valor_total_escopo)}
+                                  {formatarMoeda(linha.valorEscopo)}
                                 </td>
                                 <td className="p-3 text-right font-bold text-emerald-700 whitespace-nowrap">
-                                  {formatarMoeda(faturadoFamilia)}
+                                  {formatarMoeda(linha.valorFaturado)}
                                 </td>
                                 <td className="p-3 text-right font-semibold text-emerald-700 whitespace-nowrap">
                                   {formatarPercentual(
-                                    faturadoFamilia,
-                                    escopoFamilia,
+                                    linha.valorFaturado,
+                                    linha.valorEscopo,
                                   )}
                                 </td>
                                 <td
-                                  className={`p-3 text-right font-bold whitespace-nowrap ${saldoFamilia < 0 ? "text-red-600" : "text-amber-700"}`}
+                                  className={`p-3 text-right font-bold whitespace-nowrap ${saldoGrupo < 0 ? "text-red-600" : "text-amber-700"}`}
                                 >
-                                  {formatarMoeda(saldoFamilia)}
+                                  {formatarMoeda(saldoGrupo)}
                                 </td>
                                 <td
-                                  className={`p-3 text-right font-semibold whitespace-nowrap ${saldoFamilia < 0 ? "text-red-600" : "text-amber-700"}`}
+                                  className={`p-3 text-right font-semibold whitespace-nowrap ${saldoGrupo < 0 ? "text-red-600" : "text-amber-700"}`}
                                 >
-                                  {formatarPercentual(saldoFamilia, escopoFamilia)}
+                                  {formatarPercentual(saldoGrupo, linha.valorEscopo)}
                                 </td>
                                 {podeEditarObraSelecionada && (
                                   <td className="p-3 text-center">
-                                    <button
-                                      onClick={() =>
-                                        abrirEdicaoFamiliaFaturamento(familia)
-                                      }
-                                      className="px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-xs font-bold hover:bg-[#1e4857] transition"
-                                    >
-                                      Ajustar
-                                    </button>
+                                    {linha.familia && (
+                                      <button
+                                        onClick={() =>
+                                          abrirEdicaoFamiliaFaturamento(
+                                            linha.familia,
+                                          )
+                                        }
+                                        className="px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-xs font-bold hover:bg-[#1e4857] transition"
+                                      >
+                                        Ajustar
+                                      </button>
+                                    )}
                                   </td>
                                 )}
                               </tr>
@@ -6753,9 +6726,8 @@ export default function App() {
                       Previsão x Realizado por Grupo de Faturamento
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">
-                      Visão consolidada por grupo de faturamento. Os valores
-                      previstos e realizados são somados a partir das famílias
-                      vinculadas a cada grupo.
+                      Uma linha por material do pedido (grupo de faturamento),
+                      exatamente como no ERP.
                     </p>
                   </div>
                   <div className="overflow-x-auto max-w-full">
@@ -6775,9 +6747,9 @@ export default function App() {
                           </th>
                           <th
                             rowSpan={2}
-                            className="p-3 text-center min-w-[90px] bg-slate-50 border-r"
+                            className="p-3 text-left min-w-[260px] bg-slate-50 border-r"
                           >
-                            Famílias
+                            Família
                           </th>
                           {competenciasFaturamento.length === 0 ? (
                             <th className="p-3 text-center min-w-[260px]">
@@ -6829,19 +6801,24 @@ export default function App() {
                             </td>
                           </tr>
                         ) : (
-                          gruposFaturamentoResumo.map((grupo: any) => (
+                          gruposFaturamentoResumo.map((linha: any) => (
                             <tr
-                              key={`grupo-matriz-${grupo.label || grupo.nome}`}
+                              key={`grupo-matriz-${linha.grupo.codigo}`}
                               className="border-t hover:bg-slate-50"
                             >
                               <td className="p-3 font-bold text-[#2A6377] sticky left-0 bg-white z-10 border-r min-w-[260px]">
-                                <div>{grupo.label || grupo.nome}</div>
+                                <div>
+                                  {linha.grupo.codigo}
+                                  {linha.grupo.descricao ? ` - ${linha.grupo.descricao}` : ""}
+                                </div>
                                 <div className="text-[10px] text-slate-400 font-normal mt-1">
-                                  Escopo: {formatarMoeda(grupo.valorEscopo)} • Faturado: {formatarMoeda(grupo.valorFaturado)}
+                                  Escopo: {formatarMoeda(linha.valorEscopo)} • Faturado: {formatarMoeda(linha.valorFaturado)}
                                 </div>
                               </td>
-                              <td className="p-3 text-center font-bold text-slate-600 border-r min-w-[90px]">
-                                {grupo.quantidadeFamilias}
+                              <td className="p-3 text-left font-medium text-slate-600 border-r min-w-[260px]">
+                                {linha.familia
+                                  ? `${linha.familia.codigo_familia} - ${linha.familia.descricao_familia}`
+                                  : "Sem família"}
                               </td>
                               {competenciasFaturamento.length === 0 ? (
                                 <td className="p-3 text-center text-slate-400">
@@ -6850,16 +6827,16 @@ export default function App() {
                               ) : (
                                 competenciasFaturamento.map((comp) => {
                                   const previsto = valorPrevistoGrupoCompetencia(
-                                    grupo.nome,
+                                    linha.grupo.codigo,
                                     comp,
                                   );
                                   const realizado = valorRealizadoGrupoCompetencia(
-                                    grupo.nome,
+                                    linha.grupo.codigo,
                                     comp,
                                   );
                                   return (
                                     <td
-                                      key={`${grupo.label || grupo.nome}-${comp}-grupo-matriz`}
+                                      key={`${linha.grupo.codigo}-${comp}-grupo-matriz`}
                                       className="p-0 border-r"
                                       colSpan={2}
                                     >

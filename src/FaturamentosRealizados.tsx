@@ -5,8 +5,6 @@ import {
   formatarDataSegura,
   formatarMoeda,
   formatarPercentual,
-  grupoBaseFaturamento,
-  sufixoItemGrupo,
 } from "./utils";
 import type {
   ObraFaturamentoFamilia,
@@ -67,20 +65,19 @@ export default function FaturamentosRealizados({
     () => new Map(familias.map((f) => [f.id, f])),
     [familias],
   );
-  // Descrição por código exato: a do grupo base (XX.XXX.XXXX) quando ele existe; senão a do
-  // próprio item (".01/.02").
+  // Descrição de cada grupo exatamente como está no pedido do ERP (cada item, mesmo com
+  // sufixo .01/.02, é um material distinto, com sua própria descrição).
   const descricaoGrupo = useMemo(
     () => new Map(grupos.map((g) => [g.codigo || "", g.descricao || ""])),
     [grupos],
   );
-  // Valor do pedido por grupo base = soma das previsões (itens do pedido no ERP), somando
-  // os itens ".01/.02". Não usar valor_total_grupo: fica inflado quando uma família
-  // concentra vários grupos.
+  // Valor do pedido por grupo = soma das previsões (itens do pedido no ERP) daquele grupo
+  // exato. Não usar valor_total_grupo: fica inflado quando uma família concentra vários grupos.
   const valorGrupoNoPedido = useMemo(() => {
     const mapa = new Map<string, number>();
     for (const p of previsoes) {
-      const base = grupoBaseFaturamento(p.grupo_faturamento);
-      mapa.set(base, (mapa.get(base) || 0) + Number(p.valor_previsto || 0));
+      const codigo = p.grupo_faturamento || "";
+      mapa.set(codigo, (mapa.get(codigo) || 0) + Number(p.valor_previsto || 0));
     }
     return mapa;
   }, [previsoes]);
@@ -113,8 +110,7 @@ export default function FaturamentosRealizados({
       return [
         r.numero_nf,
         r.grupo_faturamento,
-        descricaoGrupo.get(grupoBaseFaturamento(r.grupo_faturamento)) ||
-          descricaoGrupo.get(r.grupo_faturamento || ""),
+        descricaoGrupo.get(r.grupo_faturamento || ""),
         f?.codigo_familia,
         f?.descricao_familia,
       ].some((t) => (t || "").toLowerCase().includes(termo));
@@ -179,14 +175,11 @@ export default function FaturamentosRealizados({
   const qtdNotas = new Set(linhas.map((r) => r.numero_nf)).size;
 
   const rotuloGrupo = (codigo?: string | null) => {
-    const base = grupoBaseFaturamento(codigo);
-    const item = sufixoItemGrupo(codigo);
-    const descricao = descricaoGrupo.get(base) || descricaoGrupo.get(codigo || "");
+    const descricao = descricaoGrupo.get(codigo || "");
     return (
       <>
-        <span className="font-semibold text-slate-700">{base}</span>
+        <span className="font-semibold text-slate-700">{codigo}</span>
         {descricao && <span className="text-slate-500"> · {descricao}</span>}
-        {item && <span className="text-slate-400"> · item {item}</span>}
       </>
     );
   };
@@ -340,10 +333,10 @@ export default function FaturamentosRealizados({
                                 {pct(valor(i), n.total)}
                               </td>
                               <td
-                                className={`py-1.5 px-2 text-right font-semibold ${valor(i) > (valorGrupoNoPedido.get(grupoBaseFaturamento(i.grupo_faturamento)) || 0) + 0.05 ? "text-red-600" : "text-slate-700"}`}
-                                title={`Grupo ${grupoBaseFaturamento(i.grupo_faturamento)} no pedido: ${formatarMoeda(valorGrupoNoPedido.get(grupoBaseFaturamento(i.grupo_faturamento)) || 0)}`}
+                                className={`py-1.5 px-2 text-right font-semibold ${valor(i) > (valorGrupoNoPedido.get(i.grupo_faturamento || "") || 0) + 0.05 ? "text-red-600" : "text-slate-700"}`}
+                                title={`Grupo ${i.grupo_faturamento} no pedido: ${formatarMoeda(valorGrupoNoPedido.get(i.grupo_faturamento || "") || 0)}`}
                               >
-                                {pct(valor(i), valorGrupoNoPedido.get(grupoBaseFaturamento(i.grupo_faturamento)) || 0)}
+                                {pct(valor(i), valorGrupoNoPedido.get(i.grupo_faturamento || "") || 0)}
                               </td>
                             </tr>
                           ))}
