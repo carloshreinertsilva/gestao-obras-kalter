@@ -7,6 +7,7 @@ import {
   Mic,
   Search,
   BookOpen,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { formatarDataSegura, labelOcorrencia } from "./utils";
@@ -68,6 +69,8 @@ export default function ReunioesHistorico({
   const [ate, setAte] = useState("");
   const [busca, setBusca] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const [refrescar, setRefrescar] = useState(0);
 
   useEffect(() => {
     let cancelado = false;
@@ -100,7 +103,7 @@ export default function ReunioesHistorico({
     return () => {
       cancelado = true;
     };
-  }, [recarregar]);
+  }, [recarregar, refrescar]);
 
   const reunioes = useMemo(() => {
     const mapa = new Map<string, Reuniao>();
@@ -237,6 +240,49 @@ export default function ReunioesHistorico({
     );
   };
 
+  const excluirReuniao = async (m: Reuniao) => {
+    if (m.reunioes.length === 0) return;
+    const totalOcorrencias = m.reunioes.reduce((a, r) => a + (r.ocorrencias || []).length, 0);
+    const totalTarefas = m.reunioes.reduce((a, r) => a + (r.tarefas || []).length, 0);
+    const aviso =
+      `Excluir a reunião de ${titulo(m)}?\n\n` +
+      `${m.reunioes.length} obra(s) e ${totalOcorrencias} ocorrência(s) serão excluídas` +
+      (m.sessao?.resumo_gravacao ? ", junto com o resumo da gravação (Plaud)" : "") +
+      "." +
+      (totalTarefas > 0
+        ? `\n${totalTarefas} tarefa(s) gerada(s) NÃO serão excluídas - só ficam desvinculadas desta reunião.`
+        : "") +
+      "\n\nAnotações importadas do Bitrix não são afetadas." +
+      "\n\nEsta ação não pode ser desfeita.";
+    if (!window.confirm(aviso)) return;
+
+    setExcluindo(true);
+    try {
+      const idsReunioes = m.reunioes.map((r) => r.id);
+      const { error: erroReunioes } = await supabase
+        .from("reunioes")
+        .delete()
+        .in("id", idsReunioes);
+      if (erroReunioes) throw erroReunioes;
+
+      if (m.sessao?.id) {
+        const { error: erroSessao } = await supabase
+          .from("reunioes_sessoes")
+          .delete()
+          .eq("id", m.sessao.id);
+        if (erroSessao) throw erroSessao;
+      }
+
+      onAviso("Reunião excluída!");
+      setSelecionada(null);
+      setRefrescar((v) => v + 1);
+    } catch (error: any) {
+      onAviso(error.message, "erro");
+    } finally {
+      setExcluindo(false);
+    }
+  };
+
   return (
     <div className="w-full grid grid-cols-1 xl:grid-cols-[minmax(320px,400px)_minmax(0,1fr)] gap-4 items-start xl:flex-1 xl:min-h-0 xl:items-stretch">
       <div className="bg-white rounded-xl shadow-sm border flex flex-col min-w-0 xl:min-h-0 max-h-[70vh] xl:max-h-none">
@@ -339,6 +385,14 @@ export default function ReunioesHistorico({
                     className="px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-sm font-bold hover:bg-[#1e4857] transition flex items-center gap-2 disabled:opacity-50"
                   >
                     {enviando ? <Loader2 className="animate-spin" size={15} /> : <Mail size={15} />} Reenviar por e-mail
+                  </button>
+                  <button
+                    onClick={() => excluirReuniao(atual)}
+                    disabled={excluindo}
+                    title="Excluir reunião"
+                    className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-sm font-bold hover:bg-red-50 transition flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {excluindo ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />}
                   </button>
                 </div>
               )}
