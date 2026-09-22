@@ -1354,17 +1354,6 @@ export default function App() {
     if (!idDaObra) return;
 
     try {
-      // Garante compatibilidade com obras antigas que tinham apenas o texto
-      // grupo_faturamento gravado nos itens de escopo. A função é idempotente.
-      const { error: erroRegularizacao } = await supabase.rpc(
-        "regularizar_grupos_faturamento_obra",
-        { p_id_obra: idDaObra }
-      );
-
-      if (erroRegularizacao) {
-        console.warn("Não foi possível regularizar grupos automaticamente:", erroRegularizacao);
-      }
-
       const { data, error } = await supabase
         .from("obra_faturamento_grupos")
         .select("*")
