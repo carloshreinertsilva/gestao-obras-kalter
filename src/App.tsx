@@ -4469,7 +4469,7 @@ export default function App() {
 
       {/* MENU LATERAL (ARQUITETURA ERP) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[50] w-64 bg-[#2A6377] text-white flex flex-col shadow-2xl transition-transform duration-300 md:relative md:translate-x-0 ${menuMobileAberto ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-[50] w-64 md:w-56 2xl:w-64 bg-[#2A6377] text-white flex flex-col shadow-2xl transition-transform duration-300 md:relative md:translate-x-0 ${menuMobileAberto ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div>
           <div className="p-6 border-b border-white/10 flex flex-col items-center justify-center relative">
@@ -4597,7 +4597,7 @@ export default function App() {
       </aside>
 
       {/* CONTEÚDO PRINCIPAL */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto overflow-x-hidden bg-slate-50/50">
+      <main className="flex-1 p-4 md:p-5 2xl:p-8 overflow-y-auto overflow-x-hidden bg-slate-50/50">
         {telaAtiva === "dashboard" && (
           <div className="animate-in fade-in h-full flex flex-col gap-6">
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
@@ -4704,7 +4704,7 @@ export default function App() {
                   </p>
                 </div>
                 <div className="overflow-x-auto max-w-full">
-                  <table className="w-full text-sm min-w-[980px]">
+                  <table className="w-full text-sm min-w-[820px]">
                     <thead className="bg-slate-50 text-slate-500 uppercase text-xs">
                       <tr>
                         <th className="px-4 py-3 text-left">Obra</th>
@@ -5122,7 +5122,7 @@ export default function App() {
 
             {abaPainelObra === "resumo" && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-blue-500">
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Venda Total
@@ -5217,7 +5217,7 @@ export default function App() {
 
             {abaPainelObra === "financeiro" && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Venda Total Prevista
@@ -5385,7 +5385,7 @@ export default function App() {
                     <h3 className="font-bold text-lg">Pagamentos Cliente</h3>
                   </div>
                   <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-sm min-w-[920px]">
+                    <table className="w-full text-sm min-w-[780px]">
                       <thead className="bg-slate-50 text-slate-600">
                         <tr>
                           <th className="p-3 text-left">Item</th>
@@ -5494,7 +5494,7 @@ export default function App() {
 
             {abaPainelObra === "faturamento" && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 2xl:grid-cols-5 gap-4">
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Escopo Total
@@ -5817,7 +5817,7 @@ export default function App() {
                   </h3>
                 </div>
                 <div className="overflow-x-auto max-w-full">
-                  <table className="w-full text-sm min-w-[1120px]">
+                  <table className="w-full text-sm min-w-[820px]">
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
                         <th className="p-3 text-left">Fase</th>
@@ -6031,7 +6031,7 @@ export default function App() {
                     </h3>
                   </div>
                   <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-sm min-w-[1100px]">
+                    <table className="w-full text-sm min-w-[860px]">
                       <thead className="bg-slate-50 text-slate-600">
                         <tr>
                           <th className="p-3 text-left">Item</th>
