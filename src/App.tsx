@@ -5,6 +5,7 @@ import { fasesProjeto, perfisUsuario } from "./constants";
 import TimelineObra from "./TimelineObra";
 import FaturamentosRealizados from "./FaturamentosRealizados";
 import ReunioesHistorico from "./ReunioesHistorico";
+import ValorAjustavel from "./ValorAjustavel";
 import AnexosObra from "./AnexosObra";
 import type {
   Usuario,
@@ -4618,7 +4619,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-blue-500">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
@@ -4637,9 +4638,9 @@ export default function App() {
                   </p>
                   <DollarSign className="text-slate-500" size={22} />
                 </div>
-                <p className="text-2xl font-bold text-slate-800">
+                <ValorAjustavel className="text-2xl font-bold text-slate-800">
                   {formatarMoeda(resumoPMIS.carteiraTotal)}
-                </p>
+                </ValorAjustavel>
               </div>
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-green-500">
                 <div className="flex items-center justify-between mb-3">
@@ -4648,9 +4649,9 @@ export default function App() {
                   </p>
                   <CheckCircle2 className="text-green-500" size={22} />
                 </div>
-                <p className="text-2xl font-bold text-green-700">
+                <ValorAjustavel className="text-2xl font-bold text-green-700">
                   {formatarMoeda(resumoPMIS.recebidoTotal)}
-                </p>
+                </ValorAjustavel>
               </div>
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-orange-500">
                 <div className="flex items-center justify-between mb-3">
@@ -4659,9 +4660,9 @@ export default function App() {
                   </p>
                   <Clock className="text-orange-500" size={22} />
                 </div>
-                <p className="text-2xl font-bold text-orange-700">
+                <ValorAjustavel className="text-2xl font-bold text-orange-700">
                   {formatarMoeda(resumoPMIS.saldoReceber)}
-                </p>
+                </ValorAjustavel>
               </div>
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-red-500">
                 <div className="flex items-center justify-between mb-3">
@@ -4670,9 +4671,9 @@ export default function App() {
                   </p>
                   <AlertCircle className="text-red-500" size={22} />
                 </div>
-                <p className="text-2xl font-bold text-red-600">
+                <ValorAjustavel className="text-2xl font-bold text-red-600">
                   {formatarMoeda(resumoPMIS.valorVencido)}
-                </p>
+                </ValorAjustavel>
               </div>
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-amber-500">
                 <div className="flex items-center justify-between mb-3">
@@ -5127,17 +5128,17 @@ export default function App() {
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Venda Total
                     </p>
-                    <p className="text-2xl font-bold text-slate-800 mt-1">
+                    <ValorAjustavel className="text-2xl font-bold text-slate-800 mt-1">
                       {formatarMoeda(totalVendaGeral)}
-                    </p>
+                    </ValorAjustavel>
                   </div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-emerald-500">
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Recebido
                     </p>
-                    <p className="text-2xl font-bold text-emerald-700 mt-1">
+                    <ValorAjustavel className="text-2xl font-bold text-emerald-700 mt-1">
                       {formatarMoeda(totalRealizadoParcelas)}
-                    </p>
+                    </ValorAjustavel>
                   </div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-amber-500">
                     <p className="text-xs text-slate-400 font-bold uppercase">
@@ -5222,25 +5223,25 @@ export default function App() {
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Venda Total Prevista
                     </p>
-                    <p className="text-2xl font-bold text-slate-800">
+                    <ValorAjustavel className="text-2xl font-bold text-slate-800">
                       {formatarMoeda(totalVendaGeral)}
-                    </p>
+                    </ValorAjustavel>
                   </div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Total Recebido
                     </p>
-                    <p className="text-2xl font-bold text-emerald-700">
+                    <ValorAjustavel className="text-2xl font-bold text-emerald-700">
                       {formatarMoeda(totalRealizadoParcelas)}
-                    </p>
+                    </ValorAjustavel>
                   </div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Saldo a Receber
                     </p>
-                    <p className="text-2xl font-bold text-amber-700">
+                    <ValorAjustavel className="text-2xl font-bold text-amber-700">
                       {formatarMoeda(Math.max(saldoReceberParcelas, 0))}
-                    </p>
+                    </ValorAjustavel>
                   </div>
                   <div
                     className={`bg-white p-5 rounded-xl shadow-sm border ${valorDistribuidoExcedente > 0 ? "border-red-200 bg-red-50" : ""}`}
@@ -5499,33 +5500,33 @@ export default function App() {
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Escopo Total
                     </p>
-                    <p className="text-2xl font-bold text-slate-800">
+                    <ValorAjustavel className="text-2xl font-bold text-slate-800">
                       {formatarMoeda(totalEscopoFaturamento)}
-                    </p>
+                    </ValorAjustavel>
                   </div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Previsto
                     </p>
-                    <p className="text-2xl font-bold text-blue-700">
+                    <ValorAjustavel className="text-2xl font-bold text-blue-700">
                       {formatarMoeda(totalPrevistoFaturamento)}
-                    </p>
+                    </ValorAjustavel>
                   </div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       Faturado
                     </p>
-                    <p className="text-2xl font-bold text-emerald-700">
+                    <ValorAjustavel className="text-2xl font-bold text-emerald-700">
                       {formatarMoeda(totalRealizadoFaturamento)}
-                    </p>
+                    </ValorAjustavel>
                   </div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <p className="text-xs text-slate-400 font-bold uppercase">
                       À Faturar
                     </p>
-                    <p className="text-2xl font-bold text-amber-700">
+                    <ValorAjustavel className="text-2xl font-bold text-amber-700">
                       {formatarMoeda(saldoFaturarFamiliasPositivo)}
-                    </p>
+                    </ValorAjustavel>
                   </div>
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
                     <p className="text-xs text-slate-400 font-bold uppercase">
