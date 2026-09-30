@@ -8,6 +8,7 @@ import ReunioesHistorico from "./ReunioesHistorico";
 import ValorAjustavel from "./ValorAjustavel";
 import AnexosObra from "./AnexosObra";
 import ListaMateriaisSMA from "./ListaMateriaisSMA";
+import RentabilidadeProjeto from "./RentabilidadeProjeto";
 import type {
   Usuario,
   Obra,
@@ -22,6 +23,7 @@ import type {
   ObraFaturamentoPrevisao,
   ObraFaturamentoRealizado,
   ObraSmaMaterial,
+  ObraRentabilidadeFamilia,
 } from "./types";
 import {
   formatarDataSegura,
@@ -103,6 +105,7 @@ import {
   Receipt,
   Mic,
   Boxes,
+  TrendingUp,
 } from "lucide-react";
 
 export default function App() {
@@ -309,6 +312,9 @@ export default function App() {
     ObraFaturamentoRealizado[]
   >([]);
   const [materiaisSma, setMateriaisSma] = useState<ObraSmaMaterial[]>([]);
+  const [rentabilidadeFamilias, setRentabilidadeFamilias] = useState<
+    ObraRentabilidadeFamilia[]
+  >([]);
   // ESTADOS DE ENCERRAMENTO DA OBRA
   const [modalFinalizarObraAberto, setModalFinalizarObraAberto] =
     useState<boolean>(false);
@@ -599,6 +605,10 @@ export default function App() {
     setObraEcoSelecionada(null);
   };
   const isAdmin = usuarioAtual?.perfil === "admin";
+  // Rentabilidade (custo/margem do projeto) e informacao sensivel - so admin e
+  // engenheiro veem essa aba; assistente e logistica ficam de fora.
+  const podeVerRentabilidade =
+    usuarioAtual?.perfil === "admin" || usuarioAtual?.perfil === "engenheiro";
   // Assistente herda o escopo de obras do engenheiro ao qual está vinculado.
   const idResponsavelEscopo =
     usuarioAtual?.perfil === "assistente"
@@ -1419,6 +1429,21 @@ export default function App() {
     }
   };
 
+  const buscarRentabilidadeFamilias = async (idDaObra: any) => {
+    if (!idDaObra) return;
+    try {
+      const { data, error } = await supabase
+        .from("obra_rentabilidade_familias")
+        .select("*")
+        .eq("id_obra", idDaObra)
+        .order("codigo_projeto", { ascending: true });
+      if (error) throw error;
+      setRentabilidadeFamilias(data || []);
+    } catch (error) {
+      console.error("Erro ao buscar rentabilidade do projeto:", error);
+    }
+  };
+
 
   const salvarParcelaCliente = async () => {
     const dataPrevistaISO = dataBRParaISO(
@@ -1884,8 +1909,9 @@ export default function App() {
       buscarPrevisoesFaturamento(obraEcoSelecionada.id);
       buscarRealizadosFaturamento(obraEcoSelecionada.id);
       buscarMateriaisSma(obraEcoSelecionada.id);
+      if (podeVerRentabilidade) buscarRentabilidadeFamilias(obraEcoSelecionada.id);
     }
-  }, [reuniaoForm.id_obra, telaAtiva, obraEcoSelecionada]);
+  }, [reuniaoForm.id_obra, telaAtiva, obraEcoSelecionada, podeVerRentabilidade]);
 
   useEffect(() => {
     if (
@@ -5126,6 +5152,9 @@ export default function App() {
                       label: "Diário e Tarefas",
                       icon: ClipboardList,
                     },
+                    ...(podeVerRentabilidade
+                      ? [{ id: "rentabilidade", label: "Rentabilidade", icon: TrendingUp }]
+                      : []),
                   ].map((aba) => {
                     const IconeAba = aba.icon;
                     return (
@@ -5832,6 +5861,13 @@ export default function App() {
 
             {abaPainelObra === "lista_materiais" && (
               <ListaMateriaisSMA materiais={materiaisSma} />
+            )}
+
+            {abaPainelObra === "rentabilidade" && podeVerRentabilidade && (
+              <RentabilidadeProjeto
+                familias={rentabilidadeFamilias}
+                valorVendido={totalVendaGeral}
+              />
             )}
 
             {abaPainelObra === "cronograma" && (

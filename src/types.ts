@@ -307,3 +307,21 @@ export interface ObraSmaMaterial {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface ObraRentabilidadeFamilia {
+  id: string;
+  id_obra?: string;
+  codigo_projeto?: string;
+  descricao?: string | null;
+  eh_obra?: boolean;
+  custo_previsto?: number;
+  pedidos_em_aberto?: number;
+  pedidos_encerrados?: number;
+  requisicoes?: number;
+  lancamentos_avulsos?: number;
+  previsoes_em_aberto?: number;
+  custo_realizado?: number;
+  saldo_projetado?: number;
+  created_at?: string;
+  updated_at?: string;
+}
