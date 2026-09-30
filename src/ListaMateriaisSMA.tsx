@@ -49,15 +49,15 @@ function FiltroColuna({
 }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
-  const [rascunho, setRascunho] = useState<Set<string>>(
-    new Set(selecionado ?? opcoes.map((o) => o.valor)),
-  );
+  // Sem filtro aplicado ainda (selecionado === null), o rascunho comeca vazio - o usuario
+  // marca o que quer, ou digita uma busca pra marcar automaticamente os resultados dela.
+  const [rascunho, setRascunho] = useState<Set<string>>(new Set(selecionado ?? []));
   const ref = useRef<HTMLDivElement>(null);
   const ativo = selecionado !== null;
 
   useEffect(() => {
     if (aberto) {
-      setRascunho(new Set(selecionado ?? opcoes.map((o) => o.valor)));
+      setRascunho(new Set(selecionado ?? []));
       setBusca("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,10 +74,28 @@ function FiltroColuna({
 
   const visiveis = opcoes.filter((o) => o.rotulo.toLowerCase().includes(busca.toLowerCase()));
 
+  // Buscar marca automaticamente so os resultados da busca atual (substitui a marcacao
+  // anterior feita por busca - marcacoes manuais entre uma busca e outra nao sao mexidas).
+  useEffect(() => {
+    if (!aberto || !busca.trim()) return;
+    setRascunho(new Set(visiveis.map((o) => o.valor)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca]);
+
   const alternar = (valor: string) =>
     setRascunho((atual) => {
       const novo = new Set(atual);
       novo.has(valor) ? novo.delete(valor) : novo.add(valor);
+      return novo;
+    });
+
+  const marcarVisiveis = () =>
+    setRascunho((atual) => new Set([...atual, ...visiveis.map((o) => o.valor)]));
+
+  const desmarcarVisiveis = () =>
+    setRascunho((atual) => {
+      const novo = new Set(atual);
+      visiveis.forEach((o) => novo.delete(o.valor));
       return novo;
     });
 
@@ -111,10 +129,8 @@ function FiltroColuna({
             autoFocus
           />
           <div className="flex justify-between text-[11px] text-violet-700 font-bold mb-1 px-0.5">
-            <button onClick={() => setRascunho(new Set(opcoes.map((o) => o.valor)))}>
-              Marcar todos
-            </button>
-            <button onClick={() => setRascunho(new Set())}>Desmarcar todos</button>
+            <button onClick={marcarVisiveis}>Marcar todos</button>
+            <button onClick={desmarcarVisiveis}>Desmarcar todos</button>
           </div>
           <div className="max-h-48 overflow-y-auto space-y-0.5">
             {visiveis.length === 0 ? (
