@@ -7,6 +7,7 @@ import FaturamentosRealizados from "./FaturamentosRealizados";
 import ReunioesHistorico from "./ReunioesHistorico";
 import ValorAjustavel from "./ValorAjustavel";
 import AnexosObra from "./AnexosObra";
+import ListaMateriaisSMA from "./ListaMateriaisSMA";
 import type {
   Usuario,
   Obra,
@@ -20,6 +21,7 @@ import type {
   ObraFaturamentoGrupo,
   ObraFaturamentoPrevisao,
   ObraFaturamentoRealizado,
+  ObraSmaMaterial,
 } from "./types";
 import {
   formatarDataSegura,
@@ -100,6 +102,7 @@ import {
   DollarSign,
   Receipt,
   Mic,
+  Boxes,
 } from "lucide-react";
 
 export default function App() {
@@ -305,6 +308,7 @@ export default function App() {
   const [realizadosFaturamento, setRealizadosFaturamento] = useState<
     ObraFaturamentoRealizado[]
   >([]);
+  const [materiaisSma, setMateriaisSma] = useState<ObraSmaMaterial[]>([]);
   // ESTADOS DE ENCERRAMENTO DA OBRA
   const [modalFinalizarObraAberto, setModalFinalizarObraAberto] =
     useState<boolean>(false);
@@ -1400,6 +1404,21 @@ export default function App() {
     }
   };
 
+  const buscarMateriaisSma = async (idDaObra: any) => {
+    if (!idDaObra) return;
+    try {
+      const { data, error } = await supabase
+        .from("obra_sma_materiais")
+        .select("*")
+        .eq("id_obra", idDaObra)
+        .order("nr_sma", { ascending: false });
+      if (error) throw error;
+      setMateriaisSma(data || []);
+    } catch (error) {
+      console.error("Erro ao buscar lista de materiais (SMA):", error);
+    }
+  };
+
 
   const salvarParcelaCliente = async () => {
     const dataPrevistaISO = dataBRParaISO(
@@ -1864,6 +1883,7 @@ export default function App() {
       buscarGruposFaturamentoObra(obraEcoSelecionada.id);
       buscarPrevisoesFaturamento(obraEcoSelecionada.id);
       buscarRealizadosFaturamento(obraEcoSelecionada.id);
+      buscarMateriaisSma(obraEcoSelecionada.id);
     }
   }, [reuniaoForm.id_obra, telaAtiva, obraEcoSelecionada]);
 
@@ -5098,6 +5118,7 @@ export default function App() {
                     { id: "resumo", label: "Resumo", icon: LayoutDashboard },
                     { id: "financeiro", label: "Financeiro", icon: DollarSign },
                     { id: "faturamento", label: "Faturamento", icon: Receipt },
+                    { id: "lista_materiais", label: "Lista de Materiais", icon: Boxes },
                     { id: "cronograma", label: "Cronograma", icon: Calendar },
                     { id: "documentos", label: "Documentos", icon: FileText },
                     {
@@ -5807,6 +5828,10 @@ export default function App() {
                   grupos={gruposFaturamentoObra}
                 />
               </div>
+            )}
+
+            {abaPainelObra === "lista_materiais" && (
+              <ListaMateriaisSMA materiais={materiaisSma} />
             )}
 
             {abaPainelObra === "cronograma" && (

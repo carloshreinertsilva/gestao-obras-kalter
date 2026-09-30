@@ -282,3 +282,28 @@ export interface ObraFaturamentoRealizado {
   created_at?: string;
   updated_at?: string;
 }
+
+export type SituacaoSma = "A" | "E" | "C";
+
+export interface ObraSmaMaterial {
+  id: string;
+  id_obra?: string;
+  nr_sma?: number;
+  cod_mater?: number;
+  sequencia?: number;
+  codigo_material?: string | null;
+  descricao_material?: string | null;
+  quantidade_solicitada?: number | null;
+  quantidade_atendida?: number | null;
+  projeto_sma?: string | null;
+  tipo_movimento_codigo?: number | null;
+  tipo_movimento_descricao?: string | null;
+  solicitante?: string | null;
+  situacao?: SituacaoSma | string;
+  urgente?: boolean;
+  data_cadastro?: string | null;
+  data_necessidade?: string | null;
+  observacao?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
