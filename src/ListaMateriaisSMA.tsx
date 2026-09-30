@@ -183,6 +183,7 @@ type ColunaOrdenavel =
   | "nr_sma"
   | "codigo_material"
   | "quantidade_solicitada"
+  | "saldo_a_atender"
   | "projeto_sma"
   | "tipo_movimento_descricao"
   | "solicitante"
@@ -191,12 +192,21 @@ type ColunaOrdenavel =
   | "data_necessidade"
   | "observacao";
 
+// Saldo so faz sentido pra SMA ativa: encerrada ja foi atendida e cancelada nao vai mais
+// ser atendida - nesses casos nao ha "pendencia" pro gestor acompanhar.
+const saldoAtender = (m: ObraSmaMaterial): number | null => {
+  if ((m.situacao || "A") !== "A") return null;
+  return Math.max((Number(m.quantidade_solicitada) || 0) - (Number(m.quantidade_atendida) || 0), 0);
+};
+
 const valorOrdenacao = (m: ObraSmaMaterial, coluna: ColunaOrdenavel): string | number => {
   switch (coluna) {
     case "nr_sma":
       return m.nr_sma ?? 0;
     case "quantidade_solicitada":
       return Number(m.quantidade_solicitada) || 0;
+    case "saldo_a_atender":
+      return saldoAtender(m) ?? -1;
     default:
       return m[coluna] ?? "";
   }
@@ -329,6 +339,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
       "Código do Material",
       "Descrição",
       "Qtd. Solicitada",
+      "Saldo a Atender",
       "Projeto",
       "Tipo de Movimento",
       "Solicitante",
@@ -343,6 +354,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
       m.codigo_material || "",
       m.descricao_material || "",
       formatarQtd(m.quantidade_solicitada),
+      saldoAtender(m) === null ? "" : formatarQtd(saldoAtender(m)),
       m.projeto_sma || "",
       m.tipo_movimento_descricao || "",
       m.solicitante || "",
@@ -502,7 +514,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
           </div>
         </div>
         <div className="overflow-x-auto max-w-full">
-          <table className="w-full text-sm min-w-[940px]">
+          <table className="w-full text-sm min-w-[1040px]">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="p-3 text-left whitespace-nowrap">
@@ -531,6 +543,14 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                   <CabecalhoOrdenavel
                     rotulo="Qtd. Solicitada"
                     coluna="quantidade_solicitada"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
+                </th>
+                <th className="p-3 text-right">
+                  <CabecalhoOrdenavel
+                    rotulo="Saldo a Atender"
+                    coluna="saldo_a_atender"
                     ordenacao={ordenacao}
                     onClick={alternarOrdenacao}
                   />
@@ -611,7 +631,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
             <tbody>
               {filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-6 text-center text-slate-500">
+                  <td colSpan={11}className="p-6 text-center text-slate-500">
                     {materiais.length === 0
                       ? "Nenhuma SMA importada do ERP para esta obra."
                       : "Nenhum item encontrado para o filtro atual."}
@@ -634,6 +654,11 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                     </td>
                     <td className="p-3 text-right whitespace-nowrap">
                       {formatarQtd(m.quantidade_solicitada)}
+                    </td>
+                    <td
+                      className={`p-3 text-right whitespace-nowrap ${saldoAtender(m) ? "font-bold text-amber-700" : "text-slate-400"}`}
+                    >
+                      {saldoAtender(m) === null ? "-" : formatarQtd(saldoAtender(m))}
                     </td>
                     <td className="p-3 text-slate-600 whitespace-nowrap">{m.projeto_sma || "-"}</td>
                     <td className="p-3 text-slate-600 whitespace-nowrap">

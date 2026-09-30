@@ -53,7 +53,19 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
     }));
 
   const obraRow = useMemo(() => familias.find((f) => f.eh_obra) || null, [familias]);
-  const familiasLista = useMemo(() => familias.filter((f) => !f.eh_obra), [familias]);
+  // Familia sem nenhum valor (previsto, realizado ou em aberto) nao entra na tela - so
+  // ocupa espaco. Nao altera nenhum total, ja que todos os campos dela sao zero.
+  const familiasLista = useMemo(
+    () =>
+      familias.filter(
+        (f) =>
+          !f.eh_obra &&
+          [f.custo_previsto, f.custo_realizado, f.previsoes_em_aberto, f.pedidos_em_aberto].some(
+            (v) => Math.abs(Number(v || 0)) >= 0.005,
+          ),
+      ),
+    [familias],
+  );
 
   const panorama = useMemo(() => {
     // Custo Previsto vem da SOMA das familias, nao do campo "topo" do ERP
@@ -65,8 +77,22 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
     const custoRealizado = somar(familias, "custo_realizado");
     const previsoesEmAberto = somar(familias, "previsoes_em_aberto");
     const resultadoProjetado = custoPrevisto - custoRealizado - previsoesEmAberto;
-    return { custoPrevisto, custoRealizado, previsoesEmAberto, resultadoProjetado };
-  }, [familias, familiasLista]);
+    const rentabilidadeOriginal =
+      valorVendido > 0 ? ((valorVendido - custoPrevisto) / valorVendido) * 100 : 0;
+    const rentabilidadeAtual =
+      valorVendido > 0
+        ? ((valorVendido - (custoRealizado + previsoesEmAberto)) / valorVendido) * 100
+        : 0;
+    return {
+      custoPrevisto,
+      custoRealizado,
+      previsoesEmAberto,
+      resultadoProjetado,
+      rentabilidadeOriginal,
+      rentabilidadeAtual,
+      delta: rentabilidadeAtual - rentabilidadeOriginal,
+    };
+  }, [familias, familiasLista, valorVendido]);
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -182,6 +208,36 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
         </div>
       </div>
 
+      <div className="bg-white p-5 rounded-xl shadow-sm border">
+        <p className="text-xs text-slate-400 font-bold uppercase mb-3">
+          Rentabilidade sobre o valor vendido
+        </p>
+        <div className="flex flex-wrap items-end gap-8">
+          <div>
+            <p className="text-[11px] text-slate-400">Original (venda − custo previsto)</p>
+            <p className="text-2xl font-bold text-slate-800">
+              {panorama.rentabilidadeOriginal.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-400">Atual (venda − realizado − previsões)</p>
+            <p className="text-2xl font-bold text-slate-800">
+              {panorama.rentabilidadeAtual.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
+            </p>
+          </div>
+          <div
+            className={`flex items-center gap-1.5 text-sm font-bold px-2.5 py-1 rounded-lg ${panorama.delta < 0 ? "text-red-700 bg-red-50" : "text-emerald-700 bg-emerald-50"}`}
+          >
+            {panorama.delta < 0 ? "▼" : "▲"}{" "}
+            {Math.abs(panorama.delta).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} p.p.
+          </div>
+        </div>
+        <p className="text-[11px] text-slate-400 mt-2">
+          Estimativa: considera o que já foi realizado e comprometido (pedidos + previsões de
+          pagamento) no lugar do orçamento original.
+        </p>
+      </div>
+
       <div className="inline-flex rounded-lg border overflow-hidden text-sm bg-white">
         {(
           [
@@ -200,13 +256,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
       </div>
 
       {aba === "grafico" && (
-        <GraficoRentabilidade
-          familias={familias}
-          valorVendido={valorVendido}
-          custoPrevisto={panorama.custoPrevisto}
-          custoRealizado={panorama.custoRealizado}
-          previsoesEmAberto={panorama.previsoesEmAberto}
-        />
+        <GraficoRentabilidade familias={familiasLista} />
       )}
 
       {aba === "tabela" && (
