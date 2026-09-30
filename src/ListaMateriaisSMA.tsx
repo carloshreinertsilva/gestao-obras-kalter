@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp, Download, Filter, Search } from "lucide-react";
 import { formatarDataSegura } from "./utils";
 import type { ObraSmaMaterial, SituacaoSma } from "./types";
@@ -49,7 +50,9 @@ function FiltroColuna({
 }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const gatilhoRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const ativo = selecionado !== null;
   // Sem filtro aplicado (null) equivale a nada marcado. A busca so filtra a lista aqui
   // embaixo - marcar/desmarcar aplica na hora, sem precisar de um botao "Aplicar".
@@ -59,10 +62,30 @@ function FiltroColuna({
     if (aberto) setBusca("");
   }, [aberto]);
 
+  // O popover e renderizado num portal (fora da tabela) e posicionado via coordenadas,
+  // em vez de "position: absolute" dentro da tabela: a tabela tem overflow-x-auto, e o
+  // navegador promove automaticamente overflow-y pra "auto" nesse caso (regra do CSS
+  // Overflow) - quando o filtro aplicado na hora encolhia a tabela pra 1 linha, esse
+  // overflow-y escondia o proprio popover (ainda aberto) junto com o resto da lista.
+  const abrir = () => {
+    const r = gatilhoRef.current?.getBoundingClientRect();
+    if (r) {
+      const largura = 224; // w-56
+      setPos({
+        top: r.bottom + 4,
+        left: Math.min(r.left, window.innerWidth - largura - 8),
+      });
+    }
+    setAberto(true);
+  };
+
   useEffect(() => {
     if (!aberto) return;
     const fechar = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false);
+      const alvo = e.target as Node;
+      if (gatilhoRef.current?.contains(alvo)) return;
+      if (popoverRef.current?.contains(alvo)) return;
+      setAberto(false);
     };
     document.addEventListener("mousedown", fechar);
     return () => document.removeEventListener("mousedown", fechar);
@@ -97,54 +120,61 @@ function FiltroColuna({
   };
 
   return (
-    <span className="relative inline-block ml-1 normal-case font-normal" ref={ref}>
+    <span className="relative inline-block ml-1 normal-case font-normal">
       <button
-        onClick={() => setAberto((v) => !v)}
+        ref={gatilhoRef}
+        onClick={() => (aberto ? setAberto(false) : abrir())}
         className={`align-middle p-0.5 rounded transition ${ativo ? "text-[#2A6377]" : "text-slate-300 hover:text-slate-500"}`}
         title="Filtrar"
       >
         <Filter size={12} fill={ativo ? "currentColor" : "none"} />
       </button>
-      {aberto && (
-        <div className="absolute z-20 top-full left-0 mt-1 w-56 bg-white border rounded-lg shadow-xl p-2 text-left">
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar..."
-            className="w-full border rounded px-2 py-1 text-xs mb-2 outline-none"
-            autoFocus
-          />
-          <div className="flex justify-between text-[11px] text-violet-700 font-bold mb-1 px-0.5">
-            <button onClick={marcarVisiveis}>Marcar todos</button>
-            <button onClick={desmarcarVisiveis}>Desmarcar todos</button>
-          </div>
-          <div className="max-h-48 overflow-y-auto space-y-0.5">
-            {visiveis.length === 0 ? (
-              <p className="text-xs text-slate-400 p-1">Nenhum valor.</p>
-            ) : (
-              visiveis.map((o) => (
-                <label
-                  key={o.valor}
-                  className="flex items-center gap-2 text-xs text-slate-700 px-0.5 py-0.5 rounded hover:bg-slate-50 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={marcados.has(o.valor)}
-                    onChange={() => alternar(o.valor)}
-                  />
-                  <span className="truncate">{o.rotulo}</span>
-                </label>
-              ))
-            )}
-          </div>
-          <div className="flex justify-end mt-2 pt-2 border-t">
-            <button onClick={limpar} className="text-xs text-slate-500 font-semibold">
-              Limpar filtro
-            </button>
-          </div>
-        </div>
-      )}
+      {aberto &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999 }}
+            className="w-56 bg-white border rounded-lg shadow-xl p-2 text-left"
+          >
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar..."
+              className="w-full border rounded px-2 py-1 text-xs mb-2 outline-none"
+              autoFocus
+            />
+            <div className="flex justify-between text-[11px] text-violet-700 font-bold mb-1 px-0.5">
+              <button onClick={marcarVisiveis}>Marcar todos</button>
+              <button onClick={desmarcarVisiveis}>Desmarcar todos</button>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-0.5">
+              {visiveis.length === 0 ? (
+                <p className="text-xs text-slate-400 p-1">Nenhum valor.</p>
+              ) : (
+                visiveis.map((o) => (
+                  <label
+                    key={o.valor}
+                    className="flex items-center gap-2 text-xs text-slate-700 px-0.5 py-0.5 rounded hover:bg-slate-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={marcados.has(o.valor)}
+                      onChange={() => alternar(o.valor)}
+                    />
+                    <span className="truncate">{o.rotulo}</span>
+                  </label>
+                ))
+              )}
+            </div>
+            <div className="flex justify-end mt-2 pt-2 border-t">
+              <button onClick={limpar} className="text-xs text-slate-500 font-semibold">
+                Limpar filtro
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
     </span>
   );
 }
