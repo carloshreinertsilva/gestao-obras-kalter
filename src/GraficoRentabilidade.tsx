@@ -154,25 +154,18 @@ export default function GraficoRentabilidade({
                 dataKey="nome"
                 tick={(props) => {
                   const { x, y, payload } = props;
-                  const eGeral = payload.value === "GERAL";
+                  // So a familia (depois do ultimo ponto) - "2098.100" -> "100" - senao
+                  // o codigo completo nao cabe com ~37 familias na tela. O nome inteiro
+                  // continua disponivel no tooltip ao passar o mouse.
+                  const rotuloCurto = String(payload.value).split(".").pop();
                   return (
-                    <text
-                      x={x}
-                      y={y}
-                      dy={12}
-                      textAnchor="middle"
-                      fontSize={11}
-                      fontWeight={eGeral ? 700 : 400}
-                      fill={eGeral ? "#0b0b0b" : "#898781"}
-                    >
-                      {payload.value}
+                    <text x={x} y={y} dy={10} textAnchor="middle" fontSize={11} fill="#898781">
+                      {rotuloCurto}
                     </text>
                   );
                 }}
                 interval={0}
-                height={50}
-                angle={-45}
-                textAnchor="end"
+                height={28}
               />
               <YAxis
                 tickFormatter={(v) => formatarCompacto(v)}
