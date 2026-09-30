@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Filter, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Filter, Search } from "lucide-react";
 import { formatarDataSegura } from "./utils";
 import type { ObraSmaMaterial, SituacaoSma } from "./types";
 
@@ -49,18 +49,14 @@ function FiltroColuna({
 }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
-  // Sem filtro aplicado ainda (selecionado === null), o rascunho comeca vazio - o usuario
-  // marca o que quer, ou digita uma busca pra marcar automaticamente os resultados dela.
-  const [rascunho, setRascunho] = useState<Set<string>>(new Set(selecionado ?? []));
   const ref = useRef<HTMLDivElement>(null);
   const ativo = selecionado !== null;
+  // Sem filtro aplicado (null) equivale a nada marcado. A busca so filtra a lista aqui
+  // embaixo - marcar/desmarcar aplica na hora, sem precisar de um botao "Aplicar".
+  const marcados = selecionado ?? new Set<string>();
 
   useEffect(() => {
-    if (aberto) {
-      setRascunho(new Set(selecionado ?? []));
-      setBusca("");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (aberto) setBusca("");
   }, [aberto]);
 
   useEffect(() => {
@@ -74,34 +70,25 @@ function FiltroColuna({
 
   const visiveis = opcoes.filter((o) => o.rotulo.toLowerCase().includes(busca.toLowerCase()));
 
-  // Buscar marca automaticamente so os resultados da busca atual (substitui a marcacao
-  // anterior feita por busca - marcacoes manuais entre uma busca e outra nao sao mexidas).
-  useEffect(() => {
-    if (!aberto || !busca.trim()) return;
-    setRascunho(new Set(visiveis.map((o) => o.valor)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca]);
+  // Set vazio volta a ser "sem filtro" (null) - mostra tudo, em vez de nao mostrar nada.
+  const definir = (novo: Set<string>) => onChange(novo.size === 0 ? null : novo);
 
-  const alternar = (valor: string) =>
-    setRascunho((atual) => {
-      const novo = new Set(atual);
-      novo.has(valor) ? novo.delete(valor) : novo.add(valor);
-      return novo;
-    });
+  const alternar = (valor: string) => {
+    const novo = new Set(marcados);
+    novo.has(valor) ? novo.delete(valor) : novo.add(valor);
+    definir(novo);
+  };
 
-  const marcarVisiveis = () =>
-    setRascunho((atual) => new Set([...atual, ...visiveis.map((o) => o.valor)]));
+  const marcarVisiveis = () => {
+    const novo = new Set(marcados);
+    visiveis.forEach((o) => novo.add(o.valor));
+    definir(novo);
+  };
 
-  const desmarcarVisiveis = () =>
-    setRascunho((atual) => {
-      const novo = new Set(atual);
-      visiveis.forEach((o) => novo.delete(o.valor));
-      return novo;
-    });
-
-  const aplicar = () => {
-    onChange(rascunho.size >= opcoes.length ? null : new Set(rascunho));
-    setAberto(false);
+  const desmarcarVisiveis = () => {
+    const novo = new Set(marcados);
+    visiveis.forEach((o) => novo.delete(o.valor));
+    definir(novo);
   };
 
   const limpar = () => {
@@ -143,7 +130,7 @@ function FiltroColuna({
                 >
                   <input
                     type="checkbox"
-                    checked={rascunho.has(o.valor)}
+                    checked={marcados.has(o.valor)}
                     onChange={() => alternar(o.valor)}
                   />
                   <span className="truncate">{o.rotulo}</span>
@@ -151,20 +138,65 @@ function FiltroColuna({
               ))
             )}
           </div>
-          <div className="flex justify-between gap-2 mt-2 pt-2 border-t">
+          <div className="flex justify-end mt-2 pt-2 border-t">
             <button onClick={limpar} className="text-xs text-slate-500 font-semibold">
-              Limpar
-            </button>
-            <button
-              onClick={aplicar}
-              className="text-xs bg-[#2A6377] text-white font-bold px-3 py-1 rounded"
-            >
-              Aplicar
+              Limpar filtro
             </button>
           </div>
         </div>
       )}
     </span>
+  );
+}
+
+type ColunaOrdenavel =
+  | "nr_sma"
+  | "codigo_material"
+  | "quantidade_solicitada"
+  | "projeto_sma"
+  | "tipo_movimento_descricao"
+  | "solicitante"
+  | "situacao"
+  | "data_cadastro"
+  | "data_necessidade"
+  | "observacao";
+
+const valorOrdenacao = (m: ObraSmaMaterial, coluna: ColunaOrdenavel): string | number => {
+  switch (coluna) {
+    case "nr_sma":
+      return m.nr_sma ?? 0;
+    case "quantidade_solicitada":
+      return Number(m.quantidade_solicitada) || 0;
+    default:
+      return m[coluna] ?? "";
+  }
+};
+
+function CabecalhoOrdenavel({
+  rotulo,
+  coluna,
+  ordenacao,
+  onClick,
+}: {
+  rotulo: string;
+  coluna: ColunaOrdenavel;
+  ordenacao: { coluna: ColunaOrdenavel; direcao: "asc" | "desc" } | null;
+  onClick: (coluna: ColunaOrdenavel) => void;
+}) {
+  const ativa = ordenacao?.coluna === coluna;
+  return (
+    <button
+      onClick={() => onClick(coluna)}
+      className={`inline-flex items-center gap-0.5 hover:text-[#2A6377] transition ${ativa ? "text-[#2A6377]" : ""}`}
+    >
+      {rotulo}
+      {ativa &&
+        (ordenacao!.direcao === "asc" ? (
+          <ChevronUp size={12} strokeWidth={3} />
+        ) : (
+          <ChevronDown size={12} strokeWidth={3} />
+        ))}
+    </button>
   );
 }
 
@@ -176,6 +208,17 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
   const [filtroProjeto, setFiltroProjeto] = useState<Set<string> | null>(null);
   const [filtroTipoMovimento, setFiltroTipoMovimento] = useState<Set<string> | null>(null);
   const [filtroSolicitante, setFiltroSolicitante] = useState<Set<string> | null>(null);
+  const [ordenacao, setOrdenacao] = useState<{
+    coluna: ColunaOrdenavel;
+    direcao: "asc" | "desc";
+  } | null>(null);
+
+  const alternarOrdenacao = (coluna: ColunaOrdenavel) =>
+    setOrdenacao((atual) => {
+      if (!atual || atual.coluna !== coluna) return { coluna, direcao: "asc" };
+      if (atual.direcao === "asc") return { coluna, direcao: "desc" };
+      return null;
+    });
 
   const resumo = useMemo(() => {
     const porSituacao = { A: 0, E: 0, C: 0 } as Record<SituacaoSma, number>;
@@ -315,7 +358,18 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
         ];
         return textos.some((t) => t.toLowerCase().includes(termo));
       })
-      .sort((a, b) => (b.nr_sma || 0) - (a.nr_sma || 0) || (a.sequencia || 0) - (b.sequencia || 0));
+      .sort((a, b) => {
+        if (ordenacao) {
+          const va = valorOrdenacao(a, ordenacao.coluna);
+          const vb = valorOrdenacao(b, ordenacao.coluna);
+          const cmp =
+            typeof va === "number" && typeof vb === "number"
+              ? va - vb
+              : String(va).localeCompare(String(vb), "pt-BR", { numeric: true });
+          if (cmp !== 0) return ordenacao.direcao === "asc" ? cmp : -cmp;
+        }
+        return (b.nr_sma || 0) - (a.nr_sma || 0) || (a.sequencia || 0) - (b.sequencia || 0);
+      });
   }, [
     materiais,
     busca,
@@ -325,6 +379,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
     filtroProjeto,
     filtroTipoMovimento,
     filtroSolicitante,
+    ordenacao,
   ]);
 
   return (
@@ -421,20 +476,42 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="p-3 text-left whitespace-nowrap">
-                  SMA
+                  <CabecalhoOrdenavel
+                    rotulo="SMA"
+                    coluna="nr_sma"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
                   <FiltroColuna opcoes={opcoesSma} selecionado={filtroSma} onChange={setFiltroSma} />
                 </th>
                 <th className="p-3 text-left whitespace-nowrap">
-                  Material
+                  <CabecalhoOrdenavel
+                    rotulo="Material"
+                    coluna="codigo_material"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
                   <FiltroColuna
                     opcoes={opcoesMaterial}
                     selecionado={filtroMaterial}
                     onChange={setFiltroMaterial}
                   />
                 </th>
-                <th className="p-3 text-right">Qtd. Solicitada</th>
+                <th className="p-3 text-right">
+                  <CabecalhoOrdenavel
+                    rotulo="Qtd. Solicitada"
+                    coluna="quantidade_solicitada"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
+                </th>
                 <th className="p-3 text-left whitespace-nowrap">
-                  Projeto
+                  <CabecalhoOrdenavel
+                    rotulo="Projeto"
+                    coluna="projeto_sma"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
                   <FiltroColuna
                     opcoes={opcoesProjeto}
                     selecionado={filtroProjeto}
@@ -442,7 +519,12 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                   />
                 </th>
                 <th className="p-3 text-left whitespace-nowrap">
-                  Tipo de Movimento
+                  <CabecalhoOrdenavel
+                    rotulo="Tipo de Movimento"
+                    coluna="tipo_movimento_descricao"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
                   <FiltroColuna
                     opcoes={opcoesTipoMovimento}
                     selecionado={filtroTipoMovimento}
@@ -450,17 +532,50 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                   />
                 </th>
                 <th className="p-3 text-left whitespace-nowrap">
-                  Solicitante
+                  <CabecalhoOrdenavel
+                    rotulo="Solicitante"
+                    coluna="solicitante"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
                   <FiltroColuna
                     opcoes={opcoesSolicitante}
                     selecionado={filtroSolicitante}
                     onChange={setFiltroSolicitante}
                   />
                 </th>
-                <th className="p-3 text-center">Situação</th>
-                <th className="p-3 text-center">Cadastro</th>
-                <th className="p-3 text-center">Necessidade</th>
-                <th className="p-3 text-left">Observação</th>
+                <th className="p-3 text-center">
+                  <CabecalhoOrdenavel
+                    rotulo="Situação"
+                    coluna="situacao"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
+                </th>
+                <th className="p-3 text-center">
+                  <CabecalhoOrdenavel
+                    rotulo="Cadastro"
+                    coluna="data_cadastro"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
+                </th>
+                <th className="p-3 text-center">
+                  <CabecalhoOrdenavel
+                    rotulo="Necessidade"
+                    coluna="data_necessidade"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
+                </th>
+                <th className="p-3 text-left">
+                  <CabecalhoOrdenavel
+                    rotulo="Observação"
+                    coluna="observacao"
+                    ordenacao={ordenacao}
+                    onClick={alternarOrdenacao}
+                  />
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -504,7 +619,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                     <td className="p-3 text-center text-slate-600 whitespace-nowrap">
                       {m.data_necessidade ? formatarDataSegura(m.data_necessidade) : "-"}
                     </td>
-                    <td className="p-3 text-slate-600 max-w-[260px] truncate" title={m.observacao || ""}>
+                    <td className="p-3 text-slate-600 max-w-[320px] whitespace-normal break-words">
                       {m.observacao || "-"}
                     </td>
                   </tr>
