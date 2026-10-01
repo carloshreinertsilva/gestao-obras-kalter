@@ -560,7 +560,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                     onChange={setFiltroMaterial}
                   />
                 </th>
-                <th className="p-3 text-right">
+                <th className="p-3 text-center">
                   <CabecalhoOrdenavel
                     rotulo="Qtd. Solicitada"
                     coluna="quantidade_solicitada"
@@ -568,7 +568,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                     onClick={alternarOrdenacao}
                   />
                 </th>
-                <th className="p-3 text-right">
+                <th className="p-3 text-center">
                   <CabecalhoOrdenavel
                     rotulo="Saldo a Atender"
                     coluna="saldo_a_atender"
@@ -675,11 +675,11 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                         {m.descricao_material || ""}
                       </div>
                     </td>
-                    <td className="p-3 text-right whitespace-nowrap">
+                    <td className="p-3 text-center whitespace-nowrap">
                       {formatarQtd(m.quantidade_solicitada)}
                     </td>
                     <td
-                      className={`p-3 text-right whitespace-nowrap ${saldoAtender(m) ? "font-bold text-amber-700" : "text-slate-400"}`}
+                      className={`p-3 text-center whitespace-nowrap ${saldoAtender(m) ? "font-bold text-amber-700" : "text-slate-400"}`}
                     >
                       {saldoAtender(m) === null ? "-" : formatarQtd(saldoAtender(m))}
                     </td>
