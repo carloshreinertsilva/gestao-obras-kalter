@@ -4899,7 +4899,7 @@ export default function App() {
                 tabela inteira cabe). Abaixo disso empilha: a tabela pega a largura toda e os
                 criticos viram uma grade de cartoes - antes eram 2/3 x 1/3 e a coluna Saldo
                 ficava cortada. */}
-            <div className="grid grid-cols-1 min-[1700px]:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+            <div className="grid grid-cols-1 min-[1700px]:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start min-[1700px]:items-stretch">
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <h3 className="text-lg font-bold flex items-center gap-2">
@@ -4921,7 +4921,7 @@ export default function App() {
                         <th className="px-4 py-3 text-center">Cronograma</th>
                         <th className="px-4 py-3 text-center">Tarefas</th>
                         <th className="px-4 py-3 text-center">Geral</th>
-                        <th className="px-4 py-3 text-right">Saldo</th>
+                        <th className="px-4 py-3 text-center">Saldo</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -4972,7 +4972,7 @@ export default function App() {
                                 {labelStatusPMIS(projeto.statusGeral)}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap">
+                            <td className="px-4 py-3 text-center font-bold text-slate-700 whitespace-nowrap">
                               {formatarMoeda(projeto.saldoReceber)}
                             </td>
                           </tr>
@@ -4983,14 +4983,18 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-5 border-b border-slate-100">
+              {/* Em tela grande o cartao acompanha a altura do Status Geral (absolute inset-0
+                  dentro do wrapper, cuja altura vem da linha do grid) e rola por dentro; abaixo
+                  de 1700px fica no fluxo normal, com altura maxima. */}
+              <div className="relative min-[1700px]:min-h-[320px]">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-[1700px]:absolute min-[1700px]:inset-0">
+                <div className="p-5 border-b border-slate-100 shrink-0">
                   <h3 className="text-lg font-bold flex items-center gap-2">
                     <AlertTriangle size={20} className="text-amber-500" />{" "}
                     Projetos Críticos
                   </h3>
                 </div>
-                <div className="p-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-1 max-h-[480px] overflow-y-auto">
+                <div className="p-5 grid gap-4 content-start md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-1 max-h-[480px] min-[1700px]:max-h-none min-[1700px]:flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
                   {projetosCriticosPMIS.length === 0 ? (
                     <div className="col-span-full text-center p-8 text-slate-400">
                       <CheckCircle2
@@ -5007,8 +5011,8 @@ export default function App() {
                         className="border rounded-xl p-4 hover:border-[#2A6377] hover:bg-slate-50 cursor-pointer transition"
                       >
                         <div className="flex items-start justify-between gap-3 mb-2">
-                          <div>
-                            <p className="font-bold text-[#2A6377] text-sm">
+                          <div className="min-w-0">
+                            <p className="font-bold text-[#2A6377] text-sm break-words">
                               {projeto.codigo} - {projeto.nome}
                             </p>
                             <p className="text-xs text-slate-400">
@@ -5016,7 +5020,7 @@ export default function App() {
                             </p>
                           </div>
                           <span
-                            className={`px-2 py-1 rounded-full border text-[10px] font-bold ${estiloStatusPMIS(projeto.statusGeral)}`}
+                            className={`shrink-0 px-2 py-1 rounded-full border text-[10px] font-bold ${estiloStatusPMIS(projeto.statusGeral)}`}
                           >
                             {labelStatusPMIS(projeto.statusGeral)}
                           </span>
@@ -5035,6 +5039,7 @@ export default function App() {
                     ))
                   )}
                 </div>
+              </div>
               </div>
             </div>
 
