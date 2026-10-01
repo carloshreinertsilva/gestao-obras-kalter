@@ -50,7 +50,7 @@ function FiltroColuna({
 }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
-  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [pos, setPos] = useState({ top: 0, left: 0, largura: 224 });
   const gatilhoRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const ativo = selecionado !== null;
@@ -70,10 +70,14 @@ function FiltroColuna({
   const abrir = () => {
     const r = gatilhoRef.current?.getBoundingClientRect();
     if (r) {
-      const largura = 224; // w-56
+      // Largura acompanha o maior rotulo da coluna (ex: descricao de material com ate 80+
+      // caracteres) em vez de ficar fixa em 224px e cortar o texto; limitada a 560px/tela.
+      const maiorRotulo = opcoes.reduce((m, o) => Math.max(m, o.rotulo.length), 0);
+      const largura = Math.min(Math.max(224, maiorRotulo * 6.6 + 64), 560, window.innerWidth - 16);
       setPos({
         top: r.bottom + 4,
-        left: Math.min(r.left, window.innerWidth - largura - 8),
+        left: Math.max(8, Math.min(r.left, window.innerWidth - largura - 8)),
+        largura,
       });
     }
     setAberto(true);
@@ -133,8 +137,14 @@ function FiltroColuna({
         createPortal(
           <div
             ref={popoverRef}
-            style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999 }}
-            className="w-56 bg-white border rounded-lg shadow-xl p-2 text-left"
+            style={{
+              position: "fixed",
+              top: pos.top,
+              left: pos.left,
+              width: pos.largura,
+              zIndex: 9999,
+            }}
+            className="bg-white border rounded-lg shadow-xl p-2 text-left"
           >
             <input
               type="text"
@@ -148,25 +158,36 @@ function FiltroColuna({
               <button onClick={marcarVisiveis}>Marcar todos</button>
               <button onClick={desmarcarVisiveis}>Desmarcar todos</button>
             </div>
-            <div className="max-h-48 overflow-y-auto space-y-0.5">
+            <div
+              className="overflow-y-auto space-y-0.5"
+              style={{ maxHeight: Math.max(160, Math.min(448, window.innerHeight - pos.top - 130)) }}
+            >
               {visiveis.length === 0 ? (
                 <p className="text-xs text-slate-400 p-1">Nenhum valor.</p>
               ) : (
                 visiveis.map((o) => (
                   <label
                     key={o.valor}
-                    className="flex items-center gap-2 text-xs text-slate-700 px-0.5 py-0.5 rounded hover:bg-slate-50 cursor-pointer"
+                    title={o.rotulo}
+                    className="flex items-start gap-2 text-xs text-slate-700 px-0.5 py-1 rounded hover:bg-slate-50 cursor-pointer"
                   >
                     <input
                       type="checkbox"
+                      className="mt-0.5 shrink-0"
                       checked={marcados.has(o.valor)}
                       onChange={() => alternar(o.valor)}
                     />
-                    <span className="truncate">{o.rotulo}</span>
+                    <span className="break-words min-w-0">{o.rotulo}</span>
                   </label>
                 ))
               )}
             </div>
+            <p className="text-[10px] text-slate-400 mt-1 px-0.5">
+              {visiveis.length === opcoes.length
+                ? `${opcoes.length} valores`
+                : `${visiveis.length} de ${opcoes.length} valores`}
+              {marcados.size > 0 ? ` · ${marcados.size} marcado${marcados.size > 1 ? "s" : ""}` : ""}
+            </p>
             <div className="flex justify-end mt-2 pt-2 border-t">
               <button onClick={limpar} className="text-xs text-slate-500 font-semibold">
                 Limpar filtro
@@ -648,9 +669,11 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                         </span>
                       )}
                     </td>
-                    <td className="p-3">
+                    <td className="p-3 min-w-[220px] max-w-[420px]">
                       <div className="font-semibold text-slate-700">{m.codigo_material || "-"}</div>
-                      <div className="text-xs text-slate-500">{m.descricao_material || ""}</div>
+                      <div className="text-xs text-slate-500 whitespace-normal break-words">
+                        {m.descricao_material || ""}
+                      </div>
                     </td>
                     <td className="p-3 text-right whitespace-nowrap">
                       {formatarQtd(m.quantidade_solicitada)}
