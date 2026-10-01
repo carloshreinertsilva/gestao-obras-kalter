@@ -4894,8 +4894,13 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-              <div className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            {/* Status geral ocupa o espaco que sobra; Projetos Criticos fica numa coluna
+                estreita (os motivos sao textos curtos) so em tela grande (>= 1700px, onde a
+                tabela inteira cabe). Abaixo disso empilha: a tabela pega a largura toda e os
+                criticos viram uma grade de cartoes - antes eram 2/3 x 1/3 e a coluna Saldo
+                ficava cortada. */}
+            <div className="grid grid-cols-1 min-[1700px]:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <h3 className="text-lg font-bold flex items-center gap-2">
                     <Activity size={20} className="text-[#2A6377]" /> Status
@@ -4906,7 +4911,7 @@ export default function App() {
                   </p>
                 </div>
                 <div className="overflow-x-auto max-w-full">
-                  <table className="w-full text-sm min-w-[820px]">
+                  <table className="w-full text-sm min-w-[720px] [&_th]:px-2 [&_td]:px-2 2xl:[&_th]:px-4 2xl:[&_td]:px-4">
                     <thead className="bg-slate-50 text-slate-500 uppercase text-xs">
                       <tr>
                         <th className="px-4 py-3 text-left">Obra</th>
@@ -4944,7 +4949,7 @@ export default function App() {
                                 Resp.: {projeto.responsavel}
                               </p>
                             </td>
-                            <td className="px-4 py-3 text-slate-700">
+                            <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
                               {labelFase(projeto.fase)}
                             </td>
                             {[
@@ -4967,7 +4972,7 @@ export default function App() {
                                 {labelStatusPMIS(projeto.statusGeral)}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-right font-bold text-slate-700">
+                            <td className="px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap">
                               {formatarMoeda(projeto.saldoReceber)}
                             </td>
                           </tr>
@@ -4985,9 +4990,9 @@ export default function App() {
                     Projetos Críticos
                   </h3>
                 </div>
-                <div className="p-5 space-y-4 max-h-[480px] overflow-y-auto">
+                <div className="p-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-1 max-h-[480px] overflow-y-auto">
                   {projetosCriticosPMIS.length === 0 ? (
-                    <div className="text-center p-8 text-slate-400">
+                    <div className="col-span-full text-center p-8 text-slate-400">
                       <CheckCircle2
                         size={42}
                         className="mx-auto mb-2 text-green-200"
