@@ -9,7 +9,9 @@ import ValorAjustavel from "./ValorAjustavel";
 import AnexosObra from "./AnexosObra";
 import ListaMateriaisSMA from "./ListaMateriaisSMA";
 import RentabilidadeProjeto from "./RentabilidadeProjeto";
+import { ItemNotificacao } from "./Notificacoes";
 import type {
+  Notificacao,
   Usuario,
   Obra,
   Tarefa,
@@ -106,6 +108,8 @@ import {
   Mic,
   Boxes,
   TrendingUp,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 
 export default function App() {
@@ -242,6 +246,14 @@ export default function App() {
   const [painelNotificacaoAberto, setPainelNotificacaoAberto] =
     useState<boolean>(false);
   const [menuMobileAberto, setMenuMobileAberto] = useState<boolean>(false);
+  const [menuRecolhido, setMenuRecolhido] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("menu_recolhido") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [novidades, setNovidades] = useState<Notificacao[]>([]);
 
   const [tarefaSelecionada, setTarefaSelecionada] = useState<Tarefa | null>(null);
 
@@ -640,6 +652,45 @@ export default function App() {
     }
     buscarNotificacoes();
   }, [usuarioAtual, telaAtiva]);
+
+  const buscarNovidades = async () => {
+    if (!usuarioAtual) return;
+    try {
+      const { data } = await supabase
+        .from("notificacoes")
+        .select("id, tipo, titulo, detalhe, id_obra, id_tarefa, financeira, lida_em, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (data) setNovidades(data);
+    } catch (error) {
+      console.error("Erro ao buscar notificações:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!usuarioAtual) return;
+    buscarNovidades();
+    const atualizarSeVisivel = () => {
+      if (document.visibilityState === "visible") buscarNovidades();
+    };
+    const intervalo = setInterval(atualizarSeVisivel, 60000);
+    document.addEventListener("visibilitychange", atualizarSeVisivel);
+    return () => {
+      clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", atualizarSeVisivel);
+    };
+  }, [usuarioAtual?.id]);
+
+  const alternarMenuRecolhido = () =>
+    setMenuRecolhido((atual) => {
+      const novo = !atual;
+      try {
+        localStorage.setItem("menu_recolhido", novo ? "1" : "0");
+      } catch {
+        /* sem armazenamento local: a escolha vale so ate recarregar */
+      }
+      return novo;
+    });
 
   const buscarUsuarios = async () => {
     try {
@@ -2830,6 +2881,79 @@ export default function App() {
     if (!dataVencimento || status === "concluida" || status === "cancelada") return false;
     return dataVencimento < new Date().toISOString().split("T")[0];
   };
+
+  const novidadesNaoLidas = novidades.filter((n) => !n.lida_em).length;
+  const tarefasVencidasMinhas = minhasNotificacoes.filter((t) =>
+    isAtrasada(t.data_vencimento, "pendente"),
+  ).length;
+  const totalSino = novidadesNaoLidas + tarefasVencidasMinhas;
+
+  const marcarNotificacoesLidas = async (ids?: string[]) => {
+    const agora = new Date().toISOString();
+    setNovidades((prev) =>
+      prev.map((n) =>
+        !n.lida_em && (!ids || ids.includes(n.id)) ? { ...n, lida_em: agora } : n,
+      ),
+    );
+    const { error } = await supabase.rpc("marcar_notificacoes_lidas", {
+      p_ids: ids ?? null,
+    });
+    if (error) console.error("Erro ao marcar notificações como lidas:", error);
+  };
+
+  const abrirNotificacao = async (notif: Notificacao) => {
+    if (!notif.lida_em) marcarNotificacoesLidas([notif.id]);
+    setPainelNotificacaoAberto(false);
+    if (notif.tipo === "tarefa_atribuida" || notif.tipo === "tarefa_comentario") {
+      setTelaAtiva("tarefas");
+      return;
+    }
+    if (!notif.id_obra) return;
+    try {
+      const { data } = await supabase
+        .from("obras")
+        .select("id, codigo_externo, nome, fase_atual, id_responsavel, status")
+        .eq("id", notif.id_obra)
+        .single();
+      if (data) abrirPainelObra(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const botaoSino = (classe: string) => (
+    <button
+      onClick={() => {
+        setPainelNotificacaoAberto(true);
+        buscarNovidades();
+      }}
+      title="Notificações"
+      className={`relative ${classe}`}
+    >
+      <Bell size={20} />
+      {totalSino > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-[#2A6377]">
+          {totalSino > 99 ? "99+" : totalSino}
+        </span>
+      )}
+    </button>
+  );
+
+  const itemMenu = (tela: string, rotulo: string, Icone: any, ativo: boolean) => (
+    <button
+      key={tela}
+      title={menuRecolhido ? rotulo : undefined}
+      onClick={() => {
+        setTelaAtiva(tela);
+        setMenuMobileAberto(false);
+      }}
+      className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${menuRecolhido ? "md:justify-center md:px-0" : ""} ${ativo ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
+    >
+      <Icone size={20} className="shrink-0" />
+      <span className={menuRecolhido ? "md:hidden" : ""}>{rotulo}</span>
+    </button>
+  );
+
   const tarefasFiltradas =
     filtroObraKanban === "todas"
       ? tarefasKanban || []
@@ -3408,12 +3532,15 @@ export default function App() {
             className="h-8 w-auto object-contain"
           />
         </div>
-        <button
-          onClick={() => setMenuMobileAberto(true)}
-          className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition"
-        >
-          <Menu size={24} />
-        </button>
+        <div className="flex items-center gap-3">
+          {botaoSino("p-2 bg-white/10 rounded-lg hover:bg-white/20 transition")}
+          <button
+            onClick={() => setMenuMobileAberto(true)}
+            className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition"
+          >
+            <Menu size={24} />
+          </button>
+        </div>
       </div>
 
       {menuMobileAberto && (
@@ -4389,15 +4516,48 @@ export default function App() {
           <div className="bg-white w-full max-w-sm h-full shadow-2xl flex flex-col">
             <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center">
               <h2 className="text-xl font-bold flex items-center gap-2">
-                <Bell className="text-[#2A6377]" /> Tarefas
+                <Bell className="text-[#2A6377]" /> Notificações
               </h2>
               <button onClick={() => setPainelNotificacaoAberto(false)}>
                 <X size={24} />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold uppercase text-slate-400 tracking-wider">
+                  Novidades{novidadesNaoLidas > 0 ? ` (${novidadesNaoLidas} nova${novidadesNaoLidas > 1 ? "s" : ""})` : ""}
+                </p>
+                {novidadesNaoLidas > 0 && (
+                  <button
+                    onClick={() => marcarNotificacoesLidas()}
+                    className="text-xs font-semibold text-[#2A6377] hover:underline flex items-center gap-1"
+                  >
+                    <CheckCheck size={14} /> Marcar todas como lidas
+                  </button>
+                )}
+              </div>
+              {novidades.length === 0 ? (
+                <p className="text-sm text-slate-400 mb-6">
+                  Nenhuma novidade nos últimos 30 dias.
+                </p>
+              ) : (
+                <div className="space-y-2 mb-6">
+                  {novidades.map((notif) => (
+                    <ItemNotificacao
+                      key={notif.id}
+                      notificacao={notif}
+                      onClick={() => abrirNotificacao(notif)}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <p className="text-xs font-bold uppercase text-slate-400 tracking-wider mb-3">
+                Minhas tarefas pendentes
+                {minhasNotificacoes.length > 0 ? ` (${minhasNotificacoes.length})` : ""}
+              </p>
               {minhasNotificacoes.length === 0 ? (
-                <div className="text-center mt-10 text-slate-500">
+                <div className="text-center mt-4 text-slate-500">
                   <CheckCircle2
                     size={48}
                     className="mx-auto mb-3 text-slate-300"
@@ -4516,10 +4676,12 @@ export default function App() {
 
       {/* MENU LATERAL (ARQUITETURA ERP) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[50] w-64 md:w-56 2xl:w-64 bg-[#2A6377] text-white flex flex-col shadow-2xl transition-transform duration-300 md:relative md:translate-x-0 ${menuMobileAberto ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-[50] w-64 ${menuRecolhido ? "md:w-16 2xl:w-16" : "md:w-56 2xl:w-64"} bg-[#2A6377] text-white flex flex-col shadow-2xl transition-[transform,width] duration-300 md:relative md:translate-x-0 ${menuMobileAberto ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div>
-          <div className="p-6 border-b border-white/10 flex flex-col items-center justify-center relative">
+          <div
+            className={`p-6 ${menuRecolhido ? "md:p-3" : ""} border-b border-white/10 flex flex-col items-center justify-center relative`}
+          >
             <button
               onClick={() => setMenuMobileAberto(false)}
               className="md:hidden absolute top-4 right-4 text-white/70 hover:text-white p-1"
@@ -4529,103 +4691,75 @@ export default function App() {
             <img
               src="/logo.png"
               alt="Kalter Logo"
-              className="max-h-12 w-auto mb-2 object-contain"
+              className={`max-h-12 w-auto mb-2 object-contain ${menuRecolhido ? "md:hidden" : ""}`}
               onError={(e: any) => {
                 e.target.style.display = "none";
-                e.target.nextSibling.style.display = "block";
               }}
             />
+            <div
+              className={`hidden md:flex items-center gap-3 ${menuRecolhido ? "md:flex-col" : ""}`}
+            >
+              {botaoSino("p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition")}
+              <button
+                onClick={alternarMenuRecolhido}
+                title={menuRecolhido ? "Expandir menu" : "Recolher menu"}
+                className="p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition"
+              >
+                {menuRecolhido ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto pb-6">
-            <div className="px-4 mt-6">
-              <p className="text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider">
+            <div className={`px-4 ${menuRecolhido ? "md:px-2" : ""} mt-6`}>
+              <p className={`text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider ${menuRecolhido ? "md:hidden" : ""}`}>
                 Principal
               </p>
               <div className="space-y-1">
-                <button
-                  onClick={() => {
-                    setTelaAtiva("dashboard");
-                    setMenuMobileAberto(false);
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === "dashboard" ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
-                >
-                  <LayoutDashboard size={20} /> Dashboard
-                </button>
-                <button
-                  onClick={() => {
-                    setTelaAtiva("tarefas");
-                    setMenuMobileAberto(false);
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === "tarefas" ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
-                >
-                  <CheckSquare size={20} /> Tarefas
-                </button>
+                {itemMenu("dashboard", "Dashboard", LayoutDashboard, telaAtiva === "dashboard")}
+                {itemMenu("tarefas", "Tarefas", CheckSquare, telaAtiva === "tarefas")}
               </div>
             </div>
 
-            <div className="px-4 mt-8">
-              <p className="text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider">
+            <div className={`px-4 ${menuRecolhido ? "md:px-2 md:mt-3" : ""} mt-8`}>
+              <p className={`text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider ${menuRecolhido ? "md:hidden" : ""}`}>
                 Operação
               </p>
+              {menuRecolhido && <div className="hidden md:block h-px bg-white/10 mb-3" />}
               <div className="space-y-1">
-                <button
-                  onClick={() => {
-                    setTelaAtiva("minhas_obras");
-                    setMenuMobileAberto(false);
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === "minhas_obras" || telaAtiva === "painel_obra" ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
-                >
-                  <Briefcase size={20} /> Minhas Obras
-                </button>
-                <button
-                  onClick={() => {
-                    setTelaAtiva("reunioes");
-                    setMenuMobileAberto(false);
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === "reunioes" ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
-                >
-                  <ClipboardList size={20} /> Reuniões
-                </button>
+                {itemMenu(
+                  "minhas_obras",
+                  "Minhas Obras",
+                  Briefcase,
+                  telaAtiva === "minhas_obras" || telaAtiva === "painel_obra",
+                )}
+                {itemMenu("reunioes", "Reuniões", ClipboardList, telaAtiva === "reunioes")}
               </div>
             </div>
 
-            <div className="px-4 mt-8">
-              <p className="text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider flex items-center gap-1">
+            <div className={`px-4 ${menuRecolhido ? "md:px-2 md:mt-3" : ""} mt-8`}>
+              <p className={`text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider flex items-center gap-1 ${menuRecolhido ? "md:hidden" : ""}`}>
                 <Settings size={12} /> Cadastros
               </p>
+              {menuRecolhido && <div className="hidden md:block h-px bg-white/10 mb-3" />}
               <div className="space-y-1">
-                <button
-                  onClick={() => {
-                    setTelaAtiva("cadastros_obras");
-                    setMenuMobileAberto(false);
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === "cadastros_obras" ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
-                >
-                  <HardHat size={20} /> Obras
-                </button>
-                {isAdmin && (
-                  <button
-                    onClick={() => {
-                      setTelaAtiva("cadastros_equipe");
-                      setMenuMobileAberto(false);
-                    }}
-                    className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${telaAtiva === "cadastros_equipe" ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
-                  >
-                    <Users size={20} /> Equipe
-                  </button>
-                )}
+                {itemMenu("cadastros_obras", "Obras", HardHat, telaAtiva === "cadastros_obras")}
+                {isAdmin &&
+                  itemMenu("cadastros_equipe", "Equipe", Users, telaAtiva === "cadastros_equipe")}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="p-4 border-t border-white/10 mt-auto">
-          <div className="flex items-center gap-3 mb-4 px-2">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">
+        <div className={`p-4 ${menuRecolhido ? "md:p-2" : ""} border-t border-white/10 mt-auto`}>
+          <div
+            className={`flex items-center gap-3 mb-4 px-2 ${menuRecolhido ? "md:justify-center md:px-0" : ""}`}
+            title={menuRecolhido ? `${usuarioAtual?.nome} (${usuarioAtual?.perfil})` : undefined}
+          >
+            <div className="shrink-0 w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">
               <User size={16} />
             </div>
-            <div className="overflow-hidden">
+            <div className={`overflow-hidden ${menuRecolhido ? "md:hidden" : ""}`}>
               <p className="text-sm font-medium truncate">
                 {usuarioAtual?.nome}
               </p>
@@ -4636,9 +4770,11 @@ export default function App() {
           </div>
           <button
             onClick={fazerLogout}
+            title={menuRecolhido ? "Sair" : undefined}
             className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition"
           >
-            <LogOut size={18} /> Sair
+            <LogOut size={18} className="shrink-0" />
+            <span className={menuRecolhido ? "md:hidden" : ""}>Sair</span>
           </button>
         </div>
       </aside>

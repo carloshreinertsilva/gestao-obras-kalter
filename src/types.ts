@@ -283,6 +283,25 @@ export interface ObraFaturamentoRealizado {
   updated_at?: string;
 }
 
+export type TipoNotificacao =
+  | "tarefa_atribuida"
+  | "tarefa_comentario"
+  | "obra_nova"
+  | "fase_alterada"
+  | "ocorrencia_nova";
+
+export interface Notificacao {
+  id: string;
+  tipo: TipoNotificacao | string;
+  titulo: string;
+  detalhe?: string | null;
+  id_obra?: string | null;
+  id_tarefa?: string | null;
+  financeira?: boolean;
+  lida_em?: string | null;
+  created_at: string;
+}
+
 export type SituacaoSma = "A" | "E" | "C";
 
 export interface ObraSmaMaterial {
