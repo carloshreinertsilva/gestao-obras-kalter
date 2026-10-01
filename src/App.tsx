@@ -10,8 +10,10 @@ import AnexosObra from "./AnexosObra";
 import ListaMateriaisSMA from "./ListaMateriaisSMA";
 import RentabilidadeProjeto from "./RentabilidadeProjeto";
 import { ItemNotificacao } from "./Notificacoes";
+import StatusSync from "./StatusSync";
 import type {
   Notificacao,
+  SyncStatus,
   Usuario,
   Obra,
   Tarefa,
@@ -254,6 +256,7 @@ export default function App() {
     }
   });
   const [novidades, setNovidades] = useState<Notificacao[]>([]);
+  const [statusSync, setStatusSync] = useState<SyncStatus | null>(null);
 
   const [tarefaSelecionada, setTarefaSelecionada] = useState<Tarefa | null>(null);
 
@@ -662,6 +665,12 @@ export default function App() {
         .order("created_at", { ascending: false })
         .limit(50);
       if (data) setNovidades(data);
+      const { data: sync } = await supabase
+        .from("sync_status")
+        .select("iniciou_em, terminou_em, ok, etapas_com_erro")
+        .eq("id", "robo")
+        .maybeSingle();
+      setStatusSync(sync || null);
     } catch (error) {
       console.error("Erro ao buscar notificações:", error);
     }
@@ -4757,6 +4766,11 @@ export default function App() {
         </div>
 
         <div className={`p-4 ${menuRecolhido ? "md:p-2" : ""} border-t border-white/10 mt-auto`}>
+          <StatusSync
+            status={statusSync}
+            recolhido={menuRecolhido}
+            mostrarDetalhes={isAdmin}
+          />
           <div
             className={`flex items-center gap-3 mb-4 px-2 ${menuRecolhido ? "md:justify-center md:px-0" : ""}`}
             title={menuRecolhido ? `${usuarioAtual?.nome} (${usuarioAtual?.perfil})` : undefined}

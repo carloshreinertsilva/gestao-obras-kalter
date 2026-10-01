@@ -283,6 +283,13 @@ export interface ObraFaturamentoRealizado {
   updated_at?: string;
 }
 
+export interface SyncStatus {
+  iniciou_em?: string | null;
+  terminou_em?: string | null;
+  ok: boolean;
+  etapas_com_erro: string[];
+}
+
 export type TipoNotificacao =
   | "tarefa_atribuida"
   | "tarefa_comentario"
