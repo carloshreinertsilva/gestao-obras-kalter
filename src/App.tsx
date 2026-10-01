@@ -2915,7 +2915,12 @@ export default function App() {
         .select("id, codigo_externo, nome, fase_atual, id_responsavel, status")
         .eq("id", notif.id_obra)
         .single();
-      if (data) abrirPainelObra(data);
+      if (data) {
+        abrirPainelObra(data);
+        // nf_nova -> aba Faturamento; recebimento_novo -> aba Financeiro (parcelas)
+        if (notif.tipo === "nf_nova") setAbaPainelObra("faturamento");
+        if (notif.tipo === "recebimento_novo") setAbaPainelObra("financeiro");
+      }
     } catch (error) {
       console.error(error);
     }

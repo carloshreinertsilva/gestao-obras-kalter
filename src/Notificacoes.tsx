@@ -3,8 +3,10 @@ import {
   AlertTriangle,
   Bell,
   CheckSquare,
+  DollarSign,
   HardHat,
   MessageSquare,
+  Receipt,
 } from "lucide-react";
 import type { Notificacao } from "./types";
 
@@ -14,6 +16,8 @@ const iconePorTipo: Record<string, { Icone: any; cor: string }> = {
   obra_nova: { Icone: HardHat, cor: "text-emerald-600 bg-emerald-50" },
   fase_alterada: { Icone: Activity, cor: "text-[#2A6377] bg-[#2A6377]/10" },
   ocorrencia_nova: { Icone: AlertTriangle, cor: "text-amber-600 bg-amber-50" },
+  nf_nova: { Icone: Receipt, cor: "text-violet-600 bg-violet-50" },
+  recebimento_novo: { Icone: DollarSign, cor: "text-green-600 bg-green-50" },
 };
 
 export const tempoRelativo = (iso: string) => {

@@ -288,7 +288,9 @@ export type TipoNotificacao =
   | "tarefa_comentario"
   | "obra_nova"
   | "fase_alterada"
-  | "ocorrencia_nova";
+  | "ocorrencia_nova"
+  | "nf_nova"
+  | "recebimento_novo";
 
 export interface Notificacao {
   id: string;
