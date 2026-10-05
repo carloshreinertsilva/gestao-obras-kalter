@@ -348,6 +348,7 @@ export interface ObraRentabilidadeFamilia {
   requisicoes?: number;
   lancamentos_avulsos?: number;
   previsoes_em_aberto?: number;
+  previsoes_numeros?: string | null;
   custo_realizado?: number;
   saldo_projetado?: number;
   created_at?: string;

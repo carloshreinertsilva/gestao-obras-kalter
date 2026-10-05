@@ -17,6 +17,7 @@ type Coluna =
   | "pedidos_encerrados"
   | "pedidos_em_aberto"
   | "previsoes_em_aberto"
+  | "previsoes_numeros"
   | "saldo_projetado";
 
 const somar = (lista: ObraRentabilidadeFamilia[], campo: Coluna) =>
@@ -101,7 +102,8 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
         (f) =>
           !termo ||
           (f.codigo_projeto || "").toLowerCase().includes(termo) ||
-          (f.descricao || "").toLowerCase().includes(termo),
+          (f.descricao || "").toLowerCase().includes(termo) ||
+          (f.previsoes_numeros || "").toLowerCase().includes(termo),
       )
       .sort((a, b) => {
         const va = a[ordenacao.coluna];
@@ -136,6 +138,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
       "Pedidos Encerrados",
       "Pedidos em Aberto",
       "Previsões em Aberto",
+      "Nº Previsão",
       "Saldo Projetado",
     ];
     const linhas = filtradas.map((f) => [
@@ -146,6 +149,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
       f.pedidos_encerrados ?? 0,
       f.pedidos_em_aberto ?? 0,
       f.previsoes_em_aberto ?? 0,
+      f.previsoes_numeros ?? "",
       f.saldo_projetado ?? 0,
     ]);
     const escapar = (valor: any) => `"${String(valor).replace(/"/g, '""')}"`;
@@ -161,8 +165,8 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
     URL.revokeObjectURL(url);
   };
 
-  const Cab = ({ rotulo, coluna, alinhar = "right" }: { rotulo: string; coluna: Coluna; alinhar?: "left" | "right" }) => (
-    <th className={`p-3 ${alinhar === "left" ? "text-left" : "text-right"} whitespace-nowrap`}>
+  const Cab = ({ rotulo, coluna, alinhar = "right" }: { rotulo: string; coluna: Coluna; alinhar?: "left" | "right" | "center" }) => (
+    <th className={`p-3 ${alinhar === "left" ? "text-left" : alinhar === "center" ? "text-center" : "text-right"} whitespace-nowrap`}>
       <button
         onClick={() => alternarOrdenacao(coluna)}
         className={`hover:text-[#2A6377] transition ${ordenacao.coluna === coluna ? "text-[#2A6377]" : ""}`}
@@ -290,7 +294,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
           </div>
         </div>
         <div className="overflow-x-auto max-w-full">
-          <table className="w-full text-sm min-w-[980px]">
+          <table className="w-full text-sm min-w-[1080px]">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <Cab rotulo="Família - Descrição" coluna="codigo_projeto" alinhar="left" />
@@ -300,13 +304,14 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
                 <Cab rotulo="Pedidos Encerrados (Soma)" coluna="pedidos_encerrados" />
                 <Cab rotulo="Pedidos em Aberto" coluna="pedidos_em_aberto" />
                 <Cab rotulo="Previsões em Aberto" coluna="previsoes_em_aberto" />
+                <Cab rotulo="Nº Previsão" coluna="previsoes_numeros" alinhar="center" />
                 <Cab rotulo="Saldo Projetado" coluna="saldo_projetado" />
               </tr>
             </thead>
             <tbody>
               {filtradas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-slate-500">
+                  <td colSpan={9} className="p-6 text-center text-slate-500">
                     Nenhuma família encontrada.
                   </td>
                 </tr>
@@ -322,6 +327,12 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
                     <CelulaValor valor={Number(f.pedidos_encerrados || 0)} cor="text-blue-700" />
                     <CelulaValor valor={Number(f.pedidos_em_aberto || 0)} cor="text-blue-700" />
                     <CelulaValor valor={Number(f.previsoes_em_aberto || 0)} cor="text-blue-700" />
+                    <td
+                      className="p-3 text-center text-slate-700 font-semibold whitespace-nowrap"
+                      title={f.previsoes_numeros ? `Previsão(ões) em aberto: ${f.previsoes_numeros}` : undefined}
+                    >
+                      {f.previsoes_numeros || ""}
+                    </td>
                     <CelulaValor valor={Number(f.saldo_projetado || 0)} negativoVermelho />
                   </tr>
                 ))
@@ -337,6 +348,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
                   <CelulaValor valor={totais.pedidos_encerrados} cor="text-blue-700" />
                   <CelulaValor valor={totais.pedidos_em_aberto} cor="text-blue-700" />
                   <CelulaValor valor={totais.previsoes_em_aberto} cor="text-blue-700" />
+                  <td className="p-3" />
                   <CelulaValor valor={totais.saldo_projetado} negativoVermelho />
                 </tr>
               </tfoot>
