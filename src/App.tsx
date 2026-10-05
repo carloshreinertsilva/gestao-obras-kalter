@@ -590,7 +590,9 @@ export default function App() {
             .insert([
               { nome: nomeAuth, email: emailAuth, perfil: "engenheiro" },
             ]);
-        setMensagemSucesso("Conta criada! Pode entrar.");
+        setMensagemSucesso(
+          "Conta criada! Enviamos um link de confirmação para o seu e-mail (veja também o spam). Confirme o e-mail e depois entre.",
+        );
         setModoAuth("login");
         setSenhaAuth("");
       } else if (modoAuth === "recuperar") {
