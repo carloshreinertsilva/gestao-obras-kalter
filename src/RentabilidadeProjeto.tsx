@@ -33,7 +33,7 @@ const CelulaValor = ({
   negativoVermelho?: boolean;
 }) => (
   <td
-    className={`p-3 text-right whitespace-nowrap font-semibold ${negativoVermelho && valor < 0 ? "text-red-600" : cor}`}
+    className={`px-2 py-3 text-right whitespace-nowrap font-semibold ${negativoVermelho && valor < 0 ? "text-red-600" : cor}`}
   >
     {formatarMoeda(valor)}
   </td>
@@ -166,7 +166,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
   };
 
   const Cab = ({ rotulo, coluna, alinhar = "right" }: { rotulo: string; coluna: Coluna; alinhar?: "left" | "right" | "center" }) => (
-    <th className={`p-3 ${alinhar === "left" ? "text-left" : alinhar === "center" ? "text-center" : "text-right"} whitespace-nowrap`}>
+    <th className={`px-2 py-3 align-bottom leading-tight ${alinhar === "left" ? "text-left" : alinhar === "center" ? "text-center" : "text-right"}`}>
       <button
         onClick={() => alternarOrdenacao(coluna)}
         className={`hover:text-[#2A6377] transition ${ordenacao.coluna === coluna ? "text-[#2A6377]" : ""}`}
@@ -294,14 +294,14 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
           </div>
         </div>
         <div className="overflow-x-auto max-w-full">
-          <table className="w-full text-sm min-w-[1080px]">
+          <table className="w-full text-[13px] 2xl:text-sm min-w-[820px]">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <Cab rotulo="Família - Descrição" coluna="codigo_projeto" alinhar="left" />
                 <Cab rotulo="Custo Previsto" coluna="custo_previsto" />
                 <Cab rotulo="Custo Realizado" coluna="custo_realizado" />
                 <Cab rotulo="Requisições" coluna="requisicoes" />
-                <Cab rotulo="Pedidos Encerrados (Soma)" coluna="pedidos_encerrados" />
+                <Cab rotulo="Pedidos Encerrados" coluna="pedidos_encerrados" />
                 <Cab rotulo="Pedidos em Aberto" coluna="pedidos_em_aberto" />
                 <Cab rotulo="Previsões em Aberto" coluna="previsoes_em_aberto" />
                 <Cab rotulo="Nº Previsão" coluna="previsoes_numeros" alinhar="center" />
@@ -318,7 +318,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
               ) : (
                 filtradas.map((f) => (
                   <tr key={f.id} className="border-t hover:bg-slate-50">
-                    <td className="p-3 text-slate-700">
+                    <td className="px-2 py-3 text-slate-700 min-w-[150px]">
                       {f.codigo_projeto} - {f.descricao}
                     </td>
                     <CelulaValor valor={Number(f.custo_previsto || 0)} />
@@ -328,7 +328,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
                     <CelulaValor valor={Number(f.pedidos_em_aberto || 0)} cor="text-blue-700" />
                     <CelulaValor valor={Number(f.previsoes_em_aberto || 0)} cor="text-blue-700" />
                     <td
-                      className="p-3 text-center text-slate-700 font-semibold whitespace-nowrap"
+                      className="px-2 py-3 text-center text-slate-700 font-semibold whitespace-nowrap"
                       title={f.previsoes_numeros ? `Previsão(ões) em aberto: ${f.previsoes_numeros}` : undefined}
                     >
                       {f.previsoes_numeros || ""}
@@ -341,14 +341,14 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
             {filtradas.length > 0 && (
               <tfoot>
                 <tr className="border-t-2 bg-slate-50 font-bold">
-                  <td className="p-3 text-slate-700">Soma</td>
+                  <td className="px-2 py-3 text-slate-700">Soma</td>
                   <CelulaValor valor={totais.custo_previsto} />
                   <CelulaValor valor={totais.custo_realizado} />
                   <CelulaValor valor={totais.requisicoes} cor="text-blue-700" />
                   <CelulaValor valor={totais.pedidos_encerrados} cor="text-blue-700" />
                   <CelulaValor valor={totais.pedidos_em_aberto} cor="text-blue-700" />
                   <CelulaValor valor={totais.previsoes_em_aberto} cor="text-blue-700" />
-                  <td className="p-3" />
+                  <td className="px-2 py-3" />
                   <CelulaValor valor={totais.saldo_projetado} negativoVermelho />
                 </tr>
               </tfoot>
