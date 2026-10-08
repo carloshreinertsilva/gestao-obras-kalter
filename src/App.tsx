@@ -1060,9 +1060,19 @@ export default function App() {
           };
         });
 
-        setStatusProjetosPMIS(projetos);
+        // Ordem pelo numero da obra (igual a tela Minhas Obras); no empate de gravidade, os
+        // Projetos Criticos tambem seguem essa ordem (sort estavel).
+        const projetosPorCodigo = [...projetos].sort((a: any, b: any) => {
+          const codigoA = Number(a.codigo);
+          const codigoB = Number(b.codigo);
+          if (!isNaN(codigoA) && !isNaN(codigoB)) return codigoA - codigoB;
+          return String(a.codigo || "").localeCompare(String(b.codigo || ""), "pt-BR", {
+            numeric: true,
+          });
+        });
+        setStatusProjetosPMIS(projetosPorCodigo);
         setProjetosCriticosPMIS(
-          projetos
+          projetosPorCodigo
             .filter((p: any) => p.score > 0)
             .sort((a: any, b: any) => b.score - a.score)
             .slice(0, 6),
