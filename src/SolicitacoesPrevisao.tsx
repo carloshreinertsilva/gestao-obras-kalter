@@ -128,6 +128,18 @@ export function ModalSolicitarPrevisao({
   const nomeErp = (usuario?.nome || "").trim().split(" ")[0].toUpperCase();
   const anoVencimento = new Date().getFullYear();
 
+  // Conferencia na hora, por origem: familia sem saldo em aberto ou valor acima do saldo bloqueia o envio
+  const problemaOrigem = (o: { familia: string; valor: string }) => {
+    if (!o.familia) return "";
+    const s = saldo(o.familia);
+    if (s <= 0.005) return "Esta família não tem saldo em aberto para transferir.";
+    const v = parseValorBR(o.valor);
+    if (o.valor.trim() && !isNaN(v) && v > s + 0.001)
+      return `Valor maior que o saldo disponível da família (${formatarMoeda(s)}).`;
+    return "";
+  };
+  const origemBloqueada = tipo === "transferencia" && origens.some((o) => problemaOrigem(o));
+
   const validar = (): string => {
     if (!destino) return tipo === "aumento" ? "Escolha a família." : "Escolha a família de destino.";
     if (!justificativa.trim()) return "Informe a justificativa.";
@@ -142,6 +154,8 @@ export function ModalSolicitarPrevisao({
       if (o.familia === destino) return "A origem não pode ser a mesma família do destino.";
       if (usadas.has(o.familia)) return `Família de origem repetida: ${o.familia}.`;
       usadas.add(o.familia);
+      const problema = problemaOrigem(o);
+      if (problema) return `${o.familia}: ${problema}`;
       const v = parseValorBR(o.valor);
       if (!(v > 0)) return `Informe o valor que sai de ${o.familia}.`;
       if (v > saldo(o.familia) + 0.001)
@@ -272,39 +286,56 @@ export function ModalSolicitarPrevisao({
           ) : (
             <div className="space-y-2">
               <label className="block text-sm font-semibold">De (origens)</label>
-              {origens.map((o, i) => (
-                <div key={i} className="flex gap-2 items-start">
-                  <div className="flex-1 min-w-0">
-                    <select
-                      value={o.familia}
-                      onChange={(e) =>
-                        setOrigens((prev) => prev.map((x, k) => (k === i ? { ...x, familia: e.target.value } : x)))
-                      }
-                      className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
-                    >
-                      <option value="">Selecione a família de origem...</option>
-                      {lista.filter((f) => f.codigo_projeto !== destino).map(opcaoFamilia)}
-                    </select>
+              {origens.map((o, i) => {
+                const problema = problemaOrigem(o);
+                const semSaldo = Boolean(o.familia) && saldo(o.familia) <= 0.005;
+                return (
+                  <div key={i}>
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1 min-w-0">
+                        <select
+                          value={o.familia}
+                          onChange={(e) =>
+                            setOrigens((prev) => prev.map((x, k) => (k === i ? { ...x, familia: e.target.value } : x)))
+                          }
+                          className={`w-full border rounded-lg px-3 py-2 text-sm bg-white ${semSaldo ? "border-red-400 bg-red-50" : ""}`}
+                        >
+                          <option value="">Selecione a família de origem...</option>
+                          {lista.filter((f) => f.codigo_projeto !== destino).map(opcaoFamilia)}
+                        </select>
+                      </div>
+                      <input
+                        value={o.valor}
+                        onChange={(e) =>
+                          setOrigens((prev) => prev.map((x, k) => (k === i ? { ...x, valor: e.target.value } : x)))
+                        }
+                        placeholder="Valor"
+                        disabled={semSaldo}
+                        className={`w-32 border rounded-lg px-3 py-2 text-sm disabled:bg-slate-100 ${problema && !semSaldo ? "border-red-400 bg-red-50 text-red-700" : ""}`}
+                      />
+                      {origens.length > 1 && (
+                        <button
+                          onClick={() => setOrigens((prev) => prev.filter((_, k) => k !== i))}
+                          className="p-2 text-slate-400 hover:text-red-600"
+                          title="Remover origem"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                    {o.familia &&
+                      (problema ? (
+                        <p className="mt-1 text-xs font-semibold text-red-600 flex items-center gap-1">
+                          <AlertTriangle size={13} className="shrink-0" /> {problema}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Saldo disponível: {formatarMoeda(saldo(o.familia))}
+                        </p>
+                      ))}
                   </div>
-                  <input
-                    value={o.valor}
-                    onChange={(e) =>
-                      setOrigens((prev) => prev.map((x, k) => (k === i ? { ...x, valor: e.target.value } : x)))
-                    }
-                    placeholder="Valor"
-                    className="w-32 border rounded-lg px-3 py-2 text-sm"
-                  />
-                  {origens.length > 1 && (
-                    <button
-                      onClick={() => setOrigens((prev) => prev.filter((_, k) => k !== i))}
-                      className="p-2 text-slate-400 hover:text-red-600"
-                      title="Remover origem"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => setOrigens((prev) => [...prev, { familia: "", valor: "" }])}
@@ -356,7 +387,8 @@ export function ModalSolicitarPrevisao({
           </button>
           <button
             onClick={enviar}
-            disabled={enviando}
+            disabled={enviando || origemBloqueada}
+            title={origemBloqueada ? "Corrija as origens sem saldo suficiente para enviar" : undefined}
             className="px-4 py-2 rounded-lg text-sm font-bold bg-[#2A6377] text-white hover:bg-[#1e4857] flex items-center gap-2 disabled:opacity-60"
           >
             {enviando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Enviar solicitação
