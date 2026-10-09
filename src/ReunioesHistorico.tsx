@@ -14,6 +14,10 @@ import { formatarDataSegura, labelOcorrencia } from "./utils";
 
 interface Props {
   recarregar: number;
+  // reuniao (data AAAA-MM-DD) vinda do endereco /reunioes/<data>; o clique numa
+  // reuniao avisa o App para atualizar o endereco
+  selecao?: string | null;
+  onSelecionar?: (data: string | null) => void;
   onBaixarPdf: (obras: any[], dataFormatada: string, resumoGravacao?: string | null) => void;
   onReenviarEmail: (
     obras: any[],
@@ -55,6 +59,8 @@ const limparBitrix = (texto: string) =>
 
 export default function ReunioesHistorico({
   recarregar,
+  selecao,
+  onSelecionar,
   onBaixarPdf,
   onReenviarEmail,
   onAviso,
@@ -63,7 +69,11 @@ export default function ReunioesHistorico({
   const [sessoes, setSessoes] = useState<any[]>([]);
   const [reunioesObra, setReunioesObra] = useState<any[]>([]);
   const [notasBitrix, setNotasBitrix] = useState<any[]>([]);
-  const [selecionada, setSelecionada] = useState<string | null>(null);
+  const [selecionada, setSelecionada] = useState<string | null>(selecao || null);
+
+  useEffect(() => {
+    if (selecao) setSelecionada(selecao);
+  }, [selecao]);
   const [aba, setAba] = useState<"resumos" | "gravacao" | "tarefas">("resumos");
   const [de, setDe] = useState("");
   const [ate, setAte] = useState("");
@@ -163,10 +173,11 @@ export default function ReunioesHistorico({
   }, [reunioes, de, ate, busca]);
 
   useEffect(() => {
+    if (carregando) return; // nao descarta a reuniao pedida pelo endereco antes de carregar
     if (!filtradas.length) return setSelecionada(null);
     if (!filtradas.some((m) => m.chave === selecionada))
       setSelecionada(filtradas[0].chave);
-  }, [filtradas, selecionada]);
+  }, [filtradas, selecionada, carregando]);
 
   const atual = filtradas.find((m) => m.chave === selecionada) || null;
 
@@ -337,6 +348,7 @@ export default function ReunioesHistorico({
                   onClick={() => {
                     setSelecionada(m.chave);
                     setAba("resumos");
+                    onSelecionar?.(m.data);
                   }}
                   className={`w-full text-left px-4 py-3 border-b transition ${ativa ? "bg-[#2A6377]/10 border-l-4 border-l-[#2A6377]" : "hover:bg-slate-50 border-l-4 border-l-transparent"}`}
                 >

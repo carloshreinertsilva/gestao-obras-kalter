@@ -661,11 +661,16 @@ export function PainelSolicitacoes({
   idObra,
   titulo,
   recarregar,
+  destaque,
+  onLimparDestaque,
 }: {
   usuario: Usuario | null;
   idObra?: string;
   titulo?: string;
   recarregar?: number;
+  // solicitacao aberta pelo endereco /previsoes/<id> (link do e-mail de aprovacao)
+  destaque?: string | null;
+  onLimparDestaque?: () => void;
 }) {
   const [lista, setLista] = useState<SolicitacaoPrevisao[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -690,7 +695,9 @@ export function PainelSolicitacoes({
 
   const contagem = (sts: string[] | null) => (sts ? lista.filter((s) => sts.includes(s.status)).length : lista.length);
   const termo = busca.trim().toLowerCase();
+  const destacada = destaque ? lista.find((s) => s.id === destaque) : undefined;
   const visiveis = lista.filter((s) => {
+    if (destacada && s.id === destacada.id) return false;
     const sts = FILTROS.find((f) => f[0] === filtro)?.[2];
     if (sts && !sts.includes(s.status)) return false;
     if (!termo) return true;
@@ -702,6 +709,25 @@ export function PainelSolicitacoes({
 
   return (
     <div className="space-y-3">
+      {destaque && !carregando && (
+        <div className="rounded-2xl border-2 border-[#2A6377]/40 bg-[#2A6377]/5 p-3 space-y-2 max-w-3xl">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-[#2A6377]">Solicitação aberta pelo link</p>
+            {onLimparDestaque && (
+              <button onClick={onLimparDestaque} className="text-xs font-semibold text-slate-500 hover:text-[#2A6377]">
+                Fechar
+              </button>
+            )}
+          </div>
+          {destacada ? (
+            <CartaoSolicitacao s={destacada} usuario={usuario} mostrarObra={!idObra} onAtualizar={buscar} />
+          ) : (
+            <p className="text-sm text-slate-500 bg-white border rounded-xl p-4">
+              Solicitação não encontrada. Ela pode ter sido cancelada ou você não tem acesso a ela.
+            </p>
+          )}
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         {titulo && <h3 className="font-bold text-lg">{titulo}</h3>}
         <div className="relative w-full md:w-64">

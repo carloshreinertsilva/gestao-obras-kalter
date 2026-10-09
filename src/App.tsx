@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { fasesProjeto, perfisUsuario } from "./constants";
@@ -12,6 +12,7 @@ import RentabilidadeProjeto from "./RentabilidadeProjeto";
 import { AbaPrevisoes, PainelSolicitacoes, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
 import { AtivarPush, ItemNotificacao } from "./Notificacoes";
 import { removerPushAoSair } from "./push";
+import { caminhoParaRota, rotaParaCaminho, type Rota } from "./rotas";
 import StatusSync from "./StatusSync";
 import type {
   Notificacao,
@@ -129,6 +130,11 @@ export default function App() {
   const [nomeAuth, setNomeAuth] = useState<string>("");
 
   const [telaAtiva, setTelaAtiva] = useState<string>("dashboard");
+  // partes da navegacao que vao para o endereco (ver rotas.ts)
+  const [dataReuniaoSelecionada, setDataReuniaoSelecionada] = useState<string | null>(null);
+  const [solicitacaoDestaque, setSolicitacaoDestaque] = useState<string | null>(null);
+  const rotaPronta = useRef(false);
+  const aplicandoRota = useRef(false);
   const [carregando, setCarregando] = useState<boolean>(false);
   const [toasts, setToasts] = useState<any[]>([]);
 
@@ -400,6 +406,7 @@ export default function App() {
     listaObrasParaAta: any[],
     dataAta: string,
     resumoGravacao?: string | null,
+    linkApp?: string, // so no e-mail: botao "Ver ata no app" (no PDF nao aparece)
   ) => {
     let html = `
       <!DOCTYPE html>
@@ -428,6 +435,11 @@ export default function App() {
           <div class="header">
              <img src="https://gestaoobraskalter.vercel.app/logo2.png" alt="KALTER - Refrigeração Industrial" />
              <div class="data">Gestão de Obras • Ata de Reunião • ${dataAta}</div>
+             ${
+               linkApp
+                 ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:16px auto 0 auto; width:auto;"><tr><td style="border:0; padding:0; border-radius:8px; background:#2A6377;"><a href="${linkApp}" target="_blank" style="display:inline-block; padding:10px 20px; font-family:'Segoe UI',Arial,sans-serif; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:8px;">Ver ata no app</a></td></tr></table>`
+                 : ""
+             }
           </div>
     `;
 
@@ -696,33 +708,123 @@ export default function App() {
     };
   }, [usuarioAtual?.id]);
 
-  // Clique num aviso push: abre o painel do sininho (app recem-aberto via
-  // ?abrir=notificacoes, ou ja aberto via mensagem do service worker).
-  useEffect(() => {
-    if (!usuarioAtual) return;
-    const abrirPainel = () => {
-      setPainelNotificacaoAberto(true);
-      buscarNovidades();
-    };
-    // Links dos e-mails: ?tela=tarefas abre direto a tela de tarefas (vale tambem
-    // depois do login, porque o login nao recarrega a pagina).
-    const params = new URLSearchParams(window.location.search);
-    const abrirSino = params.get("abrir") === "notificacoes";
-    const telaLink = params.get("tela");
-    if (abrirSino) abrirPainel();
-    if (telaLink === "tarefas") setTelaAtiva("tarefas");
-    if (abrirSino || telaLink) {
-      params.delete("abrir");
-      params.delete("tela");
-      const resto = params.toString();
-      window.history.replaceState(null, "", window.location.pathname + (resto ? `?${resto}` : ""));
+  // ---- Endereco do navegador (ver rotas.ts) ----------------------------------
+  // Ao entrar (inclusive depois do login, que nao recarrega a pagina) e no
+  // Voltar/Avancar do navegador, o caminho vira estado; quando o estado muda, o
+  // caminho e gravado no historico. Links dos e-mails caem aqui.
+  const aplicarRota = async (rota: Rota) => {
+    aplicandoRota.current = true;
+    try {
+      if (rota.abrirNotificacoes) {
+        setPainelNotificacaoAberto(true);
+        buscarNovidades();
+      }
+      let tela = rota.tela;
+      if (tela === "solicitacoes_previsao" && !podeSolicitarPrevisao(usuarioAtual)) tela = "dashboard";
+      if (tela === "cadastros_equipe" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
+
+      if (tela === "painel_obra" && rota.codigoObra) {
+        const abasPermitidas = [
+          "resumo", "financeiro", "faturamento", "lista_materiais", "cronograma", "documentos", "diario_tarefas",
+          ...(podeSolicitarPrevisao(usuarioAtual) ? ["previsoes"] : []),
+          ...(usuarioAtual?.perfil === "admin" || usuarioAtual?.perfil === "engenheiro" ? ["rentabilidade"] : []),
+        ];
+        const aba = abasPermitidas.includes(rota.abaObra || "") ? rota.abaObra! : "resumo";
+        if (obraEcoSelecionada?.codigo_externo === rota.codigoObra) {
+          setTelaAtiva("painel_obra");
+          setAbaPainelObra(aba);
+        } else {
+          const { data } = await supabase
+            .from("obras")
+            .select("id, codigo_externo, nome, fase_atual, id_responsavel, status")
+            .eq("codigo_externo", rota.codigoObra)
+            .maybeSingle();
+          if (data) {
+            abrirPainelObra(data);
+            setAbaPainelObra(aba);
+          } else {
+            mostrarAviso(`Obra ${rota.codigoObra} não encontrada ou sem acesso.`, "erro");
+            setTelaAtiva("minhas_obras");
+          }
+        }
+      } else {
+        setTelaAtiva(tela === "painel_obra" ? "minhas_obras" : tela);
+      }
+
+      if (tela === "reunioes") {
+        setAbaReunioes(rota.novaReuniao ? "nova" : "historico");
+        setDataReuniaoSelecionada(rota.dataReuniao || null);
+      }
+      setSolicitacaoDestaque(tela === "solicitacoes_previsao" ? rota.idSolicitacao || null : null);
+
+      if (rota.idTarefa) {
+        if (tarefaSelecionada?.id !== rota.idTarefa) {
+          const { data } = await supabase
+            .from("tarefas")
+            .select(
+              `id, id_obra, titulo, descricao, status, data_vencimento, id_responsavel, created_at, origem, prioridade, data_conclusao, observacao_conclusao, obras!inner(codigo_externo, nome, id_responsavel), usuarios(nome)`,
+            )
+            .eq("id", rota.idTarefa)
+            .maybeSingle();
+          if (data) setTarefaSelecionada(data as any);
+          else mostrarAviso("Tarefa não encontrada ou sem acesso.", "erro");
+        }
+      } else {
+        setTarefaSelecionada(null);
+      }
+    } finally {
+      // deixa o React aplicar os estados acima antes de voltar a gravar no historico
+      setTimeout(() => {
+        aplicandoRota.current = false;
+        rotaPronta.current = true;
+        // normaliza o endereco (ex.: link antigo /?tela=tarefas -> /tarefas)
+        if (caminhoRef.current !== window.location.pathname + window.location.search)
+          window.history.replaceState(null, "", caminhoRef.current);
+      }, 0);
     }
+  };
+
+  useEffect(() => {
+    if (!usuarioAtual) {
+      rotaPronta.current = false;
+      return;
+    }
+    aplicarRota(caminhoParaRota(window.location.pathname, window.location.search));
+    const aoVoltar = () => aplicarRota(caminhoParaRota(window.location.pathname, window.location.search));
+    // clique num aviso push com o app ja aberto: o service worker manda abrir o sininho
     const aoReceber = (ev: MessageEvent) => {
-      if (ev.data?.tipo === "abrir-notificacoes") abrirPainel();
+      if (ev.data?.tipo === "abrir-notificacoes") {
+        setPainelNotificacaoAberto(true);
+        buscarNovidades();
+      }
     };
+    window.addEventListener("popstate", aoVoltar);
     navigator.serviceWorker?.addEventListener("message", aoReceber);
-    return () => navigator.serviceWorker?.removeEventListener("message", aoReceber);
+    return () => {
+      window.removeEventListener("popstate", aoVoltar);
+      navigator.serviceWorker?.removeEventListener("message", aoReceber);
+    };
   }, [usuarioAtual?.id]);
+
+  const caminhoAtual = rotaParaCaminho({
+    tela: telaAtiva,
+    codigoObra: obraEcoSelecionada?.codigo_externo || undefined,
+    abaObra: abaPainelObra,
+    novaReuniao: abaReunioes === "nova",
+    dataReuniao: dataReuniaoSelecionada || undefined,
+    idSolicitacao: solicitacaoDestaque || undefined,
+    idTarefa: tarefaSelecionada?.id,
+  });
+  const caminhoRef = useRef(caminhoAtual);
+  caminhoRef.current = caminhoAtual;
+
+  useEffect(() => {
+    if (!usuarioAtual || !rotaPronta.current) return;
+    const atual = window.location.pathname + window.location.search;
+    if (caminhoAtual === atual) return;
+    if (aplicandoRota.current) window.history.replaceState(null, "", caminhoAtual);
+    else window.history.pushState(null, "", caminhoAtual);
+  }, [caminhoAtual]);
 
   const alternarMenuRecolhido = () =>
     setMenuRecolhido((atual) => {
@@ -2789,7 +2891,7 @@ export default function App() {
         </table>
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 4px 0;">
           <tr><td style="border-radius:8px; background:#2A6377;">
-            <a href="https://gestaoobraskalter.vercel.app/?tela=tarefas" target="_blank" style="display:inline-block; padding:12px 22px; font-family:'Segoe UI',Arial,sans-serif; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:8px;">Clique aqui para ver a tarefa</a>
+            <a href="${window.location.origin}/tarefas?tarefa=${idTarefa}" target="_blank" style="display:inline-block; padding:12px 22px; font-family:'Segoe UI',Arial,sans-serif; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:8px;">Clique aqui para ver a tarefa</a>
           </td></tr>
         </table>
       `;
@@ -2830,10 +2932,13 @@ export default function App() {
     if (destinatarios.length === 0)
       return { ok: false, erro: "Nenhum destinatário com e-mail cadastrado." };
     try {
+      // dataAta vem como DD/MM/AAAA; o endereco da reuniao usa AAAA-MM-DD
+      const [dia, mes, ano] = dataAta.split("/");
       const html = montarHtmlAta(
         listaObras,
         dataAta,
         resumoGravacao === undefined ? gravacaoAta?.resumo : resumoGravacao,
+        ano && mes && dia ? `${window.location.origin}/reunioes/${ano}-${mes}-${dia}` : window.location.origin,
       );
       // Vai para a fila; o robo envia pelo Gmail do Gestao de Obras na proxima rodada.
       const { error } = await supabase.rpc("enfileirar_email", {
@@ -3006,6 +3111,7 @@ export default function App() {
       title={menuRecolhido ? rotulo : undefined}
       onClick={() => {
         setTelaAtiva(tela);
+        setSolicitacaoDestaque(null);
         setMenuMobileAberto(false);
       }}
       className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${menuRecolhido ? "md:justify-center md:px-0" : ""} ${ativo ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
@@ -7259,7 +7365,11 @@ export default function App() {
                 ERP. Para pedir uma nova, abra a obra e use a aba Previsões.
               </p>
             </div>
-            <PainelSolicitacoes usuario={usuarioAtual} />
+            <PainelSolicitacoes
+              usuario={usuarioAtual}
+              destaque={solicitacaoDestaque}
+              onLimparDestaque={() => setSolicitacaoDestaque(null)}
+            />
           </div>
         )}
 
@@ -7290,6 +7400,8 @@ export default function App() {
             {abaReunioes === "historico" ? (
               <ReunioesHistorico
                 recarregar={versaoHistoricoReunioes}
+                selecao={dataReuniaoSelecionada}
+                onSelecionar={setDataReuniaoSelecionada}
                 onBaixarPdf={gerarVisualPDF}
                 onReenviarEmail={enviarAtaPorEmailResend}
                 onAviso={mostrarAviso}
