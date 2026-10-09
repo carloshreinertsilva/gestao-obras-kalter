@@ -2,6 +2,8 @@ import {
   Activity,
   AlertTriangle,
   Bell,
+  BellOff,
+  BellRing,
   CheckSquare,
   DollarSign,
   HardHat,
@@ -9,7 +11,9 @@ import {
   Receipt,
   Wallet,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { Notificacao } from "./types";
+import { ativarPush, desativarPush, estadoPush, type EstadoPush } from "./push";
 
 const iconePorTipo: Record<string, { Icone: any; cor: string }> = {
   tarefa_atribuida: { Icone: CheckSquare, cor: "text-blue-600 bg-blue-50" },
@@ -34,6 +38,86 @@ export const tempoRelativo = (iso: string) => {
   if (dias < 7) return `há ${dias} dias`;
   return new Date(iso).toLocaleDateString("pt-BR");
 };
+
+// Cartao no topo do painel do sininho: liga/desliga os avisos push neste dispositivo.
+export function AtivarPush() {
+  const [estado, setEstado] = useState<EstadoPush>("carregando");
+  const [ocupado, setOcupado] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    estadoPush()
+      .then(setEstado)
+      .catch(() => setEstado("sem_suporte"));
+  }, []);
+
+  const executar = async (acao: () => Promise<EstadoPush>) => {
+    setOcupado(true);
+    setErro("");
+    try {
+      setEstado(await acao());
+    } catch (e) {
+      console.error("Push:", e);
+      setErro("Não foi possível alterar os avisos agora. Tente novamente.");
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  if (estado === "carregando") return null;
+
+  if (estado === "ativo") {
+    return (
+      <div className="flex items-center justify-between gap-2 mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
+        <span className="flex items-center gap-1.5">
+          <BellRing size={14} /> Avisos ativos neste dispositivo
+        </span>
+        <button
+          disabled={ocupado}
+          onClick={() => executar(desativarPush)}
+          className="font-semibold hover:underline disabled:opacity-50"
+        >
+          Desativar
+        </button>
+      </div>
+    );
+  }
+
+  if (estado === "inativo") {
+    return (
+      <div className="mb-4 p-3 rounded-xl bg-[#2A6377]/5 border border-[#2A6377]/20">
+        <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+          <BellRing size={16} className="text-[#2A6377]" /> Receber avisos neste dispositivo
+        </p>
+        <p className="text-xs text-slate-500 mt-1">
+          As novidades aparecem na tela mesmo com o app fechado.
+        </p>
+        <button
+          disabled={ocupado}
+          onClick={() => executar(ativarPush)}
+          className="mt-2 px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-xs font-semibold hover:bg-[#1e4857] disabled:opacity-50"
+        >
+          {ocupado ? "Ativando..." : "Ativar avisos"}
+        </button>
+        {erro && <p className="text-xs text-red-600 mt-2">{erro}</p>}
+      </div>
+    );
+  }
+
+  const textos: Record<string, string> = {
+    bloqueado:
+      "Os avisos estão bloqueados neste navegador. Libere em Configurações do site (cadeado ao lado do endereço) e recarregue a página.",
+    ios_instalar:
+      "No iPhone/iPad: toque em Compartilhar → “Adicionar à Tela de Início”, abra o app pelo ícone criado e ative os avisos aqui.",
+    sem_suporte: "Este navegador não permite avisos fora do app.",
+  };
+  return (
+    <div className="flex gap-2 mb-4 px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 text-xs text-slate-600">
+      <BellOff size={14} className="shrink-0 mt-0.5" />
+      <span>{textos[estado]}</span>
+    </div>
+  );
+}
 
 export function ItemNotificacao({
   notificacao,

@@ -10,7 +10,8 @@ import AnexosObra from "./AnexosObra";
 import ListaMateriaisSMA from "./ListaMateriaisSMA";
 import RentabilidadeProjeto from "./RentabilidadeProjeto";
 import { AbaPrevisoes, PainelSolicitacoes, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
-import { ItemNotificacao } from "./Notificacoes";
+import { AtivarPush, ItemNotificacao } from "./Notificacoes";
+import { removerPushAoSair } from "./push";
 import StatusSync from "./StatusSync";
 import type {
   Notificacao,
@@ -617,6 +618,7 @@ export default function App() {
   };
 
   const fazerLogout = async () => {
+    await removerPushAoSair();
     await supabase.auth.signOut();
     setTelaAtiva("dashboard");
     setEmailAuth("");
@@ -692,6 +694,28 @@ export default function App() {
       clearInterval(intervalo);
       document.removeEventListener("visibilitychange", atualizarSeVisivel);
     };
+  }, [usuarioAtual?.id]);
+
+  // Clique num aviso push: abre o painel do sininho (app recem-aberto via
+  // ?abrir=notificacoes, ou ja aberto via mensagem do service worker).
+  useEffect(() => {
+    if (!usuarioAtual) return;
+    const abrirPainel = () => {
+      setPainelNotificacaoAberto(true);
+      buscarNovidades();
+    };
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("abrir") === "notificacoes") {
+      abrirPainel();
+      params.delete("abrir");
+      const resto = params.toString();
+      window.history.replaceState(null, "", window.location.pathname + (resto ? `?${resto}` : ""));
+    }
+    const aoReceber = (ev: MessageEvent) => {
+      if (ev.data?.tipo === "abrir-notificacoes") abrirPainel();
+    };
+    navigator.serviceWorker?.addEventListener("message", aoReceber);
+    return () => navigator.serviceWorker?.removeEventListener("message", aoReceber);
   }, [usuarioAtual?.id]);
 
   const alternarMenuRecolhido = () =>
@@ -4556,6 +4580,7 @@ export default function App() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
+              <AtivarPush />
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-bold uppercase text-slate-400 tracking-wider">
                   Novidades{novidadesNaoLidas > 0 ? ` (${novidadesNaoLidas} nova${novidadesNaoLidas > 1 ? "s" : ""})` : ""}
