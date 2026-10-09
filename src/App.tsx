@@ -9,6 +9,7 @@ import ValorAjustavel from "./ValorAjustavel";
 import AnexosObra from "./AnexosObra";
 import ListaMateriaisSMA from "./ListaMateriaisSMA";
 import RentabilidadeProjeto from "./RentabilidadeProjeto";
+import { AbaPrevisoes, PainelSolicitacoes, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
 import { ItemNotificacao } from "./Notificacoes";
 import StatusSync from "./StatusSync";
 import type {
@@ -110,6 +111,7 @@ import {
   Mic,
   Boxes,
   TrendingUp,
+  Wallet,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -2929,6 +2931,10 @@ export default function App() {
       setTelaAtiva("tarefas");
       return;
     }
+    if (notif.tipo === "previsao_aprovacao") {
+      setTelaAtiva("solicitacoes_previsao");
+      return;
+    }
     if (!notif.id_obra) return;
     try {
       const { data } = await supabase
@@ -2941,6 +2947,7 @@ export default function App() {
         // nf_nova -> aba Faturamento; recebimento_novo -> aba Financeiro (parcelas)
         if (notif.tipo === "nf_nova") setAbaPainelObra("faturamento");
         if (notif.tipo === "recebimento_novo") setAbaPainelObra("financeiro");
+        if (notif.tipo === "previsao_resultado") setAbaPainelObra("previsoes");
       }
     } catch (error) {
       console.error(error);
@@ -4760,6 +4767,8 @@ export default function App() {
                   telaAtiva === "minhas_obras" || telaAtiva === "painel_obra",
                 )}
                 {itemMenu("reunioes", "Reuniões", ClipboardList, telaAtiva === "reunioes")}
+                {podeSolicitarPrevisao(usuarioAtual) &&
+                  itemMenu("solicitacoes_previsao", "Previsões", Wallet, telaAtiva === "solicitacoes_previsao")}
               </div>
             </div>
 
@@ -5329,6 +5338,9 @@ export default function App() {
                       label: "Diário e Tarefas",
                       icon: ClipboardList,
                     },
+                    ...(podeSolicitarPrevisao(usuarioAtual)
+                      ? [{ id: "previsoes", label: "Previsões", icon: Wallet }]
+                      : []),
                     ...(podeVerRentabilidade
                       ? [{ id: "rentabilidade", label: "Rentabilidade", icon: TrendingUp }]
                       : []),
@@ -6044,7 +6056,13 @@ export default function App() {
               <RentabilidadeProjeto
                 familias={rentabilidadeFamilias}
                 valorVendido={totalVendaGeral}
+                obra={obraEcoSelecionada}
+                usuario={usuarioAtual}
               />
+            )}
+
+            {abaPainelObra === "previsoes" && podeSolicitarPrevisao(usuarioAtual) && obraEcoSelecionada && (
+              <AbaPrevisoes obra={obraEcoSelecionada} usuario={usuarioAtual} />
             )}
 
             {abaPainelObra === "cronograma" && (
@@ -7200,6 +7218,19 @@ export default function App() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {telaAtiva === "solicitacoes_previsao" && podeSolicitarPrevisao(usuarioAtual) && (
+          <div className="animate-in fade-in space-y-4">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Solicitações de previsão</h2>
+              <p className="text-sm text-slate-400 mt-1">
+                Aumentos e transferências de previsão pedidos pelo app: andamento, aprovação e o que foi gravado no
+                ERP. Para pedir uma nova, abra a obra e use a aba Previsões.
+              </p>
+            </div>
+            <PainelSolicitacoes usuario={usuarioAtual} />
           </div>
         )}
 

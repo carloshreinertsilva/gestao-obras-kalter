@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react";
-import { Download, Search } from "lucide-react";
+import { Download, Plus, Search } from "lucide-react";
 import { formatarMoeda } from "./utils";
-import type { ObraRentabilidadeFamilia } from "./types";
+import type { Obra, ObraRentabilidadeFamilia, Usuario } from "./types";
 import GraficoRentabilidade from "./GraficoRentabilidade";
+import { ModalSolicitarPrevisao, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
 
 interface Props {
   familias: ObraRentabilidadeFamilia[];
   valorVendido: number;
+  obra?: Obra | null;
+  usuario?: Usuario | null;
 }
 
 type Coluna =
@@ -39,8 +42,9 @@ const CelulaValor = ({
   </td>
 );
 
-export default function RentabilidadeProjeto({ familias, valorVendido }: Props) {
+export default function RentabilidadeProjeto({ familias, valorVendido, obra, usuario }: Props) {
   const [aba, setAba] = useState<"tabela" | "grafico">("tabela");
+  const [solicitando, setSolicitando] = useState(false);
   const [busca, setBusca] = useState("");
   const [ordenacao, setOrdenacao] = useState<{ coluna: Coluna; direcao: "asc" | "desc" }>({
     coluna: "codigo_projeto",
@@ -242,22 +246,41 @@ export default function RentabilidadeProjeto({ familias, valorVendido }: Props) 
         </p>
       </div>
 
-      <div className="inline-flex rounded-lg border overflow-hidden text-sm bg-white">
-        {(
-          [
-            ["tabela", "Tabela"],
-            ["grafico", "Gráfico"],
-          ] as const
-        ).map(([valor, rotulo]) => (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border overflow-hidden text-sm bg-white">
+          {(
+            [
+              ["tabela", "Tabela"],
+              ["grafico", "Gráfico"],
+            ] as const
+          ).map(([valor, rotulo]) => (
+            <button
+              key={valor}
+              onClick={() => setAba(valor)}
+              className={`px-4 py-1.5 font-semibold transition ${aba === valor ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
+        {obra && podeSolicitarPrevisao(usuario) && (
           <button
-            key={valor}
-            onClick={() => setAba(valor)}
-            className={`px-4 py-1.5 font-semibold transition ${aba === valor ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+            onClick={() => setSolicitando(true)}
+            className="bg-[#2A6377] text-white px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-[#1e4857]"
           >
-            {rotulo}
+            <Plus size={16} /> Solicitar previsão
           </button>
-        ))}
+        )}
       </div>
+
+      {solicitando && obra && (
+        <ModalSolicitarPrevisao
+          obra={obra}
+          familias={familias}
+          usuario={usuario || null}
+          onFechar={() => setSolicitando(false)}
+        />
+      )}
 
       {aba === "grafico" && (
         <GraficoRentabilidade familias={familiasLista} />

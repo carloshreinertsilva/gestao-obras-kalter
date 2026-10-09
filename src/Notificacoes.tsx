@@ -7,6 +7,7 @@ import {
   HardHat,
   MessageSquare,
   Receipt,
+  Wallet,
 } from "lucide-react";
 import type { Notificacao } from "./types";
 
@@ -18,6 +19,8 @@ const iconePorTipo: Record<string, { Icone: any; cor: string }> = {
   ocorrencia_nova: { Icone: AlertTriangle, cor: "text-amber-600 bg-amber-50" },
   nf_nova: { Icone: Receipt, cor: "text-violet-600 bg-violet-50" },
   recebimento_novo: { Icone: DollarSign, cor: "text-green-600 bg-green-50" },
+  previsao_aprovacao: { Icone: Wallet, cor: "text-amber-600 bg-amber-50" },
+  previsao_resultado: { Icone: Wallet, cor: "text-[#2A6377] bg-[#2A6377]/10" },
 };
 
 export const tempoRelativo = (iso: string) => {

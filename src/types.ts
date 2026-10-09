@@ -24,7 +24,52 @@ export interface Usuario {
   perfil?: PerfilUsuario;
   ativo?: boolean;
   id_engenheiro_vinculado?: string | null;
+  aprova_previsao?: boolean;
   created_at?: string;
+}
+
+export type StatusSolicitacaoPrevisao =
+  | "simulando"
+  | "aguardando_aprovacao"
+  | "aprovada"
+  | "executada"
+  | "recusada"
+  | "erro"
+  | "cancelada"
+  | "desfeita";
+
+export interface SolicitacaoPrevisao {
+  id: string;
+  id_obra: string;
+  codigo_obra: string;
+  tipo: "aumento" | "transferencia";
+  familia_destino: string;
+  origens: { familia: string; valor: string | number }[];
+  valor: number | string;
+  disponivel_informado?: number | string | null;
+  necessario_informado?: number | string | null;
+  justificativa: string;
+  id_solicitante?: string | null;
+  nome_solicitante: string;
+  solicitante_erp?: string | null;
+  status: StatusSolicitacaoPrevisao;
+  mensagem?: string | null;
+  plano?: any;
+  codigo_plano?: string | null;
+  vencimento?: number | null;
+  simulado_em?: string | null;
+  nome_aprovador?: string | null;
+  decidido_em?: string | null;
+  motivo_recusa?: string | null;
+  resultado?: any;
+  executado_em?: string | null;
+  desfazer_status?: "simulando" | "aguardando_confirmacao" | "confirmado" | "erro" | null;
+  desfazer_plano?: any;
+  desfazer_codigo?: string | null;
+  desfazer_mensagem?: string | null;
+  desfeito_em?: string | null;
+  created_at: string;
+  updated_at?: string;
 }
 
 export type StatusObra =
@@ -297,7 +342,9 @@ export type TipoNotificacao =
   | "fase_alterada"
   | "ocorrencia_nova"
   | "nf_nova"
-  | "recebimento_novo";
+  | "recebimento_novo"
+  | "previsao_aprovacao"
+  | "previsao_resultado";
 
 export interface Notificacao {
   id: string;
