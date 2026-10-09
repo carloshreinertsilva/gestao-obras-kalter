@@ -2881,7 +2881,7 @@ export default function App() {
     setEnviandoEmailAta(false);
     setStatusEnvioEmailAta(resultado);
     if (resultado.ok) {
-      mostrarAviso("Ata gerada! O e-mail sai em até 5 minutos.");
+      mostrarAviso("Ata enviada por e-mail automaticamente!");
     } else {
       mostrarAviso(
         `Ata gerada, mas o envio automático falhou: ${resultado.erro}`,
@@ -2897,7 +2897,7 @@ export default function App() {
     setEnviandoEmailAta(false);
     setStatusEnvioEmailAta(resultado);
     mostrarAviso(
-      resultado.ok ? "Ata na fila: o e-mail sai em até 5 minutos." : `Falha ao reenviar: ${resultado.erro}`,
+      resultado.ok ? "Ata reenviada!" : `Falha ao reenviar: ${resultado.erro}`,
       resultado.ok ? "sucesso" : "erro",
     );
   };
@@ -4679,8 +4679,7 @@ export default function App() {
                 </div>
               ) : statusEnvioEmailAta?.ok ? (
                 <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 mb-4 text-sm">
-                  ✅ E-mail na fila de envio (sai em até 5 minutos) para:{" "}
-                  {statusEnvioEmailAta.destinatarios?.join(", ")}
+                  ✅ E-mail enviado para: {statusEnvioEmailAta.destinatarios?.join(", ")}
                 </div>
               ) : statusEnvioEmailAta && !statusEnvioEmailAta.ok ? (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm flex flex-col gap-2">
