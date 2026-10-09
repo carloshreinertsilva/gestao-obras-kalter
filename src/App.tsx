@@ -409,7 +409,7 @@ export default function App() {
           <style>
             body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
             .header { text-align: center; border-bottom: 2px solid #2A6377; padding-bottom: 20px; margin-bottom: 30px; }
-            .header h1 { color: #2A6377; margin: 0 0 10px 0; font-size: 24px; letter-spacing: 1px; }
+            .header img { display: block; margin: 0 auto 12px auto; width: 260px; max-width: 100%; height: auto; border-radius: 6px; }
             .data { font-size: 14px; color: #64748b; font-weight: bold; text-transform: uppercase; }
             .gestor-title { color: #2A6377; font-size: 19px; font-weight: bold; margin: 35px 0 15px 0; border-bottom: 3px solid #2A6377; padding-bottom: 8px; }
             .gestor-title:first-of-type { margin-top: 0; }
@@ -426,7 +426,7 @@ export default function App() {
         </head>
         <body>
           <div class="header">
-             <h1>KALTER - REFRIGERAÇÃO INDUSTRIAL</h1>
+             <img src="https://gestaoobraskalter.vercel.app/logo2.png" alt="KALTER - Refrigeração Industrial" />
              <div class="data">Gestão de Obras • Ata de Reunião • ${dataAta}</div>
           </div>
     `;
@@ -704,10 +704,16 @@ export default function App() {
       setPainelNotificacaoAberto(true);
       buscarNovidades();
     };
+    // Links dos e-mails: ?tela=tarefas abre direto a tela de tarefas (vale tambem
+    // depois do login, porque o login nao recarrega a pagina).
     const params = new URLSearchParams(window.location.search);
-    if (params.get("abrir") === "notificacoes") {
-      abrirPainel();
+    const abrirSino = params.get("abrir") === "notificacoes";
+    const telaLink = params.get("tela");
+    if (abrirSino) abrirPainel();
+    if (telaLink === "tarefas") setTelaAtiva("tarefas");
+    if (abrirSino || telaLink) {
       params.delete("abrir");
+      params.delete("tela");
       const resto = params.toString();
       window.history.replaceState(null, "", window.location.pathname + (resto ? `?${resto}` : ""));
     }
@@ -2767,15 +2773,25 @@ export default function App() {
       );
       if (!responsavel?.email) return;
 
+      // So o miolo: cabecalho com logo e rodape sao colocados pelo robo
+      // (robo-sync-erp/src/layout_email.py) na hora do envio.
+      const esc = (t?: string | null) =>
+        (t || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const linha = (rotulo: string, valor: string) =>
+        `<tr><td style="padding:6px 12px 6px 0; color:#64748b; font-size:13px; white-space:nowrap; vertical-align:top;">${rotulo}</td><td style="padding:6px 0; font-size:15px; color:#1e293b;">${valor}</td></tr>`;
       const html = `
-        <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; max-width: 560px; margin: 0 auto;">
-          <h2 style="color: #2A6377;">Nova tarefa atribuída a você</h2>
-          <p><strong>${dados.titulo}</strong></p>
-          ${dados.descricao ? `<p style="color:#475569;">${dados.descricao}</p>` : ""}
-          ${dados.nome_obra ? `<p><strong>Obra:</strong> ${dados.nome_obra}</p>` : ""}
-          ${dados.data_vencimento ? `<p><strong>Prazo:</strong> ${formatarDataSegura(dados.data_vencimento)}</p>` : ""}
-          <p style="margin-top:24px; font-size:12px; color:#94a3b8;">Gerado via Kalter Sistema de Gestão de Obras</p>
-        </div>
+        <p style="margin:0 0 18px 0; font-size:20px; font-weight:bold; color:#2A6377;">Nova tarefa atribuída a você</p>
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-top:1px solid #e5eaee; border-bottom:1px solid #e5eaee; padding:8px 0;">
+          ${linha("Tarefa", `<strong>${esc(dados.titulo)}</strong>`)}
+          ${dados.descricao ? linha("Descrição", esc(dados.descricao).replace(/\n/g, "<br/>")) : ""}
+          ${dados.nome_obra ? linha("Obra", esc(dados.nome_obra)) : ""}
+          ${dados.data_vencimento ? linha("Prazo", `<strong>${formatarDataSegura(dados.data_vencimento)}</strong>`) : ""}
+        </table>
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 4px 0;">
+          <tr><td style="border-radius:8px; background:#2A6377;">
+            <a href="https://gestaoobraskalter.vercel.app/?tela=tarefas" target="_blank" style="display:inline-block; padding:12px 22px; font-family:'Segoe UI',Arial,sans-serif; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:8px;">Clique aqui para ver a tarefa</a>
+          </td></tr>
+        </table>
       `;
 
       // Vai para a fila; o robo envia pelo Gmail do Gestao de Obras e marca
