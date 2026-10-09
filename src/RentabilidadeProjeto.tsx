@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Search } from "lucide-react";
 import { formatarMoeda } from "./utils";
+import { supabase } from "./supabase";
 import type { Obra, ObraRentabilidadeFamilia, Usuario } from "./types";
 import GraficoRentabilidade from "./GraficoRentabilidade";
 import { ModalSolicitarPrevisao, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
@@ -57,6 +58,30 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
       direcao: atual.coluna === coluna && atual.direcao === "asc" ? "desc" : "asc",
     }));
 
+  // Margem prevista do orcamento e venda sem impostos, vindas do ERP pelo robo (obras.margem_prevista_erp /
+  // venda_sem_impostos_erp). E a mesma base do BI "Analise Margem e Rentabilidade" e da calculadora de
+  // orcamento: % = margem / venda sem impostos (ex.: obra 2182 = 32,1%).
+  const [margemErp, setMargemErp] = useState<{ margem: number; vendaSemImpostos: number } | null>(null);
+  useEffect(() => {
+    let ativo = true;
+    setMargemErp(null);
+    if (!obra?.id) return;
+    supabase
+      .from("obras")
+      .select("margem_prevista_erp, venda_sem_impostos_erp")
+      .eq("id", obra.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!ativo || !data) return;
+        const margem = Number(data.margem_prevista_erp || 0);
+        const vendaSemImpostos = Number(data.venda_sem_impostos_erp || 0);
+        if (margem !== 0 && vendaSemImpostos > 0) setMargemErp({ margem, vendaSemImpostos });
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [obra?.id]);
+
   const obraRow = useMemo(() => familias.find((f) => f.eh_obra) || null, [familias]);
   // Familia sem nenhum valor (previsto, realizado ou em aberto) nao entra na tela - so
   // ocupa espaco. Nao altera nenhum total, ja que todos os campos dela sao zero.
@@ -82,22 +107,27 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
     const custoRealizado = somar(familias, "custo_realizado");
     const previsoesEmAberto = somar(familias, "previsoes_em_aberto");
     const resultadoProjetado = custoPrevisto - custoRealizado - previsoesEmAberto;
-    const rentabilidadeOriginal =
-      valorVendido > 0 ? ((valorVendido - custoPrevisto) / valorVendido) * 100 : 0;
-    const rentabilidadeAtual =
-      valorVendido > 0
-        ? ((valorVendido - (custoRealizado + previsoesEmAberto)) / valorVendido) * 100
-        : 0;
+    // Com a margem do orcamento no ERP: % sobre a venda sem impostos (regra do BI / calculadora).
+    // Sem ela (obra sem margem cadastrada ou pedido sem venda sem impostos): regra antiga, venda - custo.
+    const baseErp = margemErp !== null;
+    const margemOriginal = baseErp ? margemErp.margem : valorVendido - custoPrevisto;
+    const margemAtual = margemOriginal + resultadoProjetado;
+    const base = baseErp ? margemErp.vendaSemImpostos : valorVendido;
+    const rentabilidadeOriginal = base > 0 ? (margemOriginal / base) * 100 : 0;
+    const rentabilidadeAtual = base > 0 ? (margemAtual / base) * 100 : 0;
     return {
       custoPrevisto,
       custoRealizado,
       previsoesEmAberto,
       resultadoProjetado,
+      baseErp,
+      margemOriginal,
+      margemAtual,
       rentabilidadeOriginal,
       rentabilidadeAtual,
       delta: rentabilidadeAtual - rentabilidadeOriginal,
     };
-  }, [familias, familiasLista, valorVendido]);
+  }, [familias, familiasLista, valorVendido, margemErp]);
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -218,20 +248,26 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
 
       <div className="bg-white p-5 rounded-xl shadow-sm border">
         <p className="text-xs text-slate-400 font-bold uppercase mb-3">
-          Rentabilidade sobre o valor vendido
+          {panorama.baseErp ? "Margem sobre a venda sem impostos" : "Rentabilidade sobre o valor vendido"}
         </p>
         <div className="flex flex-wrap items-end gap-8">
           <div>
-            <p className="text-[11px] text-slate-400">Original (venda − custo previsto)</p>
+            <p className="text-[11px] text-slate-400">
+              {panorama.baseErp ? "Prevista (margem do orçamento no ERP)" : "Original (venda − custo previsto)"}
+            </p>
             <p className="text-2xl font-bold text-slate-800">
               {panorama.rentabilidadeOriginal.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
             </p>
+            <p className="text-[11px] text-slate-500">{formatarMoeda(panorama.margemOriginal)}</p>
           </div>
           <div>
-            <p className="text-[11px] text-slate-400">Atual (venda − realizado − previsões)</p>
+            <p className="text-[11px] text-slate-400">
+              {panorama.baseErp ? "Atual (margem prevista + resultado projetado)" : "Atual (venda − realizado − previsões)"}
+            </p>
             <p className="text-2xl font-bold text-slate-800">
               {panorama.rentabilidadeAtual.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
             </p>
+            <p className="text-[11px] text-slate-500">{formatarMoeda(panorama.margemAtual)}</p>
           </div>
           <div
             className={`flex items-center gap-1.5 text-sm font-bold px-2.5 py-1 rounded-lg ${panorama.delta < 0 ? "text-red-700 bg-red-50" : "text-emerald-700 bg-emerald-50"}`}
@@ -243,6 +279,9 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
         <p className="text-[11px] text-slate-400 mt-2">
           Estimativa: considera o que já foi realizado e comprometido (pedidos + previsões de
           pagamento) no lugar do orçamento original.
+          {panorama.baseErp
+            ? " Margem prevista = contribuição + rentabilidade do orçamento no ERP; % sobre a venda sem impostos."
+            : " Obra sem margem de orçamento cadastrada no ERP: % calculado como venda − custo sobre o valor vendido."}
         </p>
       </div>
 
