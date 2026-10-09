@@ -2778,19 +2778,16 @@ export default function App() {
         </div>
       `;
 
-      const { data, error } = await supabase.functions.invoke("enviar-email", {
-        body: {
-          to: [responsavel.email],
-          subject: `Nova tarefa: ${dados.titulo}`,
-          html,
-        },
+      // Vai para a fila; o robo envia pelo Gmail do Gestao de Obras e marca
+      // email_atribuicao_enviado quando sair.
+      const { error } = await supabase.rpc("enfileirar_email", {
+        p_para: [responsavel.email],
+        p_assunto: `Nova tarefa: ${dados.titulo}`,
+        p_html: html,
+        p_origem: "tarefa_atribuida",
+        p_id_tarefa: idTarefa,
       });
-      if (!error && !data?.error) {
-        await supabase
-          .from("tarefas")
-          .update({ email_atribuicao_enviado: true })
-          .eq("id", idTarefa);
-      }
+      if (error) throw error;
     } catch (error) {
       console.error("Erro ao enviar e-mail de atribuição de tarefa:", error);
     }
@@ -2822,23 +2819,14 @@ export default function App() {
         dataAta,
         resumoGravacao === undefined ? gravacaoAta?.resumo : resumoGravacao,
       );
-      const { data, error } = await supabase.functions.invoke(
-        "enviar-email",
-        {
-          body: {
-            to: destinatarios,
-            subject: `Ata de Reunião de Obras - ${dataAta}`,
-            html,
-          },
-        },
-      );
+      // Vai para a fila; o robo envia pelo Gmail do Gestao de Obras na proxima rodada.
+      const { error } = await supabase.rpc("enfileirar_email", {
+        p_para: destinatarios,
+        p_assunto: `Ata de Reunião de Obras - ${dataAta}`,
+        p_html: html,
+        p_origem: "ata",
+      });
       if (error) throw error;
-      if (data?.error)
-        throw new Error(
-          typeof data.error === "string"
-            ? data.error
-            : JSON.stringify(data.error),
-        );
       return { ok: true, destinatarios };
     } catch (error: any) {
       return {
@@ -2893,7 +2881,7 @@ export default function App() {
     setEnviandoEmailAta(false);
     setStatusEnvioEmailAta(resultado);
     if (resultado.ok) {
-      mostrarAviso("Ata enviada por e-mail automaticamente!");
+      mostrarAviso("Ata gerada! O e-mail sai em até 5 minutos.");
     } else {
       mostrarAviso(
         `Ata gerada, mas o envio automático falhou: ${resultado.erro}`,
@@ -2909,7 +2897,7 @@ export default function App() {
     setEnviandoEmailAta(false);
     setStatusEnvioEmailAta(resultado);
     mostrarAviso(
-      resultado.ok ? "Ata reenviada!" : `Falha ao reenviar: ${resultado.erro}`,
+      resultado.ok ? "Ata na fila: o e-mail sai em até 5 minutos." : `Falha ao reenviar: ${resultado.erro}`,
       resultado.ok ? "sucesso" : "erro",
     );
   };
@@ -4691,7 +4679,8 @@ export default function App() {
                 </div>
               ) : statusEnvioEmailAta?.ok ? (
                 <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 mb-4 text-sm">
-                  ✅ E-mail enviado para: {statusEnvioEmailAta.destinatarios?.join(", ")}
+                  ✅ E-mail na fila de envio (sai em até 5 minutos) para:{" "}
+                  {statusEnvioEmailAta.destinatarios?.join(", ")}
                 </div>
               ) : statusEnvioEmailAta && !statusEnvioEmailAta.ok ? (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm flex flex-col gap-2">

@@ -235,7 +235,7 @@ export default function ReunioesHistorico({
     );
     setEnviando(false);
     onAviso(
-      resultado.ok ? "Ata reenviada por e-mail!" : `Falha ao enviar: ${resultado.erro}`,
+      resultado.ok ? "Ata na fila: o e-mail sai em até 5 minutos." : `Falha ao enviar: ${resultado.erro}`,
       resultado.ok ? "sucesso" : "erro",
     );
   };
