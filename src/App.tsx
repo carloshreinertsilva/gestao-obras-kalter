@@ -647,6 +647,18 @@ export default function App() {
     usuarioAtual?.perfil === "assistente"
       ? usuarioAtual?.id_engenheiro_vinculado || usuarioAtual?.id
       : usuarioAtual?.id;
+  // Logistica/Suprimentos acompanha TODAS as obras (cota e compra o material que os
+  // gestores pedem), so para consulta e so nas abas de que precisa; pode pedir previsao.
+  // Resumo e Financeiro ficam de fora (mostram recebimentos do cliente).
+  const ehLogistica = usuarioAtual?.perfil === "logistica";
+  const veTodasObras = isAdmin || ehLogistica;
+  const abaInicialObra = ehLogistica ? "faturamento" : "resumo";
+  const abaObraPermitida = (aba: string) => {
+    if (ehLogistica) return ["faturamento", "lista_materiais", "diario_tarefas", "previsoes"].includes(aba);
+    if (aba === "rentabilidade") return podeVerRentabilidade;
+    if (aba === "previsoes") return podeSolicitarPrevisao(usuarioAtual);
+    return ["resumo", "financeiro", "faturamento", "lista_materiais", "cronograma", "documentos", "diario_tarefas"].includes(aba);
+  };
   const podeEditarObra = (obra: any) =>
     Boolean(isAdmin || (obra && usuarioAtual && obra.id_responsavel === idResponsavelEscopo));
   const podeEditarObraSelecionada = Boolean(
@@ -724,12 +736,7 @@ export default function App() {
       if (tela === "cadastros_equipe" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
 
       if (tela === "painel_obra" && rota.codigoObra) {
-        const abasPermitidas = [
-          "resumo", "financeiro", "faturamento", "lista_materiais", "cronograma", "documentos", "diario_tarefas",
-          ...(podeSolicitarPrevisao(usuarioAtual) ? ["previsoes"] : []),
-          ...(usuarioAtual?.perfil === "admin" || usuarioAtual?.perfil === "engenheiro" ? ["rentabilidade"] : []),
-        ];
-        const aba = abasPermitidas.includes(rota.abaObra || "") ? rota.abaObra! : "resumo";
+        const aba = abaObraPermitida(rota.abaObra || "") ? rota.abaObra! : abaInicialObra;
         if (obraEcoSelecionada?.codigo_externo === rota.codigoObra) {
           setTelaAtiva("painel_obra");
           setAbaPainelObra(aba);
@@ -859,7 +866,7 @@ export default function App() {
         )
         .eq("status", "em_andamento")
         .order("created_at", { ascending: false });
-      if (!isAdmin) query = query.eq("id_responsavel", idResponsavelEscopo);
+      if (!veTodasObras) query = query.eq("id_responsavel", idResponsavelEscopo);
       const { data } = await query;
       if (data) {
         setObrasLista(data);
@@ -2166,7 +2173,7 @@ export default function App() {
           `id, id_obra, titulo, descricao, status, data_vencimento, id_responsavel, created_at, origem, prioridade, data_conclusao, observacao_conclusao, obras!inner(codigo_externo, nome, id_responsavel), usuarios(nome)`,
         )
         .order("created_at", { ascending: false });
-      if (!isAdmin) {
+      if (!veTodasObras) {
         const { data: obrasUsuario } = await supabase
           .from("obras")
           .select("id")
@@ -2489,7 +2496,7 @@ export default function App() {
     // quando o painel era aberto a partir do Dashboard.
     setObraEcoSelecionada(obra);
     setFiltroObraKanban(obra.id);
-    setAbaPainelObra("resumo");
+    setAbaPainelObra(abaInicialObra);
     setTelaAtiva("painel_obra");
     try {
       const { data } = await supabase
@@ -5473,13 +5480,9 @@ export default function App() {
                       label: "Diário e Tarefas",
                       icon: ClipboardList,
                     },
-                    ...(podeSolicitarPrevisao(usuarioAtual)
-                      ? [{ id: "previsoes", label: "Previsões", icon: Wallet }]
-                      : []),
-                    ...(podeVerRentabilidade
-                      ? [{ id: "rentabilidade", label: "Rentabilidade", icon: TrendingUp }]
-                      : []),
-                  ].map((aba) => {
+                    { id: "previsoes", label: "Previsões", icon: Wallet },
+                    { id: "rentabilidade", label: "Rentabilidade", icon: TrendingUp },
+                  ].filter((aba) => abaObraPermitida(aba.id)).map((aba) => {
                     const IconeAba = aba.icon;
                     return (
                       <button
@@ -5495,7 +5498,7 @@ export default function App() {
               </div>
             </div>
 
-            {abaPainelObra === "resumo" && (
+            {abaPainelObra === "resumo" && abaObraPermitida("resumo") && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                   <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-blue-500">
@@ -5590,7 +5593,7 @@ export default function App() {
               </div>
             )}
 
-            {abaPainelObra === "financeiro" && (
+            {abaPainelObra === "financeiro" && abaObraPermitida("financeiro") && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                   <div className="bg-white p-5 rounded-xl shadow-sm border">
