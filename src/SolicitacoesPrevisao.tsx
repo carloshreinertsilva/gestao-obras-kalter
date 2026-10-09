@@ -61,6 +61,11 @@ const sufixoFamilia = (codigo: string) => String(codigo || "").split(".").pop() 
 
 const rotuloFamilia = (f: FamiliaPrevisao) => `${f.codigo_projeto} - ${f.descricao || ""}`;
 
+// Impostos (970), despesas comerciais (980), seguros (990) e garantia (1000) nao podem ser movimentados
+// pelos gestores: nao aparecem como origem nem destino (o banco tambem recusa).
+const FAMILIAS_RESTRITAS = ["970", "980", "990", "1000"];
+export const familiaRestrita = (codigo?: string) => FAMILIAS_RESTRITAS.includes(sufixoFamilia(codigo || ""));
+
 export const podeSolicitarPrevisao = (usuario?: Usuario | null) =>
   ["admin", "engenheiro", "assistente"].includes(String(usuario?.perfil || ""));
 
@@ -95,17 +100,19 @@ export function ModalSolicitarPrevisao({
   const lista = useMemo(
     () =>
       familias
-        .filter((f) => !f.eh_obra && f.codigo_projeto)
+        .filter((f) => !f.eh_obra && f.codigo_projeto && !familiaRestrita(f.codigo_projeto))
         .sort((a, b) =>
           String(a.codigo_projeto).localeCompare(String(b.codigo_projeto), "pt-BR", { numeric: true }),
         ),
     [familias],
   );
+  // Origem so pode ser familia com saldo em aberto
+  const listaOrigens = lista.filter((f) => Number(f.previsoes_em_aberto || 0) > 0.005);
   const saldo = (codigo: string) =>
     Number(lista.find((f) => f.codigo_projeto === codigo)?.previsoes_em_aberto || 0);
 
   const [tipo, setTipo] = useState<"aumento" | "transferencia">("aumento");
-  const [destino, setDestino] = useState(familiaInicial || "");
+  const [destino, setDestino] = useState(familiaInicial && !familiaRestrita(familiaInicial) ? familiaInicial : "");
   const [disponivel, setDisponivel] = useState("");
   const [necessario, setNecessario] = useState("");
   const [valorAumento, setValorAumento] = useState("");
@@ -300,8 +307,10 @@ export function ModalSolicitarPrevisao({
                           }
                           className={`w-full border rounded-lg px-3 py-2 text-sm bg-white ${semSaldo ? "border-red-400 bg-red-50" : ""}`}
                         >
-                          <option value="">Selecione a família de origem...</option>
-                          {lista.filter((f) => f.codigo_projeto !== destino).map(opcaoFamilia)}
+                          <option value="">
+                            {listaOrigens.length ? "Selecione a família de origem..." : "Nenhuma família com saldo em aberto"}
+                          </option>
+                          {listaOrigens.filter((f) => f.codigo_projeto !== destino).map(opcaoFamilia)}
                         </select>
                       </div>
                       <input
@@ -802,12 +811,21 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
                     <td className="px-3 py-2.5 text-center font-semibold text-slate-700">{f.previsoes_numeros || ""}</td>
                     {pode && (
                       <td className="px-3 py-2.5 text-right">
-                        <button
-                          onClick={() => setModal({ aberto: true, familia: f.codigo_projeto })}
-                          className="text-xs font-semibold text-[#2A6377] hover:underline whitespace-nowrap"
-                        >
-                          Solicitar
-                        </button>
+                        {familiaRestrita(f.codigo_projeto) ? (
+                          <span
+                            className="text-[11px] text-slate-400 whitespace-nowrap"
+                            title="Impostos, despesas comerciais, seguros e garantia não são movimentados por solicitação"
+                          >
+                            Não movimentável
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setModal({ aberto: true, familia: f.codigo_projeto })}
+                            className="text-xs font-semibold text-[#2A6377] hover:underline whitespace-nowrap"
+                          >
+                            Solicitar
+                          </button>
+                        )}
                       </td>
                     )}
                   </tr>
