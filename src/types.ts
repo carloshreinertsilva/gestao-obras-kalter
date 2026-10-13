@@ -25,6 +25,7 @@ export interface Usuario {
   ativo?: boolean;
   id_engenheiro_vinculado?: string | null;
   aprova_previsao?: boolean;
+  recebe_copia_previsao?: boolean;
   created_at?: string;
 }
 

@@ -168,6 +168,8 @@ export default function App() {
     email: "",
     perfil: "engenheiro",
     id_engenheiro_vinculado: "",
+    aprova_previsao: false,
+    recebe_copia_previsao: false,
   });
   const [novaObra, setNovaObra] = useState<any>({
     id: null,
@@ -848,7 +850,7 @@ export default function App() {
     try {
       const { data } = await supabase
         .from("usuarios")
-        .select("id, nome, email, perfil, id_engenheiro_vinculado")
+        .select("id, nome, email, perfil, id_engenheiro_vinculado, aprova_previsao, recebe_copia_previsao")
         .eq("ativo", true);
       setListaUsuarios(data || []);
     } catch (error) {
@@ -2333,6 +2335,8 @@ export default function App() {
           novoUsuario.perfil === "assistente"
             ? novoUsuario.id_engenheiro_vinculado || null
             : null,
+        aprova_previsao: Boolean(novoUsuario.aprova_previsao),
+        recebe_copia_previsao: Boolean(novoUsuario.recebe_copia_previsao),
       };
 
       if (novoUsuario.id) {
@@ -2353,6 +2357,8 @@ export default function App() {
         email: "",
         perfil: "engenheiro",
         id_engenheiro_vinculado: "",
+        aprova_previsao: false,
+        recebe_copia_previsao: false,
       });
       buscarUsuarios();
     } catch (error: any) {
@@ -2369,6 +2375,8 @@ export default function App() {
       email: usuario.email || "",
       perfil: usuario.perfil || "engenheiro",
       id_engenheiro_vinculado: usuario.id_engenheiro_vinculado || "",
+      aprova_previsao: Boolean(usuario.aprova_previsao),
+      recebe_copia_previsao: Boolean(usuario.recebe_copia_previsao),
     });
     setTimeout(() => {
       document
@@ -2384,6 +2392,8 @@ export default function App() {
       email: "",
       perfil: "engenheiro",
       id_engenheiro_vinculado: "",
+      aprova_previsao: false,
+      recebe_copia_previsao: false,
     });
   };
 
@@ -6947,6 +6957,37 @@ export default function App() {
                     </div>
                   )}
                 </div>
+                <div className="mt-4 pt-4 border-t space-y-2">
+                  <p className="text-xs font-bold uppercase text-slate-400 tracking-wider">Previsões</p>
+                  <label className="flex items-start gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(novoUsuario.aprova_previsao)}
+                      onChange={(e) => setNovoUsuario({ ...novoUsuario, aprova_previsao: e.target.checked })}
+                      className="mt-0.5 accent-[#2A6377]"
+                    />
+                    <span>
+                      <b>Aprova previsões</b>
+                      <span className="block text-[11px] text-slate-400">
+                        Recebe o e-mail com as solicitações para aprovar e pode aprovar ou recusar no app (a aprovação grava no ERP).
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(novoUsuario.recebe_copia_previsao)}
+                      onChange={(e) => setNovoUsuario({ ...novoUsuario, recebe_copia_previsao: e.target.checked })}
+                      className="mt-0.5 accent-[#2A6377]"
+                    />
+                    <span>
+                      <b>Recebe cópia das previsões</b>
+                      <span className="block text-[11px] text-slate-400">
+                        Cópia informativa de cada solicitação nova (sem aprovar) e cópia das aprovações e recusas.
+                      </span>
+                    </span>
+                  </label>
+                </div>
                 <div className="flex justify-end gap-2 pt-6">
                   {novoUsuario.id && (
                     <button
@@ -7000,6 +7041,20 @@ export default function App() {
                         <p className="text-xs text-slate-500 truncate max-w-full">
                           {user.email}
                         </p>
+                        {(user.aprova_previsao || user.recebe_copia_previsao) && (
+                          <p className="flex flex-wrap gap-1 mt-1">
+                            {user.aprova_previsao && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Aprova previsões
+                              </span>
+                            )}
+                            {user.recebe_copia_previsao && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
+                                Cópia das previsões
+                              </span>
+                            )}
+                          </p>
+                        )}
                         {user.perfil === "assistente" && (
                           <p className="text-[11px] text-[#2A6377] font-bold truncate max-w-full">
                             Assistente de:{" "}
