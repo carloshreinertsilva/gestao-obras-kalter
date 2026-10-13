@@ -118,6 +118,12 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 
+// Link de "Esqueceu a senha?": o Supabase entra com a pessoa logada e marca
+// type=recovery no endereco. Guardado aqui, antes do supabase-js limpar o endereco.
+const ENTROU_POR_RECUPERACAO =
+  typeof window !== "undefined" &&
+  /type=recovery/.test(window.location.hash + window.location.search);
+
 export default function App() {
   const [sessao, setSessao] = useState<Session | null>(null);
   const [usuarioAtual, setUsuarioAtual] = useState<Usuario | null>(null);
@@ -128,6 +134,10 @@ export default function App() {
   const [emailAuth, setEmailAuth] = useState<string>("");
   const [senhaAuth, setSenhaAuth] = useState<string>("");
   const [nomeAuth, setNomeAuth] = useState<string>("");
+  // tela "Definir nova senha" (aberta pelo link de recuperacao do e-mail)
+  const [redefinindoSenha, setRedefinindoSenha] = useState<boolean>(ENTROU_POR_RECUPERACAO);
+  const [novaSenha, setNovaSenha] = useState<string>("");
+  const [confirmaSenha, setConfirmaSenha] = useState<string>("");
 
   const [telaAtiva, setTelaAtiva] = useState<string>("dashboard");
   // partes da navegacao que vao para o endereco (ver rotas.ts)
@@ -556,7 +566,8 @@ export default function App() {
     });
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") setRedefinindoSenha(true);
       setSessao(session);
       if (session) buscarPerfilUsuario(session.user?.email);
       else {
@@ -617,13 +628,40 @@ export default function App() {
           redirectTo: window.location.origin,
         });
         if (error) throw error;
-        setMensagemSucesso("Instruções enviadas.");
+        setMensagemSucesso(
+          "Se o e-mail estiver cadastrado, enviamos um link para criar uma nova senha (veja também o spam). Abra o link: o sistema vai pedir a senha nova.",
+        );
         setModoAuth("login");
       }
     } catch (error: any) {
       setErroLogin(
         error.message.includes("Invalid login credentials")
           ? "E-mail ou senha incorretos."
+          : error.message,
+      );
+    } finally {
+      setCarregandoAuth(false);
+    }
+  };
+
+  const salvarNovaSenha = async (e: any) => {
+    e.preventDefault();
+    setErroLogin("");
+    if (novaSenha.length < 6) return setErroLogin("A senha precisa ter pelo menos 6 caracteres.");
+    if (novaSenha !== confirmaSenha) return setErroLogin("As duas senhas não são iguais.");
+    setCarregandoAuth(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: novaSenha });
+      if (error) throw error;
+      setRedefinindoSenha(false);
+      setNovaSenha("");
+      setConfirmaSenha("");
+      window.history.replaceState(null, "", "/");
+      mostrarAviso("Senha alterada! Use a nova senha nos próximos acessos.");
+    } catch (error: any) {
+      setErroLogin(
+        /different from the old/i.test(error.message)
+          ? "A nova senha precisa ser diferente da anterior."
           : error.message,
       );
     } finally {
@@ -3544,6 +3582,79 @@ export default function App() {
         <Loader2 className="animate-spin text-[#2A6377]" size={48} />
       </div>
     );
+
+  if (sessao && redefinindoSenha) {
+    return (
+      <div className="flex h-screen bg-slate-100 items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+          <div className="bg-[#2A6377] p-6 md:p-8 text-center flex flex-col items-center justify-center border-b border-[#1e4857]">
+            <img src="/logo.png" alt="Kalter Logo" className="max-h-16 w-auto object-contain" />
+            <p className="text-white/80 font-medium tracking-wide uppercase text-xs mt-2">Gestão de Obras</p>
+          </div>
+          <form onSubmit={salvarNovaSenha} className="p-6 md:p-8 space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">Definir nova senha</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Crie a nova senha para <b>{sessao.user?.email}</b>.
+              </p>
+            </div>
+            {erroLogin && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start gap-3 text-sm font-medium">
+                <AlertTriangle size={20} className="shrink-0 mt-0.5" />
+                <span>{erroLogin}</span>
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium mb-1">Nova senha</label>
+              <div className="relative">
+                <KeyRound size={18} className="absolute left-3 top-3 text-slate-400" />
+                <input
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  value={novaSenha}
+                  onChange={(e) => setNovaSenha(e.target.value)}
+                  className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-[#2A6377]"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Repita a nova senha</label>
+              <div className="relative">
+                <KeyRound size={18} className="absolute left-3 top-3 text-slate-400" />
+                <input
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmaSenha}
+                  onChange={(e) => setConfirmaSenha(e.target.value)}
+                  className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-[#2A6377]"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={carregandoAuth}
+              className="w-full bg-[#2A6377] hover:bg-[#1e4857] text-white p-3 rounded-lg font-bold flex justify-center items-center disabled:opacity-50"
+            >
+              {carregandoAuth ? <Loader2 className="animate-spin" size={18} /> : "Salvar nova senha"}
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                setRedefinindoSenha(false);
+                window.history.replaceState(null, "", "/");
+                await supabase.auth.signOut();
+              }}
+              className="w-full text-slate-500 text-sm font-medium"
+            >
+              Cancelar e sair
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   if (!sessao) {
     return (
