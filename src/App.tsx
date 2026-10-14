@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import TimelineObra from "./TimelineObra";
-import FaturamentosRealizados from "./FaturamentosRealizados";
 import TelaEquipe from "./telas/TelaEquipe";
 import TelaDashboard from "./telas/TelaDashboard";
 import TelaCadastroObras from "./telas/TelaCadastroObras";
 import TelaTarefas from "./telas/TelaTarefas";
 import TelaReunioes from "./telas/TelaReunioes";
-import ValorAjustavel from "./ValorAjustavel";
-import AnexosObra from "./AnexosObra";
+import AbaResumo from "./telas/painel/AbaResumo";
+import AbaFinanceiro from "./telas/painel/AbaFinanceiro";
+import AbaFaturamento from "./telas/painel/AbaFaturamento";
+import AbaCronograma from "./telas/painel/AbaCronograma";
+import AbaDocumentos from "./telas/painel/AbaDocumentos";
+import AbaDiarioTarefas from "./telas/painel/AbaDiarioTarefas";
 import ListaMateriaisSMA from "./ListaMateriaisSMA";
 import RentabilidadeProjeto from "./RentabilidadeProjeto";
 import { AbaPrevisoes, PainelSolicitacoes, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
@@ -39,25 +41,15 @@ import {
   formatarDataHora,
   formatarMoeda,
   dataHojeISO,
-  formatarCompetencia,
   selecionarTextoAoFocar,
   isoParaDataBR,
   formatarEntradaDataBR,
   dataBRParaISO,
   calcularStatusParcela,
-  labelStatusParcelaCalculado,
-  classeStatusParcela,
   labelFase,
-  labelStatusDocumento,
   indicadorPorStatusDocumento,
-  corIndicadorDocumento,
-  classeStatusDocumento,
-  classeStatusCronograma,
-  labelStatusCronograma,
-  formatarTamanhoArquivo,
   normalizarNomeArquivo,
   compararCodigoFamilia,
-  formatarPercentual,
   isAtrasada,
 } from "./utils";
 import {
@@ -65,7 +57,6 @@ import {
   Calendar,
   CheckSquare,
   HardHat,
-  Plus,
   Save,
   Clock,
   AlertTriangle,
@@ -74,7 +65,6 @@ import {
   Loader2,
   Play,
   Check,
-  Trash2,
   Users,
   Edit2,
   X,
@@ -87,12 +77,10 @@ import {
   CalendarPlus,
   Menu,
   MessageSquare,
-  BookOpen,
   ChevronRight,
   FolderOpen,
   FileText,
   LayoutDashboard,
-  Activity,
   Settings,
   ClipboardList,
   DollarSign,
@@ -1435,7 +1423,7 @@ export default function App() {
         if (error) throw error;
         setComentariosTarefaAtual(data || []);
       } catch (error) {
-        console.log("Tabela de comentários ausente.");
+        falhaAoCarregar("os comentários da tarefa", error);
       }
     };
     buscarComentarios();
@@ -3352,7 +3340,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL DE ENVIO DE ATA ATUAL */}
 
       {/* MENU LATERAL (ARQUITETURA ERP) */}
       <aside
@@ -3649,691 +3636,59 @@ export default function App() {
             </div>
 
             {abaPainelObra === "resumo" && abaObraPermitida("resumo") && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                  <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-blue-500">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Venda Total
-                    </p>
-                    <ValorAjustavel className="text-2xl font-bold text-slate-800 mt-1">
-                      {formatarMoeda(totalVendaGeral)}
-                    </ValorAjustavel>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-emerald-500">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Recebido
-                    </p>
-                    <ValorAjustavel className="text-2xl font-bold text-emerald-700 mt-1">
-                      {formatarMoeda(totalRealizadoParcelas)}
-                    </ValorAjustavel>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-amber-500">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Cronograma
-                    </p>
-                    <p className="text-2xl font-bold text-amber-700 mt-1">
-                      {percentualCronograma}%
-                    </p>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-red-500">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Parcelas Vencidas
-                    </p>
-                    <p className="text-2xl font-bold text-red-600 mt-1">
-                      {parcelasVencidas}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
-                      <BookOpen size={18} className="text-[#2A6377]" />{" "}
-                      Descrição do Projeto
-                    </h3>
-                    <p className="text-slate-700 whitespace-pre-wrap min-h-[80px]">
-                      {obraEcoSelecionada.descricao ||
-                        "Nenhum descritivo cadastrado para esta obra."}
-                    </p>
-                    {obraEcoSelecionada.observacoes && (
-                      <div className="mt-4 bg-slate-50 p-3 rounded-lg border text-sm text-slate-600">
-                        <strong>Observações:</strong>
-                        <br />
-                        {obraEcoSelecionada.observacoes}
-                      </div>
-                    )}
-                  </div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
-                      <Activity size={18} className="text-[#2A6377]" />{" "}
-                      Indicadores Gerais
-                    </h3>
-                    <div className="space-y-3 text-sm">
-                      <div className="flex justify-between items-center border-b pb-2">
-                        <span>Documentos concluídos</span>
-                        <span className="font-bold">
-                          {documentosConcluidos}/{documentosProjeto.length} (
-                          {percentualDocumentos}%)
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center border-b pb-2">
-                        <span>Fases concluídas</span>
-                        <span className="font-bold">
-                          {fasesConcluidas}/{cronogramaObra.length} (
-                          {percentualCronograma}%)
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center border-b pb-2">
-                        <span>Saldo a receber</span>
-                        <span className="font-bold text-amber-700">
-                          {formatarMoeda(Math.max(saldoReceberParcelas, 0))}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span>Fase atual</span>
-                        <span className="font-bold text-[#2A6377]">
-                          {labelFase(
-                            obraEcoSelecionada.fase_atual || "processo_inicial",
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <AbaResumo
+                cronogramaObra={cronogramaObra}
+                documentosConcluidos={documentosConcluidos}
+                documentosProjeto={documentosProjeto}
+                fasesConcluidas={fasesConcluidas}
+                obraEcoSelecionada={obraEcoSelecionada}
+                parcelasVencidas={parcelasVencidas}
+                percentualCronograma={percentualCronograma}
+                percentualDocumentos={percentualDocumentos}
+                saldoReceberParcelas={saldoReceberParcelas}
+                totalRealizadoParcelas={totalRealizadoParcelas}
+                totalVendaGeral={totalVendaGeral}
+              />
             )}
 
             {abaPainelObra === "financeiro" && abaObraPermitida("financeiro") && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Venda Total Prevista
-                    </p>
-                    <ValorAjustavel className="text-2xl font-bold text-slate-800">
-                      {formatarMoeda(totalVendaGeral)}
-                    </ValorAjustavel>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Total Recebido
-                    </p>
-                    <ValorAjustavel className="text-2xl font-bold text-emerald-700">
-                      {formatarMoeda(totalRealizadoParcelas)}
-                    </ValorAjustavel>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Saldo a Receber
-                    </p>
-                    <ValorAjustavel className="text-2xl font-bold text-amber-700">
-                      {formatarMoeda(Math.max(saldoReceberParcelas, 0))}
-                    </ValorAjustavel>
-                  </div>
-                  <div
-                    className={`bg-white p-5 rounded-xl shadow-sm border ${valorDistribuidoExcedente > 0 ? "border-red-200 bg-red-50" : ""}`}
-                  >
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Falta Distribuir
-                    </p>
-                    <p
-                      className={`text-2xl font-bold ${valorDistribuidoExcedente > 0 ? "text-red-600" : "text-blue-700"}`}
-                    >
-                      {valorDistribuidoExcedente > 0
-                        ? `-${formatarMoeda(valorDistribuidoExcedente)}`
-                        : formatarMoeda(valorRestanteDistribuirPositivo)}
-                    </p>
-                  </div>
-                </div>
-
-                {podeEditarObraSelecionada && (
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                      <Plus size={18} /> Nova Parcela / Recebimento
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-                      <input
-                        placeholder="Descrição"
-                        value={novaParcelaCliente.descricao}
-                        onChange={(e) =>
-                          setNovaParcelaCliente({
-                            ...novaParcelaCliente,
-                            descricao: e.target.value,
-                          })
-                        }
-                        className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                      />
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="dd/mm/aaaa"
-                        maxLength={10}
-                        value={novaParcelaCliente.data_prevista}
-                        onFocus={selecionarTextoAoFocar}
-                        onChange={(e) =>
-                          setNovaParcelaCliente({
-                            ...novaParcelaCliente,
-                            data_prevista: formatarEntradaDataBR(
-                              e.target.value,
-                            ),
-                          })
-                        }
-                        className="border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                      />
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="Valor previsto"
-                        value={novaParcelaCliente.valor_previsto}
-                        onChange={(e) =>
-                          setNovaParcelaCliente({
-                            ...novaParcelaCliente,
-                            valor_previsto: e.target.value,
-                          })
-                        }
-                        className="border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                      />
-                      <input
-                        placeholder="Observação"
-                        value={novaParcelaCliente.observacao || ""}
-                        onChange={(e) =>
-                          setNovaParcelaCliente({
-                            ...novaParcelaCliente,
-                            observacao: e.target.value,
-                          })
-                        }
-                        className="border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                      />
-                      <button
-                        onClick={salvarParcelaCliente}
-                        disabled={carregando}
-                        className="bg-[#2A6377] text-white rounded-lg font-bold flex items-center justify-center gap-2"
-                      >
-                        <Save size={16} /> Salvar
-                      </button>
-                    </div>
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                      <div className="bg-slate-50 border rounded-lg p-3">
-                        <span className="text-slate-400 font-bold uppercase text-xs block">
-                          Venda total
-                        </span>
-                        <span className="font-bold text-slate-700">
-                          {formatarMoeda(totalVendaGeral)}
-                        </span>
-                      </div>
-                      <div className="bg-slate-50 border rounded-lg p-3">
-                        <span className="text-slate-400 font-bold uppercase text-xs block">
-                          Já distribuído
-                        </span>
-                        <span className="font-bold text-slate-700">
-                          {formatarMoeda(totalPrevistoParcelas)}
-                        </span>
-                      </div>
-                      <div
-                        className={`${valorDistribuidoExcedente > 0 ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-100"} border rounded-lg p-3`}
-                      >
-                        <span className="text-slate-400 font-bold uppercase text-xs block">
-                          Falta distribuir
-                        </span>
-                        <span
-                          className={`font-bold ${valorDistribuidoExcedente > 0 ? "text-red-600" : "text-blue-700"}`}
-                        >
-                          {valorDistribuidoExcedente > 0
-                            ? `Excedeu ${formatarMoeda(valorDistribuidoExcedente)}`
-                            : formatarMoeda(valorRestanteDistribuirPositivo)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 mt-3">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setNovaParcelaCliente({
-                            ...novaParcelaCliente,
-                            valor_previsto: String(
-                              valorRestanteDistribuirPositivo.toFixed(2),
-                            ),
-                          })
-                        }
-                        className="text-xs font-bold text-[#2A6377] bg-[#2A6377]/10 px-3 py-2 rounded-lg hover:bg-[#2A6377]/20 transition"
-                      >
-                        Usar saldo restante
-                      </button>
-                      <p className="text-xs text-slate-400">
-                        A data é digitada no formato dd/mm/aaaa para evitar o
-                        problema do seletor nativo de data no StackBlitz.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
-                  <div className="p-4 border-b">
-                    <h3 className="font-bold text-lg">Pagamentos Cliente</h3>
-                  </div>
-                  <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-sm min-w-[780px]">
-                      <thead className="bg-slate-50 text-slate-600">
-                        <tr>
-                          <th className="p-3 text-left">Item</th>
-                          <th className="p-3">Data Prevista</th>
-                          <th className="p-3">Valor Previsto</th>
-                          <th className="p-3">Data Recebimento</th>
-                          <th className="p-3">Valor Recebido</th>
-                          <th className="p-3">Status</th>
-                          {podeEditarObraSelecionada && <th className="p-3">Ações</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {parcelasCliente.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={7}
-                              className="p-6 text-center text-slate-500"
-                            >
-                              Nenhuma parcela cadastrada.
-                            </td>
-                          </tr>
-                        ) : (
-                          parcelasCliente.map((parcela) => (
-                            <tr
-                              key={parcela.id}
-                              className="border-t hover:bg-slate-50"
-                            >
-                              <td className="p-3 font-medium">
-                                <div>{parcela.descricao}</div>
-                                {parcela.observacao && (
-                                  <div className="text-xs text-slate-400 font-normal mt-1">
-                                    {parcela.observacao}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="p-3 text-center">
-                                {formatarDataSegura(parcela.data_prevista)}
-                              </td>
-                              <td className="p-3 text-center font-bold">
-                                {formatarMoeda(parcela.valor_previsto)}
-                              </td>
-                              <td className="p-3 text-center">
-                                {parcela.data_realizada
-                                  ? formatarDataSegura(parcela.data_realizada)
-                                  : "-"}
-                              </td>
-                              <td className="p-3 text-center font-medium">
-                                {Number(parcela.valor_realizado || 0) > 0
-                                  ? formatarMoeda(parcela.valor_realizado)
-                                  : "-"}
-                              </td>
-                              <td className="p-3 text-center">
-                                <span
-                                  className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusParcela(parcela)}`}
-                                >
-                                  {labelStatusParcelaCalculado(parcela)}
-                                </span>
-                              </td>
-                              {podeEditarObraSelecionada && (
-                                <td className="p-3 text-center">
-                                  <div className="flex items-center justify-center gap-2">
-                                    <button
-                                      onClick={() =>
-                                        abrirLiquidacaoParcela(parcela)
-                                      }
-                                      className="px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-xs font-bold hover:bg-[#1e4857] transition"
-                                    >
-                                      {Number(parcela.valor_realizado || 0) > 0
-                                        ? "Editar"
-                                        : "Liquidar"}
-                                    </button>
-                                    {Number(parcela.valor_realizado || 0) >
-                                      0 && (
-                                      <button
-                                        onClick={() =>
-                                          reabrirParcelaCliente(parcela)
-                                        }
-                                        className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition"
-                                      >
-                                        Reabrir
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={() =>
-                                        deletarRegistroPMIS(
-                                          "parcelas_cliente",
-                                          parcela.id,
-                                        )
-                                      }
-                                      className="text-red-400 hover:text-red-600"
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </div>
-                                </td>
-                              )}
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
+              <AbaFinanceiro
+                abrirLiquidacaoParcela={abrirLiquidacaoParcela}
+                carregando={carregando}
+                deletarRegistroPMIS={deletarRegistroPMIS}
+                novaParcelaCliente={novaParcelaCliente}
+                parcelasCliente={parcelasCliente}
+                podeEditarObraSelecionada={podeEditarObraSelecionada}
+                reabrirParcelaCliente={reabrirParcelaCliente}
+                saldoReceberParcelas={saldoReceberParcelas}
+                salvarParcelaCliente={salvarParcelaCliente}
+                setNovaParcelaCliente={setNovaParcelaCliente}
+                totalPrevistoParcelas={totalPrevistoParcelas}
+                totalRealizadoParcelas={totalRealizadoParcelas}
+                totalVendaGeral={totalVendaGeral}
+                valorDistribuidoExcedente={valorDistribuidoExcedente}
+                valorRestanteDistribuirPositivo={valorRestanteDistribuirPositivo}
+              />
             )}
 
             {abaPainelObra === "faturamento" && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 2xl:grid-cols-5 gap-4">
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Escopo Total
-                    </p>
-                    <ValorAjustavel className="text-2xl font-bold text-slate-800">
-                      {formatarMoeda(totalEscopoFaturamento)}
-                    </ValorAjustavel>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Previsto
-                    </p>
-                    <ValorAjustavel className="text-2xl font-bold text-blue-700">
-                      {formatarMoeda(totalPrevistoFaturamento)}
-                    </ValorAjustavel>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Faturado
-                    </p>
-                    <ValorAjustavel className="text-2xl font-bold text-emerald-700">
-                      {formatarMoeda(totalRealizadoFaturamento)}
-                    </ValorAjustavel>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      À Faturar
-                    </p>
-                    <ValorAjustavel className="text-2xl font-bold text-amber-700">
-                      {formatarMoeda(saldoFaturarFamiliasPositivo)}
-                    </ValorAjustavel>
-                  </div>
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <p className="text-xs text-slate-400 font-bold uppercase">
-                      Itens no Escopo
-                    </p>
-                    <p className="text-2xl font-bold text-[#2A6377]">
-                      {familiasFaturamentoComEscopo.length}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
-                  <div className="p-4 border-b">
-                    <h3 className="font-bold text-lg flex items-center gap-2">
-                      <Receipt size={18} className="text-[#2A6377]" /> Escopo
-                      por Grupo/Família
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Cada linha representa uma combinação de grupo de faturamento, família e valor de escopo.
-                      A mesma família pode aparecer em mais de um grupo. O escopo vem direto do pedido de
-                      venda no ERP — ajustes são feitos lá, não neste sistema.
-                    </p>
-                  </div>
-                  <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 text-slate-600">
-                        <tr>
-                          <th className="p-3 text-left">
-                            Grupo de Faturamento
-                          </th>
-                          <th className="p-3 text-right">Valor Total Escopo</th>
-                          <th className="p-3 text-right">Faturado</th>
-                          <th className="p-3 text-right">% Faturado</th>
-                          <th className="p-3 text-right">À Faturar</th>
-                          <th className="p-3 text-right">% À Faturar</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {familiasFaturamento.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="p-6 text-center text-slate-500">
-                              Nenhuma família criada para esta obra. Verifique
-                              se a função de regularização foi executada.
-                            </td>
-                          </tr>
-                        ) : gruposFaturamentoResumo.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="p-6 text-center text-slate-500">
-                              Nenhum item de escopo informado. O escopo é
-                              importado automaticamente do pedido de venda no ERP.
-                            </td>
-                          </tr>
-                        ) : (
-                          gruposFaturamentoResumo.map((linha) => {
-                            const saldoGrupo = Math.max(
-                              0,
-                              Math.round(
-                                (linha.valorEscopo - linha.valorFaturado) * 100,
-                              ) / 100 || 0,
-                            );
-                            return (
-                              <tr
-                                key={linha.grupo.id}
-                                className="border-t hover:bg-slate-50"
-                              >
-                                <td className="p-3 font-bold text-[#2A6377]">
-                                  <div>
-                                    {linha.grupo.codigo}
-                                    {linha.grupo.descricao
-                                      ? ` - ${linha.grupo.descricao}`
-                                      : ""}
-                                  </div>
-                                  {linha.familia?.observacao && (
-                                    <div className="text-[10px] text-slate-400 font-normal mt-1">
-                                      {linha.familia.observacao}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="p-3 text-right font-bold whitespace-nowrap">
-                                  {formatarMoeda(linha.valorEscopo)}
-                                </td>
-                                <td className="p-3 text-right font-bold text-emerald-700 whitespace-nowrap">
-                                  {formatarMoeda(linha.valorFaturado)}
-                                </td>
-                                <td className="p-3 text-right font-semibold text-emerald-700 whitespace-nowrap">
-                                  {formatarPercentual(
-                                    linha.valorFaturado,
-                                    linha.valorEscopo,
-                                  )}
-                                </td>
-                                <td className="p-3 text-right font-bold whitespace-nowrap text-amber-700">
-                                  {formatarMoeda(saldoGrupo)}
-                                </td>
-                                <td className="p-3 text-right font-semibold whitespace-nowrap text-amber-700">
-                                  {formatarPercentual(saldoGrupo, linha.valorEscopo)}
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
-                  <div className="p-4 border-b">
-                    <h3 className="font-bold text-lg flex items-center gap-2">
-                      <Activity size={18} className="text-[#2A6377]" />
-                      Previsão x Realizado por Grupo de Faturamento
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Uma linha por material do pedido (grupo de faturamento),
-                      exatamente como no ERP.
-                    </p>
-                  </div>
-                  <div className="overflow-x-auto max-w-full">
-                    <table
-                      className="text-xs"
-                      style={{
-                        minWidth: `${360 + Math.max(competenciasFaturamento.length, 1) * 260}px`,
-                      }}
-                    >
-                      <thead className="bg-slate-50 text-slate-600">
-                        <tr>
-                          <th
-                            rowSpan={2}
-                            className="p-3 text-left min-w-[260px] sticky left-0 bg-slate-50 z-20 border-r"
-                          >
-                            Grupo de Faturamento
-                          </th>
-                          {competenciasFaturamento.length === 0 ? (
-                            <th className="p-3 text-center min-w-[260px]">
-                              Competências
-                            </th>
-                          ) : (
-                            competenciasFaturamento.map((comp) => (
-                              <th
-                                key={`grupo-${comp}`}
-                                className="p-0 text-center min-w-[260px] border-r"
-                                colSpan={2}
-                              >
-                                <div className="bg-[#2A6377] text-white p-2 font-bold">
-                                  {formatarCompetencia(comp)}
-                                </div>
-                              </th>
-                            ))
-                          )}
-                        </tr>
-                        <tr>
-                          {competenciasFaturamento.length === 0 ? (
-                            <th className="p-3 text-center text-slate-400">
-                              Sem previsão cadastrada
-                            </th>
-                          ) : (
-                            competenciasFaturamento.map((comp) => (
-                              <th key={`grupo-${comp}-sub`} className="p-0" colSpan={2}>
-                                <div className="grid grid-cols-2 min-w-[260px]">
-                                  <span className="p-2 border-r bg-slate-50">
-                                    Previsto
-                                  </span>
-                                  <span className="p-2 bg-slate-50">
-                                    Realizado
-                                  </span>
-                                </div>
-                              </th>
-                            ))
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {gruposFaturamentoResumo.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={Math.max(competenciasFaturamento.length * 2 + 1, 2)}
-                              className="p-6 text-center text-slate-500"
-                            >
-                              Nenhum grupo de faturamento com escopo informado.
-                            </td>
-                          </tr>
-                        ) : (
-                          gruposFaturamentoResumo.map((linha: any) => (
-                            <tr
-                              key={`grupo-matriz-${linha.grupo.codigo}`}
-                              className="border-t hover:bg-slate-50"
-                            >
-                              <td className="p-3 font-bold text-[#2A6377] sticky left-0 bg-white z-10 border-r min-w-[260px]">
-                                <div>
-                                  {linha.grupo.codigo}
-                                  {linha.grupo.descricao ? ` - ${linha.grupo.descricao}` : ""}
-                                </div>
-                                <div className="text-[10px] text-slate-400 font-normal mt-1">
-                                  Escopo: {formatarMoeda(linha.valorEscopo)} • Faturado: {formatarMoeda(linha.valorFaturado)}
-                                </div>
-                              </td>
-                              {competenciasFaturamento.length === 0 ? (
-                                <td className="p-3 text-center text-slate-400">
-                                  Sem previsão
-                                </td>
-                              ) : (
-                                competenciasFaturamento.map((comp) => {
-                                  const previsto = valorPrevistoGrupoCompetencia(
-                                    linha.grupo.codigo,
-                                    comp,
-                                  );
-                                  const realizado = valorRealizadoGrupoCompetencia(
-                                    linha.grupo.codigo,
-                                    comp,
-                                  );
-                                  return (
-                                    <td
-                                      key={`${linha.grupo.codigo}-${comp}-grupo-matriz`}
-                                      className="p-0 border-r"
-                                      colSpan={2}
-                                    >
-                                      <div className="grid grid-cols-2 min-w-[260px]">
-                                        <span
-                                          className={`p-3 text-right border-r whitespace-nowrap ${previsto > 0 ? "font-bold text-blue-700" : "text-slate-300"}`}
-                                        >
-                                          {previsto > 0
-                                            ? formatarMoeda(previsto)
-                                            : "-"}
-                                        </span>
-                                        <span
-                                          className={`p-3 text-right whitespace-nowrap ${realizado > 0 ? "font-bold text-emerald-700" : "text-slate-300"}`}
-                                        >
-                                          {realizado > 0
-                                            ? formatarMoeda(realizado)
-                                            : "-"}
-                                        </span>
-                                      </div>
-                                    </td>
-                                  );
-                                })
-                              )}
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                      {competenciasFaturamento.length > 0 && gruposFaturamentoResumo.length > 0 && (
-                        <tfoot className="bg-slate-100 border-t-2 border-[#2A6377] text-slate-800">
-                          <tr>
-                            <td className="p-3 font-black text-[#2A6377] sticky left-0 bg-slate-100 z-20 border-r min-w-[260px]">
-                              TOTAL POR COMPETÊNCIA
-                            </td>
-                            {competenciasFaturamento.map((comp) => {
-                              const totalPrevisto = totalPrevistoCompetencia(comp);
-                              const totalRealizado = totalRealizadoCompetencia(comp);
-
-                              return (
-                                <td
-                                  key={`${comp}-total-grupo-matriz`}
-                                  className="p-0 border-r"
-                                  colSpan={2}
-                                >
-                                  <div className="grid grid-cols-2 min-w-[260px]">
-                                    <span className="p-3 text-right border-r whitespace-nowrap font-black text-blue-700">
-                                      {totalPrevisto > 0 ? formatarMoeda(totalPrevisto) : "-"}
-                                    </span>
-                                    <span className="p-3 text-right whitespace-nowrap font-black text-emerald-700">
-                                      {totalRealizado > 0 ? formatarMoeda(totalRealizado) : "-"}
-                                    </span>
-                                  </div>
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        </tfoot>
-                      )}
-                    </table>
-                  </div>
-                </div>
-
-                <FaturamentosRealizados
-                  realizados={realizadosFaturamentoDoEscopo}
-                  previsoes={previsoesFaturamentoDoEscopo}
-                  familias={familiasFaturamento}
-                  grupos={gruposFaturamentoObra}
-                />
-              </div>
+              <AbaFaturamento
+                competenciasFaturamento={competenciasFaturamento}
+                familiasFaturamento={familiasFaturamento}
+                familiasFaturamentoComEscopo={familiasFaturamentoComEscopo}
+                gruposFaturamentoObra={gruposFaturamentoObra}
+                gruposFaturamentoResumo={gruposFaturamentoResumo}
+                previsoesFaturamentoDoEscopo={previsoesFaturamentoDoEscopo}
+                realizadosFaturamentoDoEscopo={realizadosFaturamentoDoEscopo}
+                saldoFaturarFamiliasPositivo={saldoFaturarFamiliasPositivo}
+                totalEscopoFaturamento={totalEscopoFaturamento}
+                totalPrevistoCompetencia={totalPrevistoCompetencia}
+                totalPrevistoFaturamento={totalPrevistoFaturamento}
+                totalRealizadoCompetencia={totalRealizadoCompetencia}
+                totalRealizadoFaturamento={totalRealizadoFaturamento}
+                valorPrevistoGrupoCompetencia={valorPrevistoGrupoCompetencia}
+                valorRealizadoGrupoCompetencia={valorRealizadoGrupoCompetencia}
+              />
             )}
 
             {abaPainelObra === "lista_materiais" && (
@@ -4354,647 +3709,50 @@ export default function App() {
             )}
 
             {abaPainelObra === "cronograma" && (
-              <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
-                <div className="p-4 border-b">
-                  <h3 className="font-bold text-lg flex items-center gap-2">
-                    <Calendar size={18} className="text-[#2A6377]" /> Cronograma
-                    Resumo
-                  </h3>
-                </div>
-                <div className="overflow-x-auto max-w-full">
-                  <table className="w-full text-sm min-w-[820px]">
-                    <thead className="bg-slate-50 text-slate-600">
-                      <tr>
-                        <th className="p-3 text-left">Fase</th>
-                        <th className="p-3">Início Previsto</th>
-                        <th className="p-3">Prazo Entrega</th>
-                        <th className="p-3">Início Real</th>
-                        <th className="p-3">Fim Real</th>
-                        <th className="p-3">Status</th>
-                        <th className="p-3 text-left">Observação</th>
-                        {podeEditarObraSelecionada && <th className="p-3">Ações</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cronogramaObra.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={podeEditarObraSelecionada ? 8 : 7}
-                            className="p-6 text-center text-slate-500"
-                          >
-                            Nenhuma fase cadastrada.
-                          </td>
-                        </tr>
-                      ) : (
-                        cronogramaObra.map((fase) => {
-                          const inicioPrevisto =
-                            fase.inicio_previsto ||
-                            obraEcoSelecionada?.data_inicio;
-                          const fimPrevisto =
-                            fase.fim_previsto ||
-                            obraEcoSelecionada?.data_previsao_fim;
-                          return (
-                            <tr
-                              key={fase.id}
-                              className="border-t hover:bg-slate-50"
-                            >
-                              <td className="p-3 font-bold text-[#2A6377]">
-                                {labelFase(fase.fase ?? "")}
-                              </td>
-                              <td className="p-3 text-center text-slate-700">
-                                {formatarDataSegura(inicioPrevisto)}
-                              </td>
-                              <td className="p-3 text-center text-slate-700">
-                                {formatarDataSegura(fimPrevisto)}
-                              </td>
-                              <td className="p-3 text-center text-slate-700">
-                                {fase.inicio_real
-                                  ? formatarDataSegura(fase.inicio_real)
-                                  : "-"}
-                              </td>
-                              <td className="p-3 text-center text-slate-700">
-                                {fase.fim_real
-                                  ? formatarDataSegura(fase.fim_real)
-                                  : "-"}
-                              </td>
-                              <td className="p-3 text-center">
-                                <span
-                                  className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusCronograma(fase.status ?? "")}`}
-                                >
-                                  {labelStatusCronograma(fase.status ?? "")}
-                                </span>
-                              </td>
-                              <td
-                                className="p-3 text-slate-600 max-w-[220px] truncate"
-                                title={fase.observacao || ""}
-                              >
-                                {fase.observacao || "-"}
-                              </td>
-                              {podeEditarObraSelecionada && (
-                                <td className="p-3 text-center">
-                                  <div className="flex items-center justify-center gap-2 flex-wrap">
-                                    <button
-                                      onClick={() =>
-                                        abrirModalCronograma(
-                                          fase,
-                                          "editar_previsto",
-                                        )
-                                      }
-                                      className="px-3 py-1.5 rounded-lg bg-white border text-slate-700 text-xs font-bold hover:bg-slate-100 transition"
-                                    >
-                                      Editar prazos
-                                    </button>
-                                    {fase.status === "nao_iniciado" && (
-                                      <button
-                                        onClick={() =>
-                                          abrirModalCronograma(fase, "iniciar")
-                                        }
-                                        className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-200 transition"
-                                      >
-                                        Iniciar
-                                      </button>
-                                    )}
-                                    {fase.status === "em_andamento" && (
-                                      <>
-                                        <button
-                                          onClick={() =>
-                                            abrirModalCronograma(
-                                              fase,
-                                              "finalizar",
-                                            )
-                                          }
-                                          className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition"
-                                        >
-                                          Finalizar
-                                        </button>
-                                        <button
-                                          onClick={() => zerarFaseCronograma(fase)}
-                                          className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-100 text-xs font-bold hover:bg-red-100 transition"
-                                        >
-                                          Voltar para não iniciado
-                                        </button>
-                                      </>
-                                    )}
-                                    {fase.status === "concluido" && (
-                                      <>
-                                        <button
-                                          onClick={() =>
-                                            reabrirFaseCronograma(fase)
-                                          }
-                                          className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition"
-                                        >
-                                          Reabrir
-                                        </button>
-                                        <button
-                                          onClick={() => zerarFaseCronograma(fase)}
-                                          className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-100 text-xs font-bold hover:bg-red-100 transition"
-                                        >
-                                          Zerar
-                                        </button>
-                                      </>
-                                    )}
-                                    {fase.status === "atrasado" && (
-                                      <button
-                                        onClick={() =>
-                                          abrirModalCronograma(fase, "iniciar")
-                                        }
-                                        className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-200 transition"
-                                      >
-                                        Iniciar
-                                      </button>
-                                    )}
-                                  </div>
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="px-4 py-3 bg-slate-50 border-t text-xs text-slate-500">
-                  As datas previstas podem ser ajustadas pelo botão Editar
-                  prazos. Quando a fase ainda não tiver datas próprias, o
-                  sistema usa o início e o prazo de entrega cadastrados na obra
-                  como sugestão. As datas reais são registradas pelos botões
-                  Iniciar e Finalizar, informando data e observação. Se uma fase foi iniciada por engano, use Voltar para não iniciado.
-                </div>
-              </div>
+              <AbaCronograma
+                abrirModalCronograma={abrirModalCronograma}
+                cronogramaObra={cronogramaObra}
+                obraEcoSelecionada={obraEcoSelecionada}
+                podeEditarObraSelecionada={podeEditarObraSelecionada}
+                reabrirFaseCronograma={reabrirFaseCronograma}
+                zerarFaseCronograma={zerarFaseCronograma}
+              />
             )}
 
             {abaPainelObra === "documentos" && (
-              <div className="space-y-6">
-                {podeEditarObraSelecionada && (
-                  <div className="bg-white p-5 rounded-xl shadow-sm border">
-                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                      <Plus size={18} /> Novo Documento
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                      <input
-                        placeholder="Item"
-                        value={novoDocumentoProjeto.item}
-                        onChange={(e) =>
-                          setNovoDocumentoProjeto({
-                            ...novoDocumentoProjeto,
-                            item: e.target.value,
-                          })
-                        }
-                        className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                      />
-                      <input
-                        placeholder="Detalhes"
-                        value={novoDocumentoProjeto.detalhes}
-                        onChange={(e) =>
-                          setNovoDocumentoProjeto({
-                            ...novoDocumentoProjeto,
-                            detalhes: e.target.value,
-                          })
-                        }
-                        className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                      />
-                      <button
-                        onClick={salvarDocumentoProjeto}
-                        disabled={carregando}
-                        className="bg-[#2A6377] text-white rounded-lg font-bold flex items-center justify-center gap-2"
-                      >
-                        <Save size={16} /> Salvar
-                      </button>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-3">
-                      Novos documentos entram como “Não Elaborado” e indicador
-                      vermelho. Use os botões da lista para iniciar ou concluir.
-                    </p>
-                  </div>
-                )}
-
-                <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
-                  <div className="p-4 border-b">
-                    <h3 className="font-bold text-lg flex items-center gap-2">
-                      <FileText size={18} className="text-[#2A6377]" />{" "}
-                      Documentos do Projeto
-                    </h3>
-                  </div>
-                  <div className="overflow-x-auto max-w-full">
-                    <table className="w-full text-sm min-w-[860px]">
-                      <thead className="bg-slate-50 text-slate-600">
-                        <tr>
-                          <th className="p-3 text-left">Item</th>
-                          <th className="p-3 text-left">Detalhes</th>
-                          <th className="p-3">Status</th>
-                          <th className="p-3">Indicador</th>
-                          <th className="p-3">Conclusão</th>
-                          <th className="p-3 text-left">Anexos</th>
-                          {podeEditarObraSelecionada && <th className="p-3">Ações</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {documentosProjeto.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={podeEditarObraSelecionada ? 7 : 6}
-                              className="p-6 text-center text-slate-500"
-                            >
-                              Nenhum documento cadastrado.
-                            </td>
-                          </tr>
-                        ) : (
-                          documentosProjeto.map((doc) => (
-                            <tr
-                              key={doc.id}
-                              className="border-t hover:bg-slate-50 align-top"
-                            >
-                              <td className="p-3 font-bold">{doc.item}</td>
-                              <td className="p-3 text-slate-600 max-w-[260px]">
-                                {doc.detalhes}
-                              </td>
-                              <td className="p-3 text-center">
-                                <span
-                                  className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${classeStatusDocumento(doc.status ?? "")}`}
-                                >
-                                  {labelStatusDocumento(doc.status ?? "")}
-                                </span>
-                              </td>
-                              <td className="p-3 text-center">
-                                <span
-                                  className={`inline-block w-5 h-5 rounded-full border-2 border-slate-800 ${corIndicadorDocumento(doc.status ?? "")}`}
-                                ></span>
-                              </td>
-                              <td className="p-3 text-center text-slate-700">
-                                {doc.data_conclusao
-                                  ? formatarDataSegura(doc.data_conclusao)
-                                  : "-"}
-                              </td>
-                              <td className="p-3 min-w-[280px]">
-                                <div className="space-y-2">
-                                  {(arquivosDocumentos[doc.id] || []).length ===
-                                  0 ? (
-                                    <p className="text-xs text-slate-400 italic">
-                                      Nenhum anexo.
-                                    </p>
-                                  ) : (
-                                    (arquivosDocumentos[doc.id] || []).map(
-                                      (arquivo: any) => (
-                                        <div
-                                          key={arquivo.id}
-                                          className="flex items-center justify-between gap-2 bg-white border rounded-lg p-2 shadow-sm"
-                                        >
-                                          <button
-                                            onClick={() =>
-                                              abrirArquivoDocumento(arquivo)
-                                            }
-                                            className="text-left flex-1 min-w-0 hover:text-[#2A6377]"
-                                          >
-                                            <p className="font-medium text-xs truncate">
-                                              {arquivo.nome_arquivo}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">
-                                              {formatarTamanhoArquivo(
-                                                arquivo.tamanho_bytes,
-                                              )}{" "}
-                                              •{" "}
-                                              {formatarDataSegura(
-                                                arquivo.created_at,
-                                              )}
-                                            </p>
-                                          </button>
-                                          {podeEditarObraSelecionada && (
-                                            <button
-                                              onClick={() =>
-                                                excluirArquivoDocumento(arquivo)
-                                              }
-                                              className="text-red-400 hover:text-red-600 shrink-0"
-                                            >
-                                              <Trash2 size={14} />
-                                            </button>
-                                          )}
-                                        </div>
-                                      ),
-                                    )
-                                  )}
-                                  {podeEditarObraSelecionada && (
-                                    <label
-                                      className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition ${uploadDocumentoId === doc.id ? "bg-slate-200 text-slate-500" : "bg-[#2A6377]/10 text-[#2A6377] hover:bg-[#2A6377]/20"}`}
-                                    >
-                                      {uploadDocumentoId === doc.id ? (
-                                        <Loader2
-                                          className="animate-spin"
-                                          size={14}
-                                        />
-                                      ) : (
-                                        <Plus size={14} />
-                                      )}{" "}
-                                      Anexar arquivo
-                                      <input
-                                        type="file"
-                                        className="hidden"
-                                        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                                        disabled={uploadDocumentoId === doc.id}
-                                        onChange={(e) => {
-                                          const arquivo =
-                                            e.target.files?.[0] || null;
-                                          anexarArquivoDocumento(doc, arquivo);
-                                          e.currentTarget.value = "";
-                                        }}
-                                      />
-                                    </label>
-                                  )}
-                                </div>
-                              </td>
-                              {podeEditarObraSelecionada && (
-                                <td className="p-3 text-center">
-                                  <div className="flex flex-col items-center gap-2">
-                                    {doc.status === "nao_elaborado" && (
-                                      <button
-                                        onClick={() =>
-                                          iniciarDocumentoProjeto(doc)
-                                        }
-                                        className="px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold hover:bg-amber-200 transition w-24"
-                                      >
-                                        Iniciar
-                                      </button>
-                                    )}
-                                    {doc.status === "em_andamento" && (
-                                      <button
-                                        onClick={() =>
-                                          concluirDocumentoProjeto(doc)
-                                        }
-                                        className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold hover:bg-green-700 transition w-24"
-                                      >
-                                        Concluir
-                                      </button>
-                                    )}
-                                    {doc.status === "concluido" && (
-                                      <button
-                                        onClick={() =>
-                                          reabrirDocumentoProjeto(doc)
-                                        }
-                                        className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition w-24"
-                                      >
-                                        Reabrir
-                                      </button>
-                                    )}
-                                    {doc.status !== "concluido" &&
-                                      doc.status !== "em_andamento" && (
-                                        <button
-                                          onClick={() =>
-                                            concluirDocumentoProjeto(doc)
-                                          }
-                                          className="px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs font-bold hover:bg-green-100 transition w-24"
-                                        >
-                                          Concluir
-                                        </button>
-                                      )}
-                                    <button
-                                      onClick={() =>
-                                        deletarRegistroPMIS(
-                                          "documentos_projeto",
-                                          doc.id,
-                                        )
-                                      }
-                                      className="text-red-400 hover:text-red-600"
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </div>
-                                </td>
-                              )}
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
+              <AbaDocumentos
+                abrirArquivoDocumento={abrirArquivoDocumento}
+                anexarArquivoDocumento={anexarArquivoDocumento}
+                arquivosDocumentos={arquivosDocumentos}
+                carregando={carregando}
+                concluirDocumentoProjeto={concluirDocumentoProjeto}
+                deletarRegistroPMIS={deletarRegistroPMIS}
+                documentosProjeto={documentosProjeto}
+                excluirArquivoDocumento={excluirArquivoDocumento}
+                iniciarDocumentoProjeto={iniciarDocumentoProjeto}
+                novoDocumentoProjeto={novoDocumentoProjeto}
+                podeEditarObraSelecionada={podeEditarObraSelecionada}
+                reabrirDocumentoProjeto={reabrirDocumentoProjeto}
+                salvarDocumentoProjeto={salvarDocumentoProjeto}
+                setNovoDocumentoProjeto={setNovoDocumentoProjeto}
+                uploadDocumentoId={uploadDocumentoId}
+              />
             )}
 
             {abaPainelObra === "diario_tarefas" && (
-              <div className="flex flex-col gap-6 flex-1 items-start w-full">
-                <div className="flex gap-2 border-b w-full">
-                  {[
-                    { id: "historico", label: "Histórico" },
-                    { id: "anexos", label: "Anexos" },
-                    { id: "tarefas", label: "Tarefas" },
-                  ].map((sub) => (
-                    <button
-                      key={sub.id}
-                      onClick={() => setSubAbaDiario(sub.id as any)}
-                      className={`px-4 py-2.5 text-sm font-bold border-b-2 transition ${subAbaDiario === sub.id ? "border-[#2A6377] text-[#2A6377]" : "border-transparent text-slate-500 hover:text-[#2A6377]"}`}
-                    >
-                      {sub.label}
-                    </button>
-                  ))}
-                </div>
-
-                {subAbaDiario === "historico" && (
-                  <TimelineObra
-                    idObra={obraEcoSelecionada.id}
-                    usuarioAtualId={usuarioAtual?.id}
-                    podeGerenciar={podeEditarObraSelecionada}
-                    onAviso={mostrarAviso}
-                  />
-                )}
-
-                {subAbaDiario === "anexos" && (
-                  <AnexosObra
-                    idObra={obraEcoSelecionada.id}
-                    usuarioAtualId={usuarioAtual?.id}
-                    podeGerenciar={podeEditarObraSelecionada}
-                    onAviso={mostrarAviso}
-                  />
-                )}
-
-                {subAbaDiario === "tarefas" && (
-                <div className="flex flex-col bg-white p-5 rounded-xl shadow-sm border w-full">
-                  <div className="border-b pb-3 mb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-bold flex items-center gap-2">
-                        <CheckSquare size={20} className="text-[#2A6377]" /> Tarefas da Obra
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Crie e acompanhe tarefas avulsas da obra. Tarefas de reunião também aparecem aqui.
-                      </p>
-                    </div>
-                    {podeEditarObraSelecionada && !["finalizada", "cancelada"].includes(obraEcoSelecionada.status ?? "") && (
-                      <button
-                        onClick={abrirModalNovaTarefaObra}
-                        className="bg-[#2A6377] hover:bg-[#1e4857] text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2"
-                      >
-                        <Plus size={16} /> Nova Tarefa
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {[
-                      { id: "abertas", label: "Abertas" },
-                      { id: "atrasadas", label: "Atrasadas" },
-                      { id: "pendente", label: "A Fazer" },
-                      { id: "em_andamento", label: "Em Andamento" },
-                      { id: "concluida", label: "Concluídas" },
-                      { id: "cancelada", label: "Canceladas" },
-                      { id: "todas", label: "Todas" },
-                    ].map((filtro) => (
-                      <button
-                        key={filtro.id}
-                        onClick={() => setFiltroTarefasObra(filtro.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${filtroTarefasObra === filtro.id ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}`}
-                      >
-                        {filtro.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex gap-4 overflow-x-auto pb-2 items-start flex-1">
-                    <div className="flex-1 min-w-[260px] bg-gray-50 rounded-xl p-3 border">
-                      <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-bold text-sm">A Fazer</h4>
-                        <span className="bg-gray-200 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                          {
-                            tarefasPainelObra.filter(
-                              (t) => t?.status === "pendente",
-                            ).length
-                          }
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {tarefasPainelObra
-                          .filter((t) => t?.status === "pendente")
-                          .map((tarefa) => (
-                            <div
-                              key={tarefa?.id}
-                              onClick={() => setTarefaSelecionada(tarefa)}
-                              className="bg-white p-3 rounded shadow-sm border hover:border-[#2A6377] cursor-pointer"
-                            >
-                              <p className="font-medium text-sm leading-tight mb-2">
-                                {tarefa?.titulo}
-                              </p>
-                              <div className="flex flex-wrap gap-1 mb-2">
-                                <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                                  {tarefa?.origem === "reuniao" ? "Reunião" : "Avulsa"}
-                                </span>
-                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${tarefa?.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefa?.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefa?.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
-                                  {tarefa?.prioridade || "normal"}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center border-t pt-2">
-                                <span className="text-[10px] uppercase font-bold text-slate-400">
-                                  <User size={10} className="inline mr-1" />
-                                  {tarefa?.usuarios?.nome}
-                                </span>
-                                <span
-                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"}`}
-                                >
-                                  <Clock size={10} />{" "}
-                                  {formatarDataSegura(tarefa?.data_vencimento)}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-[260px] bg-[#2A6377]/5 rounded-xl p-3 border border-[#2A6377]/20">
-                      <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-bold text-sm text-[#2A6377]">
-                          Em Andamento
-                        </h4>
-                        <span className="bg-[#2A6377]/20 text-[#2A6377] text-[10px] px-2 py-0.5 rounded-full font-bold">
-                          {
-                            tarefasPainelObra.filter(
-                              (t) => t?.status === "em_andamento",
-                            ).length
-                          }
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {tarefasPainelObra
-                          .filter((t) => t?.status === "em_andamento")
-                          .map((tarefa) => (
-                            <div
-                              key={tarefa?.id}
-                              onClick={() => setTarefaSelecionada(tarefa)}
-                              className="bg-white p-3 rounded shadow-sm border hover:border-[#2A6377] cursor-pointer"
-                            >
-                              <p className="font-medium text-sm leading-tight mb-2">
-                                {tarefa?.titulo}
-                              </p>
-                              <div className="flex flex-wrap gap-1 mb-2">
-                                <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                                  {tarefa?.origem === "reuniao" ? "Reunião" : "Avulsa"}
-                                </span>
-                                <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${tarefa?.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefa?.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefa?.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
-                                  {tarefa?.prioridade || "normal"}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center border-t pt-2">
-                                <span className="text-[10px] uppercase font-bold text-slate-400">
-                                  <User size={10} className="inline mr-1" />
-                                  {tarefa?.usuarios?.nome}
-                                </span>
-                                <span
-                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"}`}
-                                >
-                                  <Clock size={10} />{" "}
-                                  {formatarDataSegura(tarefa?.data_vencimento)}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-[260px] bg-green-50/50 rounded-xl p-3 border border-green-100">
-                      <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-bold text-sm text-green-700">
-                          Concluídas
-                        </h4>
-                      </div>
-                      <div className="space-y-2">
-                        {tarefasPainelObra
-                          .filter((t) => t?.status === "concluida")
-                          .map((tarefa) => (
-                            <div
-                              key={tarefa?.id}
-                              onClick={() => setTarefaSelecionada(tarefa)}
-                              className="bg-white p-3 rounded shadow-sm border opacity-70 cursor-pointer hover:opacity-100"
-                            >
-                              <p className="font-medium text-sm leading-tight mb-2 line-through text-slate-500">
-                                {tarefa?.titulo}
-                              </p>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-[260px] bg-red-50/40 rounded-xl p-3 border border-red-100">
-                      <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-bold text-sm text-red-700">
-                          Canceladas
-                        </h4>
-                        <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                          {tarefasPainelObra.filter((t) => t?.status === "cancelada").length}
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {tarefasPainelObra
-                          .filter((t) => t?.status === "cancelada")
-                          .map((tarefa) => (
-                            <div
-                              key={tarefa?.id}
-                              onClick={() => setTarefaSelecionada(tarefa)}
-                              className="bg-white p-3 rounded shadow-sm border opacity-70 cursor-pointer hover:opacity-100"
-                            >
-                              <p className="font-medium text-sm leading-tight mb-2 line-through text-slate-500">
-                                {tarefa?.titulo}
-                              </p>
-                              <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
-                                Cancelada
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                )}
-              </div>
+              <AbaDiarioTarefas
+                abrirModalNovaTarefaObra={abrirModalNovaTarefaObra}
+                filtroTarefasObra={filtroTarefasObra}
+                mostrarAviso={mostrarAviso}
+                obraEcoSelecionada={obraEcoSelecionada}
+                podeEditarObraSelecionada={podeEditarObraSelecionada}
+                setFiltroTarefasObra={setFiltroTarefasObra}
+                setSubAbaDiario={setSubAbaDiario}
+                setTarefaSelecionada={setTarefaSelecionada}
+                subAbaDiario={subAbaDiario}
+                tarefasPainelObra={tarefasPainelObra}
+                usuarioAtual={usuarioAtual}
+              />
             )}
           </div>
         )}
