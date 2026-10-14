@@ -74,7 +74,9 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
   const [itens, setItens] = useState<ItemSma[]>([]);
   const [familias, setFamilias] = useState<PrevisaoFamilia[]>([]);
   const [liberadas, setLiberadas] = useState<PrevisaoLiberada[]>([]);
+  // filtro do topo: vale para as tres tabelas e para os indicadores
   const [obra, setObra] = useState("todas");
+  const [gestor, setGestor] = useState("todos");
   const [situacao, setSituacao] = useState("pendentes"); // pendentes = ainda sem pedido
   const [soUrgentes, setSoUrgentes] = useState(false);
   const [soAtrasados, setSoAtrasados] = useState(false);
@@ -104,15 +106,30 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // obra -> nome e gestor, a partir das SMAs e do saldo por familia (as previsoes liberadas so trazem o codigo)
+  const infoObras = useMemo(() => {
+    const mapa = new Map<string, { nome: string; gestor: string }>();
+    [...familias, ...itens].forEach((o) => mapa.set(o.codigo_obra, { nome: o.nome_obra, gestor: o.gestor || "Sem gestor" }));
+    return mapa;
+  }, [itens, familias]);
+  const gestores = useMemo(() => [...new Set([...infoObras.values()].map((o) => o.gestor))].sort((a, b) => a.localeCompare(b, "pt-BR")), [infoObras]);
   const obras = useMemo(
-    () => Array.from(new Map(itens.map((i) => [i.codigo_obra, `${i.codigo_obra} - ${i.nome_obra}`])).entries()).sort(),
-    [itens],
+    () =>
+      [...infoObras.entries()]
+        .filter(([, o]) => gestor === "todos" || o.gestor === gestor)
+        .map(([cod, o]) => [cod, `${cod} - ${o.nome}`] as [string, string])
+        .sort((a, b) => a[0].localeCompare(b[0], "pt-BR", { numeric: true })),
+    [infoObras, gestor],
   );
+  const noFiltro = (codigoObra: string) =>
+    (obra === "todas" || codigoObra === obra) && (gestor === "todos" || infoObras.get(codigoObra)?.gestor === gestor);
+
   const hoje = hojeISO();
   const atrasado = (i: ItemSma) => Boolean(i.data_necessidade && i.data_necessidade < hoje);
   const termo = busca.trim().toLowerCase();
-  const filtrados = itens.filter((i) => {
-    if (obra !== "todas" && i.codigo_obra !== obra) return false;
+  const itensFiltro = itens.filter((i) => noFiltro(i.codigo_obra));
+  const liberadasFiltro = liberadas.filter((p) => noFiltro(p.codigo_obra));
+  const filtrados = itensFiltro.filter((i) => {
     if (situacao === "pendentes" && i.situacao_compra === "com_pedido") return false;
     if (situacao !== "pendentes" && situacao !== "todas" && i.situacao_compra !== situacao) return false;
     if (soUrgentes && !i.urgente) return false;
@@ -120,8 +137,8 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
     if (termo && ![i.codigo_material, i.descricao_material, i.solicitante, String(i.nr_sma)].join(" ").toLowerCase().includes(termo)) return false;
     return true;
   });
-  const semPedido = itens.filter((i) => i.situacao_compra !== "com_pedido");
-  const familiasVisiveis = familias.filter((f) => obra === "todas" || f.codigo_obra === obra);
+  const semPedido = itensFiltro.filter((i) => i.situacao_compra !== "com_pedido");
+  const familiasVisiveis = familias.filter((f) => noFiltro(f.codigo_obra));
 
   if (carregando)
     return (
@@ -132,7 +149,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
 
   const indicadores: [string, number, string][] = [
     ["Itens sem pedido", semPedido.length, "text-slate-800"],
-    ["Ainda não iniciados", itens.filter((i) => i.situacao_compra === "sem_compra").length, "text-red-600"],
+    ["Ainda não iniciados", itensFiltro.filter((i) => i.situacao_compra === "sem_compra").length, "text-red-600"],
     ["Urgentes sem pedido", semPedido.filter((i) => i.urgente).length, "text-orange-600"],
     ["Atrasados (necessidade vencida)", semPedido.filter(atrasado).length, "text-red-600"],
   ];
@@ -144,6 +161,45 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
         <p className="text-sm text-slate-400 mt-1">
           Material solicitado nas SMAs das obras em andamento, previsões liberadas e saldo por família. Atualizado pelo ERP.
         </p>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border p-3 flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-xs font-bold uppercase text-slate-400 mr-1">Filtrar</span>
+        <select
+          value={gestor}
+          onChange={(e) => {
+            setGestor(e.target.value);
+            setObra("todas");
+          }}
+          className="border rounded-lg px-2 py-1.5 bg-white"
+        >
+          <option value="todos">Todos os gestores</option>
+          {gestores.map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </select>
+        <select value={obra} onChange={(e) => setObra(e.target.value)} className="border rounded-lg px-2 py-1.5 bg-white max-w-[280px]">
+          <option value="todas">Todas as obras</option>
+          {obras.map(([cod, rot]) => (
+            <option key={cod} value={cod}>
+              {rot}
+            </option>
+          ))}
+        </select>
+        {(gestor !== "todos" || obra !== "todas") && (
+          <button
+            onClick={() => {
+              setGestor("todos");
+              setObra("todas");
+            }}
+            className="px-2 py-1.5 text-[#2A6377] font-semibold hover:underline"
+          >
+            Limpar filtro
+          </button>
+        )}
+        <span className="text-[11px] text-slate-400 ml-auto">Vale para SMAs, previsões liberadas e saldo por família.</span>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -159,14 +215,6 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
         <div className="p-4 border-b flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
           <h3 className="font-bold text-lg">Material da SMA pendente</h3>
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <select value={obra} onChange={(e) => setObra(e.target.value)} className="border rounded-lg px-2 py-1.5 bg-white">
-              <option value="todas">Todas as obras</option>
-              {obras.map(([cod, rot]) => (
-                <option key={cod} value={cod}>
-                  {rot}
-                </option>
-              ))}
-            </select>
             <select value={situacao} onChange={(e) => setSituacao(e.target.value)} className="border rounded-lg px-2 py-1.5 bg-white">
               <option value="pendentes">Sem pedido</option>
               <option value="sem_compra">Não iniciada</option>
@@ -281,14 +329,14 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
                 </tr>
               </thead>
               <tbody>
-                {liberadas.length === 0 ? (
+                {liberadasFiltro.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="p-6 text-center text-slate-400">
                       Nenhuma previsão gravada nos últimos 30 dias.
                     </td>
                   </tr>
                 ) : (
-                  liberadas.map((p) => (
+                  liberadasFiltro.map((p) => (
                     <tr key={p.id} className="border-t">
                       <td className="px-3 py-2 whitespace-nowrap">{p.executado_em ? formatarDataSegura(p.executado_em) : "-"}</td>
                       <td className="px-3 py-2">
