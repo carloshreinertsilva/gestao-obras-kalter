@@ -6,6 +6,7 @@ import TelaDashboard from "./telas/TelaDashboard";
 import TelaCadastroObras from "./telas/TelaCadastroObras";
 import TelaTarefas from "./telas/TelaTarefas";
 import TelaReunioes from "./telas/TelaReunioes";
+import TelaCompras from "./telas/TelaCompras";
 import AbaResumo from "./telas/painel/AbaResumo";
 import AbaFinanceiro from "./telas/painel/AbaFinanceiro";
 import AbaFaturamento from "./telas/painel/AbaFaturamento";
@@ -54,6 +55,7 @@ import {
 } from "./utils";
 import {
   Briefcase,
+  ShoppingCart,
   Calendar,
   CheckSquare,
   HardHat,
@@ -443,6 +445,8 @@ export default function App() {
   // gestores pedem), so para consulta e so nas abas de que precisa; pode pedir previsao.
   // Resumo e Financeiro ficam de fora (mostram recebimentos do cliente).
   const ehLogistica = usuarioAtual?.perfil === "logistica";
+  // painel de compras (so consulta): logistica e admin
+  const podeVerCompras = ehLogistica || usuarioAtual?.perfil === "admin";
   const veTodasObras = isAdmin || ehLogistica;
   const abaInicialObra = ehLogistica ? "faturamento" : "resumo";
   const abaObraPermitida = (aba: string) => {
@@ -531,6 +535,7 @@ export default function App() {
       let tela = rota.tela;
       if (tela === "solicitacoes_previsao" && !podeSolicitarPrevisao(usuarioAtual)) tela = "dashboard";
       if (tela === "cadastros_equipe" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
+      if (tela === "compras" && !podeVerCompras) tela = "dashboard";
 
       if (tela === "painel_obra" && rota.codigoObra) {
         const aba = abaObraPermitida(rota.abaObra || "") ? rota.abaObra! : abaInicialObra;
@@ -3412,6 +3417,7 @@ export default function App() {
                 {itemMenu("reunioes", "Reuniões", ClipboardList, telaAtiva === "reunioes")}
                 {podeSolicitarPrevisao(usuarioAtual) &&
                   itemMenu("solicitacoes_previsao", "Previsões", Wallet, telaAtiva === "solicitacoes_previsao")}
+                {podeVerCompras && itemMenu("compras", "Compras", ShoppingCart, telaAtiva === "compras")}
               </div>
             </div>
 
@@ -3786,6 +3792,8 @@ export default function App() {
             onAviso={mostrarAviso}
           />
         )}
+
+        {telaAtiva === "compras" && podeVerCompras && <TelaCompras falhaAoCarregar={falhaAoCarregar} />}
 
         {telaAtiva === "solicitacoes_previsao" && podeSolicitarPrevisao(usuarioAtual) && (
           <div className="animate-in fade-in space-y-4">
