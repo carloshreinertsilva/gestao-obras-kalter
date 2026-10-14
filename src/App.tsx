@@ -361,6 +361,7 @@ export default function App() {
         if (!nomeAuth) throw new Error("Preencha o seu nome.");
         if (!/@kalter\.com\.br$/i.test(emailAuth.trim()))
           throw new Error("Use o seu e-mail da empresa (@kalter.com.br).");
+        if (problemaSenha(senhaAuth)) throw new Error(problemaSenha(senhaAuth));
         const { data, error } = await supabase.auth.signUp({
           email: emailAuth,
           password: senhaAuth,
@@ -391,17 +392,31 @@ export default function App() {
       setErroLogin(
         error.message.includes("Invalid login credentials")
           ? "E-mail ou senha incorretos."
-          : error.message,
+          : traduzirErroSenha(error.message),
       );
     } finally {
       setCarregandoAuth(false);
     }
   };
 
+  // Mesma regra configurada no Supabase (Authentication > Sign In / Providers, 14/10): minimo 8,
+  // minuscula, maiuscula, numero e simbolo. Validar aqui so da a mensagem em portugues antes de enviar.
+  const REGRA_SENHA = "Mínimo de 8 caracteres, com letra minúscula, maiúscula, número e símbolo (ex.: ! @ # $).";
+  const problemaSenha = (s: string) =>
+    s.length < 8 || !/[a-z]/.test(s) || !/[A-Z]/.test(s) || !/[0-9]/.test(s) || !/[^A-Za-z0-9]/.test(s)
+      ? `Senha fraca. ${REGRA_SENHA}`
+      : "";
+  const traduzirErroSenha = (msg: string) =>
+    /different from the old/i.test(msg)
+      ? "A nova senha precisa ser diferente da anterior."
+      : /password/i.test(msg) && /(weak|characters|at least|should contain)/i.test(msg)
+        ? `Senha fraca. ${REGRA_SENHA}`
+        : msg;
+
   const salvarNovaSenha = async (e: any) => {
     e.preventDefault();
     setErroLogin("");
-    if (novaSenha.length < 6) return setErroLogin("A senha precisa ter pelo menos 6 caracteres.");
+    if (problemaSenha(novaSenha)) return setErroLogin(problemaSenha(novaSenha));
     if (novaSenha !== confirmaSenha) return setErroLogin("As duas senhas não são iguais.");
     setCarregandoAuth(true);
     try {
@@ -413,11 +428,7 @@ export default function App() {
       window.history.replaceState(null, "", "/");
       mostrarAviso("Senha alterada! Use a nova senha nos próximos acessos.");
     } catch (error: any) {
-      setErroLogin(
-        /different from the old/i.test(error.message)
-          ? "A nova senha precisa ser diferente da anterior."
-          : error.message,
-      );
+      setErroLogin(traduzirErroSenha(error.message));
     } finally {
       setCarregandoAuth(false);
     }
@@ -2119,6 +2130,7 @@ export default function App() {
                   className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-[#2A6377]"
                 />
               </div>
+              <p className="text-[11px] text-slate-400 mt-1">{REGRA_SENHA}</p>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Repita a nova senha</label>
@@ -2268,6 +2280,7 @@ export default function App() {
                       className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-[#2A6377]"
                     />
                   </div>
+                  {modoAuth === "cadastro" && <p className="text-[11px] text-slate-400 mt-1">{REGRA_SENHA}</p>}
                 </div>
               )}
               <button
