@@ -71,7 +71,7 @@ export const familiaRestrita = (codigo?: string) => FAMILIAS_RESTRITAS.includes(
 
 // Logistica tambem pede: cota e compra o material que os gestores das obras pedem.
 export const podeSolicitarPrevisao = (usuario?: Usuario | null) =>
-  ["admin", "engenheiro", "assistente", "logistica"].includes(String(usuario?.perfil || ""));
+  ["admin", "coordenador", "engenheiro", "assistente", "logistica"].includes(String(usuario?.perfil || ""));
 
 const STATUS: Record<string, { rotulo: string; classe: string }> = {
   simulando: { rotulo: "Simulando no ERP", classe: "bg-slate-100 text-slate-600 border-slate-200" },

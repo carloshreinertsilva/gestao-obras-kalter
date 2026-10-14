@@ -452,11 +452,15 @@ export default function App() {
     setSenhaAuth("");
     setObraEcoSelecionada(null);
   };
+  // admin: tudo, inclusive cadastros (equipe, obras) e historico de alteracoes.
+  // coordenador: ve e gerencia tudo como o admin, menos esses cadastros e o historico.
   const isAdmin = usuarioAtual?.perfil === "admin";
+  const veTudo = isAdmin || usuarioAtual?.perfil === "coordenador";
+  const podeCadastrarObras = usuarioAtual?.perfil !== "coordenador";
   // Rentabilidade (custo/margem do projeto) e informacao sensivel - so admin e
   // engenheiro veem essa aba; assistente e logistica ficam de fora.
   const podeVerRentabilidade =
-    usuarioAtual?.perfil === "admin" || usuarioAtual?.perfil === "engenheiro";
+    veTudo || usuarioAtual?.perfil === "engenheiro";
   // Assistente herda o escopo de obras do engenheiro ao qual está vinculado.
   const idResponsavelEscopo =
     usuarioAtual?.perfil === "assistente"
@@ -467,8 +471,8 @@ export default function App() {
   // Resumo e Financeiro ficam de fora (mostram recebimentos do cliente).
   const ehLogistica = usuarioAtual?.perfil === "logistica";
   // painel de compras (so consulta): logistica e admin
-  const podeVerCompras = ehLogistica || usuarioAtual?.perfil === "admin";
-  const veTodasObras = isAdmin || ehLogistica;
+  const podeVerCompras = ehLogistica || veTudo;
+  const veTodasObras = veTudo || ehLogistica;
   const abaInicialObra = ehLogistica ? "faturamento" : "resumo";
   const abaObraPermitida = (aba: string) => {
     if (ehLogistica) return ["faturamento", "lista_materiais", "diario_tarefas", "previsoes"].includes(aba);
@@ -478,12 +482,12 @@ export default function App() {
   };
   // Filtro unico das obras que o usuario enxerga: quem nao ve todas fica com as do
   // seu escopo (engenheiro: as dele; assistente: as do engenheiro vinculado).
-  const noEscopoDoUsuario = (query: any, verTodas: boolean = isAdmin) =>
+  const noEscopoDoUsuario = (query: any, verTodas: boolean = veTudo) =>
     verTodas ? query : query.eq("id_responsavel", idResponsavelEscopo);
   const podeEditarObra = (obra: any) =>
-    Boolean(isAdmin || (obra && usuarioAtual && obra.id_responsavel === idResponsavelEscopo));
+    Boolean(veTudo || (obra && usuarioAtual && obra.id_responsavel === idResponsavelEscopo));
   const podeEditarObraSelecionada = Boolean(
-    isAdmin ||
+    veTudo ||
       (obraEcoSelecionada &&
         usuarioAtual &&
         obraEcoSelecionada.id_responsavel === idResponsavelEscopo),
@@ -558,6 +562,7 @@ export default function App() {
       if (tela === "cadastros_equipe" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
       if (tela === "compras" && !podeVerCompras) tela = "dashboard";
       if (tela === "historico" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
+      if (tela === "cadastros_obras" && !podeCadastrarObras) tela = "dashboard";
 
       if (tela === "painel_obra" && rota.codigoObra) {
         const aba = abaObraPermitida(rota.abaObra || "") ? rota.abaObra! : abaInicialObra;
@@ -2691,7 +2696,7 @@ export default function App() {
                 </button>
               )}
               {!["concluida", "cancelada"].includes(tarefaSelecionada.status ?? "") &&
-                (isAdmin || tarefaSelecionada.id_responsavel === usuarioAtual?.id || tarefaSelecionada.obras?.id_responsavel === idResponsavelEscopo) && (
+                (veTudo || tarefaSelecionada.id_responsavel === usuarioAtual?.id || tarefaSelecionada.obras?.id_responsavel === idResponsavelEscopo) && (
                 <button
                   onClick={() => cancelarTarefa(tarefaSelecionada)}
                   className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-6 py-3 md:py-2 rounded-lg font-bold flex items-center gap-2 transition flex-1 sm:flex-none justify-center"
@@ -3445,18 +3450,20 @@ export default function App() {
               </div>
             </div>
 
+            {(podeCadastrarObras || isAdmin) && (
             <div className={`px-4 ${menuRecolhido ? "md:px-2 md:mt-3" : ""} mt-8`}>
               <p className={`text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider flex items-center gap-1 ${menuRecolhido ? "md:hidden" : ""}`}>
                 <Settings size={12} /> Cadastros
               </p>
               {menuRecolhido && <div className="hidden md:block h-px bg-white/10 mb-3" />}
               <div className="space-y-1">
-                {itemMenu("cadastros_obras", "Obras", HardHat, telaAtiva === "cadastros_obras")}
+                {podeCadastrarObras && itemMenu("cadastros_obras", "Obras", HardHat, telaAtiva === "cadastros_obras")}
                 {isAdmin &&
                   itemMenu("cadastros_equipe", "Equipe", Users, telaAtiva === "cadastros_equipe")}
                 {isAdmin && itemMenu("historico", "Histórico", History, telaAtiva === "historico")}
               </div>
             </div>
+            )}
           </div>
         </div>
 
@@ -3464,7 +3471,7 @@ export default function App() {
           <StatusSync
             status={statusSync}
             recolhido={menuRecolhido}
-            mostrarDetalhes={isAdmin}
+            mostrarDetalhes={veTudo}
           />
           <div
             className={`flex items-center gap-3 mb-4 px-2 ${menuRecolhido ? "md:justify-center md:px-0" : ""}`}
@@ -3499,7 +3506,7 @@ export default function App() {
         {telaAtiva === "dashboard" && (
           <TelaDashboard
             usuarioAtual={usuarioAtual}
-            isAdmin={isAdmin}
+            isAdmin={veTudo}
             tarefasDashboard={tarefasDashboard}
             noEscopoDoUsuario={noEscopoDoUsuario}
             falhaAoCarregar={falhaAoCarregar}
@@ -3804,7 +3811,7 @@ export default function App() {
           <TelaEquipe listaUsuarios={listaUsuarios} onAtualizar={buscarUsuarios} onAviso={mostrarAviso} />
         )}
 
-        {telaAtiva === "cadastros_obras" && (
+        {telaAtiva === "cadastros_obras" && podeCadastrarObras && (
           <TelaCadastroObras
             usuarioAtual={usuarioAtual}
             listaUsuarios={listaUsuarios}

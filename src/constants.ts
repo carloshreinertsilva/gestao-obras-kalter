@@ -11,6 +11,7 @@ export const fasesProjeto = [
 
 export const perfisUsuario = [
   { valor: "admin", label: "Administrador" },
+  { valor: "coordenador", label: "Coordenador" },
   { valor: "engenheiro", label: "Engenheiro/Gestor" },
   { valor: "assistente", label: "Assistente" },
   { valor: "logistica", label: "Logística/Suprimentos" },

@@ -11,6 +11,7 @@
 
 export type PerfilUsuario =
   | "admin"
+  | "coordenador"
   | "engenheiro"
   | "assistente"
   | "logistica"

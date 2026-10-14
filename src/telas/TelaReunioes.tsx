@@ -537,7 +537,7 @@ export default function TelaReunioes({
   const destinatariosAta = () => {
     const emails = listaUsuarios
       .filter((u) =>
-        ["admin", "engenheiro", "gestor", "logistica"].includes(
+        ["admin", "coordenador", "engenheiro", "gestor", "logistica"].includes(
           u.perfil || "",
         ),
       )
