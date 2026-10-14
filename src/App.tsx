@@ -1,20 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import TelaEquipe from "./telas/TelaEquipe";
 import TelaDashboard from "./telas/TelaDashboard";
-import TelaCadastroObras from "./telas/TelaCadastroObras";
-import TelaTarefas from "./telas/TelaTarefas";
 import TelaReunioes from "./telas/TelaReunioes";
-import TelaCompras from "./telas/TelaCompras";
-import AbaResumo from "./telas/painel/AbaResumo";
-import AbaFinanceiro from "./telas/painel/AbaFinanceiro";
-import AbaFaturamento from "./telas/painel/AbaFaturamento";
-import AbaCronograma from "./telas/painel/AbaCronograma";
-import AbaDocumentos from "./telas/painel/AbaDocumentos";
-import AbaDiarioTarefas from "./telas/painel/AbaDiarioTarefas";
-import ListaMateriaisSMA from "./ListaMateriaisSMA";
-import RentabilidadeProjeto from "./RentabilidadeProjeto";
 import { AbaPrevisoes, PainelSolicitacoes, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
 import { AtivarPush, ItemNotificacao } from "./Notificacoes";
 import { removerPushAoSair } from "./push";
@@ -99,6 +87,26 @@ import {
 const ENTROU_POR_RECUPERACAO =
   typeof window !== "undefined" &&
   /type=recovery/.test(window.location.hash + window.location.search);
+
+// Telas e abas carregadas so quando abertas (o Dashboard e a tela inicial e vem junto).
+const AbaCronograma = lazy(() => import("./telas/painel/AbaCronograma"));
+const AbaDiarioTarefas = lazy(() => import("./telas/painel/AbaDiarioTarefas"));
+const AbaDocumentos = lazy(() => import("./telas/painel/AbaDocumentos"));
+const AbaFaturamento = lazy(() => import("./telas/painel/AbaFaturamento"));
+const AbaFinanceiro = lazy(() => import("./telas/painel/AbaFinanceiro"));
+const AbaResumo = lazy(() => import("./telas/painel/AbaResumo"));
+const ListaMateriaisSMA = lazy(() => import("./ListaMateriaisSMA"));
+const RentabilidadeProjeto = lazy(() => import("./RentabilidadeProjeto"));
+const TelaCadastroObras = lazy(() => import("./telas/TelaCadastroObras"));
+const TelaCompras = lazy(() => import("./telas/TelaCompras"));
+const TelaEquipe = lazy(() => import("./telas/TelaEquipe"));
+const TelaTarefas = lazy(() => import("./telas/TelaTarefas"));
+
+const CarregandoTela = () => (
+  <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400">
+    <Loader2 className="animate-spin" size={18} /> Carregando...
+  </div>
+);
 
 export default function App() {
   const [sessao, setSessao] = useState<Session | null>(null);
@@ -3483,6 +3491,7 @@ export default function App() {
 
       {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 p-4 md:p-5 2xl:p-8 overflow-y-auto overflow-x-hidden bg-slate-50/50">
+        <Suspense fallback={<CarregandoTela />}>
         {telaAtiva === "dashboard" && (
           <TelaDashboard
             usuarioAtual={usuarioAtual}
@@ -3663,6 +3672,7 @@ export default function App() {
               </div>
             </div>
 
+            <Suspense fallback={<CarregandoTela />}>
             {abaPainelObra === "resumo" && abaObraPermitida("resumo") && (
               <AbaResumo
                 cronogramaObra={cronogramaObra}
@@ -3782,6 +3792,7 @@ export default function App() {
                 usuarioAtual={usuarioAtual}
               />
             )}
+            </Suspense>
           </div>
         )}
 
@@ -3852,6 +3863,7 @@ export default function App() {
             onAbrirTarefa={setTarefaSelecionada}
           />
         )}
+        </Suspense>
       </main>
     </div>
   );

@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { fasesProjeto } from "../constants";
 import ValorAjustavel from "../ValorAjustavel";
 import { formatarDataSegura, formatarDataHora, formatarMoeda, dataHojeISO, labelFase, isAtrasada } from "../utils";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Briefcase, CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2, FolderOpen, Activity, DollarSign } from "lucide-react";
 import type { Usuario } from "../types";
+
+const GraficoObrasPorFase = lazy(() => import("./GraficoObrasPorFase"));
 
 // Dashboard: visao geral das obras do usuario (admin ve todas), status PMIS,
 // projetos criticos, minhas tarefas e ultimas anotacoes do diario.
@@ -668,33 +669,9 @@ export default function TelaDashboard({
                 Sem dados.
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dadosGrafico}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    vertical={false}
-                    stroke="#e5e7eb"
-                  />
-                  <XAxis
-                    dataKey="nome"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 11 }}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip cursor={{ fill: "#f3f4f6" }} />
-                  <Bar
-                    dataKey="total"
-                    name="Obras"
-                    fill="#2A6377"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              <Suspense fallback={<div className="h-full" />}>
+                <GraficoObrasPorFase dados={dadosGrafico} />
+              </Suspense>
             )}
           </div>
         </div>
