@@ -298,3 +298,9 @@ export const labelOcorrencia = (tipo: string) => {
   };
   return mapas[tipo] || tipo;
 };
+
+// Tarefa aberta com prazo ja vencido (hoje nao conta como atrasada)
+export const isAtrasada = (dataVencimento: any, status: any) => {
+    if (!dataVencimento || status === "concluida" || status === "cancelada") return false;
+    return dataVencimento < new Date().toISOString().split("T")[0];
+  };
