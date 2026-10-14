@@ -388,6 +388,18 @@ export default function App() {
     );
   };
 
+  // Falha ao carregar dados: registra no console e avisa na tela, sem repetir o mesmo
+  // aviso em sequencia (ex.: varias partes da obra falhando juntas).
+  const ultimoAvisoFalha = useRef({ texto: "", quando: 0 });
+  const falhaAoCarregar = (oque: string, error: unknown) => {
+    console.error(`Erro ao carregar ${oque}:`, error);
+    const texto = `Não foi possível carregar ${oque}. Verifique a conexão e atualize a página.`;
+    const agora = Date.now();
+    if (ultimoAvisoFalha.current.texto === texto && agora - ultimoAvisoFalha.current.quando < 15000) return;
+    ultimoAvisoFalha.current = { texto, quando: agora };
+    mostrarAviso(texto, "erro");
+  };
+
   const agendarNoOutlookWeb = (tarefa: any) => {
     if (!tarefa.data_vencimento) {
       mostrarAviso("Esta tarefa não tem prazo definido.", "erro");
@@ -599,7 +611,7 @@ export default function App() {
       }
       if (data) setUsuarioAtual(data);
     } catch (error) {
-      console.error(error);
+      falhaAoCarregar("o seu cadastro", error);
     } finally {
       setCarregandoAuth(false);
     }
@@ -713,6 +725,10 @@ export default function App() {
     if (aba === "previsoes") return podeSolicitarPrevisao(usuarioAtual);
     return ["resumo", "financeiro", "faturamento", "lista_materiais", "cronograma", "documentos", "diario_tarefas"].includes(aba);
   };
+  // Filtro unico das obras que o usuario enxerga: quem nao ve todas fica com as do
+  // seu escopo (engenheiro: as dele; assistente: as do engenheiro vinculado).
+  const noEscopoDoUsuario = (query: any, verTodas: boolean = isAdmin) =>
+    verTodas ? query : query.eq("id_responsavel", idResponsavelEscopo);
   const podeEditarObra = (obra: any) =>
     Boolean(isAdmin || (obra && usuarioAtual && obra.id_responsavel === idResponsavelEscopo));
   const podeEditarObraSelecionada = Boolean(
@@ -726,15 +742,16 @@ export default function App() {
     async function buscarNotificacoes() {
       if (!usuarioAtual) return;
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("tarefas")
           .select("id, titulo, data_vencimento, obras(nome, codigo_externo)")
           .eq("id_responsavel", usuarioAtual.id)
           .eq("status", "pendente")
           .order("created_at", { ascending: false });
+        if (error) throw error;
         if (data) setMinhasNotificacoes(data);
       } catch (error) {
-        console.error(error);
+        falhaAoCarregar("suas tarefas pendentes", error);
       }
     }
     buscarNotificacoes();
@@ -900,13 +917,14 @@ export default function App() {
 
   const buscarUsuarios = async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("usuarios")
         .select("id, nome, email, perfil, id_engenheiro_vinculado, aprova_previsao, recebe_copia_previsao")
         .eq("ativo", true);
+      if (error) throw error;
       setListaUsuarios(data || []);
     } catch (error) {
-      console.error(error);
+      falhaAoCarregar("a lista de usuários", error);
     }
   };
 
@@ -920,15 +938,16 @@ export default function App() {
         )
         .eq("status", "em_andamento")
         .order("created_at", { ascending: false });
-      if (!veTodasObras) query = query.eq("id_responsavel", idResponsavelEscopo);
-      const { data } = await query;
+      query = noEscopoDoUsuario(query, veTodasObras);
+      const { data, error } = await query;
+      if (error) throw error;
       if (data) {
         setObrasLista(data);
         if (data.length > 0 && !reuniaoForm.id_obra)
           setReuniaoForm((prev: any) => ({ ...prev, id_obra: data[0].id }));
       }
     } catch (error) {
-      console.error(error);
+      falhaAoCarregar("as obras", error);
     }
   };
 
@@ -950,11 +969,12 @@ export default function App() {
         .order("created_at", { ascending: false });
       if (filtroStatusCadastroObras !== "todas")
         query = query.eq("status", filtroStatusCadastroObras);
-      if (!isAdmin) query = query.eq("id_responsavel", idResponsavelEscopo);
-      const { data } = await query;
+      query = noEscopoDoUsuario(query);
+      const { data, error } = await query;
+      if (error) throw error;
       setObrasCadastroLista(data || []);
     } catch (error) {
-      console.error(error);
+      falhaAoCarregar("o cadastro de obras", error);
     }
   };
 
@@ -986,8 +1006,7 @@ export default function App() {
           .eq("status", "em_andamento")
           .order("created_at", { ascending: false });
 
-        if (!isAdmin)
-          queryObras = queryObras.eq("id_responsavel", idResponsavelEscopo);
+        queryObras = noEscopoDoUsuario(queryObras);
 
         const { data: obrasDashboard, error: obrasErro } = await queryObras;
         if (obrasErro) throw obrasErro;
@@ -1303,7 +1322,7 @@ export default function App() {
           console.log("Tabela diario_obra ausente para o Feed");
         }
       } catch (error) {
-        console.error(error);
+        falhaAoCarregar("o dashboard", error);
       }
     }
 
@@ -1362,7 +1381,7 @@ export default function App() {
         fasesAtrasadas,
       });
     } catch (error) {
-      console.error(error);
+      falhaAoCarregar("os dados da obra para a reunião", error);
       setContextoObraAta(null);
     } finally {
       setCarregandoContextoAta(false);
@@ -1426,18 +1445,19 @@ export default function App() {
         `Retomando ata em andamento (${obrasRecuperadas.length} obra(s) já registrada(s)).`,
       );
     } catch (error) {
-      console.error(error);
+      falhaAoCarregar("a reunião", error);
     }
   };
 
   const buscarFaturamentosDaObra = async (idDaObra: any) => {
     if (!idDaObra) return;
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("faturamentos")
         .select("id, numero_nf, tipo, valor, created_at, usuarios(nome)")
         .eq("id_obra", idDaObra)
         .order("created_at", { ascending: false });
+      if (error) throw error;
       setFaturamentosObra(data || []);
     } catch (error) {
       console.log("Tabela de faturamentos ausente.");
@@ -1455,7 +1475,7 @@ export default function App() {
       if (error) throw error;
       setParcelasCliente(data || []);
     } catch (error) {
-      console.error("Erro ao buscar parcelas do cliente:", error);
+      falhaAoCarregar("as parcelas do cliente", error);
     }
   };
 
@@ -1470,7 +1490,7 @@ export default function App() {
       if (error) throw error;
       setDocumentosProjeto(data || []);
     } catch (error) {
-      console.error("Erro ao buscar documentos do projeto:", error);
+      falhaAoCarregar("os documentos do projeto", error);
     }
   };
 
@@ -1493,7 +1513,7 @@ export default function App() {
 
       setArquivosDocumentos(agrupado);
     } catch (error) {
-      console.error("Erro ao buscar anexos dos documentos:", error);
+      falhaAoCarregar("os anexos dos documentos", error);
     }
   };
 
@@ -1609,7 +1629,7 @@ export default function App() {
       if (error) throw error;
       setCronogramaObra(data || []);
     } catch (error) {
-      console.error("Erro ao buscar cronograma da obra:", error);
+      falhaAoCarregar("o cronograma da obra", error);
     }
   };
 
@@ -1628,7 +1648,7 @@ export default function App() {
         ),
       );
     } catch (error) {
-      console.error("Erro ao buscar famílias de faturamento:", error);
+      falhaAoCarregar("as famílias de faturamento", error);
     }
   };
 
@@ -1646,7 +1666,7 @@ export default function App() {
 
       setGruposFaturamentoObra(data || []);
     } catch (error) {
-      console.error("Erro ao buscar grupos de faturamento:", error);
+      falhaAoCarregar("os grupos de faturamento", error);
       setGruposFaturamentoObra([]);
     }
   };
@@ -1662,7 +1682,7 @@ export default function App() {
       if (error) throw error;
       setPrevisoesFaturamento(data || []);
     } catch (error) {
-      console.error("Erro ao buscar previsões de faturamento:", error);
+      falhaAoCarregar("as previsões de faturamento", error);
     }
   };
 
@@ -1677,7 +1697,7 @@ export default function App() {
       if (error) throw error;
       setRealizadosFaturamento(data || []);
     } catch (error) {
-      console.error("Erro ao buscar faturamentos realizados:", error);
+      falhaAoCarregar("os faturamentos realizados", error);
     }
   };
 
@@ -1692,7 +1712,7 @@ export default function App() {
       if (error) throw error;
       setMateriaisSma(data || []);
     } catch (error) {
-      console.error("Erro ao buscar lista de materiais (SMA):", error);
+      falhaAoCarregar("a lista de materiais (SMA)", error);
     }
   };
 
@@ -1707,7 +1727,7 @@ export default function App() {
       if (error) throw error;
       setRentabilidadeFamilias(data || []);
     } catch (error) {
-      console.error("Erro ao buscar rentabilidade do projeto:", error);
+      falhaAoCarregar("a rentabilidade do projeto", error);
     }
   };
 
@@ -2228,10 +2248,11 @@ export default function App() {
         )
         .order("created_at", { ascending: false });
       if (!veTodasObras) {
-        const { data: obrasUsuario } = await supabase
+        const { data: obrasUsuario, error: erroObras } = await supabase
           .from("obras")
           .select("id")
-          .eq("id_responsavel", idResponsavelEscopo);
+          .eq("id_responsavel", idResponsavelEscopo); // so entra aqui quem nao ve todas
+        if (erroObras) throw erroObras;
         const idsMinhasObras = obrasUsuario?.map((o) => o.id) || [];
         if (idsMinhasObras.length > 0)
           query = query.or(
@@ -2243,7 +2264,7 @@ export default function App() {
       if (error) throw error;
       setTarefasKanban(data || []);
     } catch (error) {
-      console.error(error);
+      falhaAoCarregar("as tarefas", error);
     }
   };
 
@@ -2260,11 +2281,12 @@ export default function App() {
     const buscarComentarios = async () => {
       if (!tarefaSelecionada) return;
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("comentarios_tarefa")
           .select("id, texto, created_at, usuarios(nome)")
           .eq("id_tarefa", tarefaSelecionada.id)
           .order("created_at", { ascending: true });
+        if (error) throw error;
         setComentariosTarefaAtual(data || []);
       } catch (error) {
         console.log("Tabela de comentários ausente.");
@@ -2570,7 +2592,7 @@ export default function App() {
         .single();
       if (data) setObraEcoSelecionada(data);
     } catch (error) {
-      console.error(error);
+      falhaAoCarregar("os dados da obra", error);
     }
   };
 
@@ -2977,6 +2999,7 @@ export default function App() {
       if (error) throw error;
     } catch (error) {
       console.error("Erro ao enviar e-mail de atribuição de tarefa:", error);
+      mostrarAviso("A tarefa foi salva, mas o e-mail para o responsável não pôde ser enviado.", "erro");
     }
   };
 
@@ -3152,7 +3175,7 @@ export default function App() {
         if (notif.tipo === "previsao_resultado") setAbaPainelObra("previsoes");
       }
     } catch (error) {
-      console.error(error);
+      falhaAoCarregar("a obra da notificação", error);
     }
   };
 
