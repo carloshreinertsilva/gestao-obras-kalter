@@ -382,6 +382,7 @@ export interface ObraSmaMaterial {
   data_cadastro?: string | null;
   data_necessidade?: string | null;
   observacao?: string | null;
+  ordens_producao?: string | null; // OPs do ERP: item vai ser produzido, nao comprado
   created_at?: string;
   updated_at?: string;
 }

@@ -690,6 +690,14 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                     <td className="p-3 text-slate-600 whitespace-nowrap">{m.solicitante || "-"}</td>
                     <td className="p-3 text-center">
                       <BadgeSituacao situacao={m.situacao} />
+                      {m.ordens_producao && (
+                        <span
+                          className="block mt-1 text-[10px] font-bold text-violet-700 whitespace-nowrap"
+                          title="Item vai ser produzido (ordem de produção no ERP com o número da SMA): não entra em Compras"
+                        >
+                          Produção · OP {m.ordens_producao}
+                        </span>
+                      )}
                     </td>
                     <td className="p-3 text-center text-slate-600 whitespace-nowrap">
                       {m.data_cadastro ? formatarDataSegura(m.data_cadastro) : "-"}
