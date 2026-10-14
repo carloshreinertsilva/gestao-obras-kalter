@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import HistoricoRentabilidade from "./HistoricoRentabilidade";
+import { calcularPanorama, familiasVisiveis } from "./calculoRentabilidade";
 import { Download, Plus, Search } from "lucide-react";
 import { formatarMoeda } from "./utils";
 import { supabase } from "./supabase";
@@ -114,53 +115,15 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
   }, [obra?.id]);
 
   const obraRow = useMemo(() => familias.find((f) => f.eh_obra) || null, [familias]);
-  // Familia sem nenhum valor (previsto, realizado ou em aberto) nao entra na tela - so
-  // ocupa espaco. Nao altera nenhum total, ja que todos os campos dela sao zero.
   const familiasLista = useMemo(
-    () =>
-      familias.filter(
-        (f) =>
-          !f.eh_obra &&
-          ([f.custo_previsto, f.custo_realizado, f.previsoes_em_aberto, f.pedidos_em_aberto].some(
-            (v) => Math.abs(Number(v || 0)) >= 0.005,
-          ) ||
-            // familia zerada mas com material a caminho (ex.: alerta "sem verba") tambem aparece
-            (alertas[f.codigo_projeto || ""]?.nivel ?? "ok") !== "ok"),
-      ),
+    () => familiasVisiveis(familias, (cod) => alertas[cod]?.nivel ?? "ok"),
     [familias, alertas],
   );
 
-  const panorama = useMemo(() => {
-    // Custo Previsto vem da SOMA das familias, nao do campo "topo" do ERP
-    // (cpj_valor_projeto da linha-obra): em tese os dois deveriam bater, mas o
-    // cadastro no ERP pode ficar dessincronizado (familia reorcada sem atualizar o
-    // total, ou vice-versa) - a soma das familias e o valor confiavel e verificavel,
-    // e bate com a tabela detalhada logo abaixo.
-    const custoPrevisto = somar(familiasLista, "custo_previsto");
-    const custoRealizado = somar(familias, "custo_realizado");
-    const previsoesEmAberto = somar(familias, "previsoes_em_aberto");
-    const resultadoProjetado = custoPrevisto - custoRealizado - previsoesEmAberto;
-    // Com a margem do orcamento no ERP: % sobre a venda sem impostos (regra do BI / calculadora).
-    // Sem ela (obra sem margem cadastrada ou pedido sem venda sem impostos): regra antiga, venda - custo.
-    const baseErp = margemErp !== null;
-    const margemOriginal = baseErp ? margemErp.margem : valorVendido - custoPrevisto;
-    const margemAtual = margemOriginal + resultadoProjetado;
-    const base = baseErp ? margemErp.vendaSemImpostos : valorVendido;
-    const rentabilidadeOriginal = base > 0 ? (margemOriginal / base) * 100 : 0;
-    const rentabilidadeAtual = base > 0 ? (margemAtual / base) * 100 : 0;
-    return {
-      custoPrevisto,
-      custoRealizado,
-      previsoesEmAberto,
-      resultadoProjetado,
-      baseErp,
-      margemOriginal,
-      margemAtual,
-      rentabilidadeOriginal,
-      rentabilidadeAtual,
-      delta: rentabilidadeAtual - rentabilidadeOriginal,
-    };
-  }, [familias, familiasLista, valorVendido, margemErp]);
+  const panorama = useMemo(
+    () => calcularPanorama(familias, valorVendido, margemErp),
+    [familias, valorVendido, margemErp],
+  );
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
