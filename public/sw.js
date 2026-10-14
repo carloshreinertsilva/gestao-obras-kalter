@@ -32,7 +32,8 @@ self.addEventListener("notificationclick", (event) => {
       const abertas = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       for (const cliente of abertas) {
         if (new URL(cliente.url).origin === self.location.origin) {
-          cliente.postMessage({ tipo: "abrir-notificacoes" });
+          // app ja aberto: ele mesmo navega ate o endereco do aviso (sem recarregar)
+          cliente.postMessage({ tipo: "abrir-url", url });
           return cliente.focus();
         }
       }

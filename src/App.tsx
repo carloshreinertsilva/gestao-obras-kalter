@@ -595,8 +595,16 @@ export default function App() {
     }
     aplicarRota(caminhoParaRota(window.location.pathname, window.location.search));
     const aoVoltar = () => aplicarRota(caminhoParaRota(window.location.pathname, window.location.search));
-    // clique num aviso push com o app ja aberto: o service worker manda abrir o sininho
+    // clique num aviso push com o app ja aberto: o service worker manda o endereco do
+    // aviso (ex.: /previsoes/<id>) e o app navega ate ele
     const aoReceber = (ev: MessageEvent) => {
+      if (ev.data?.tipo === "abrir-url" && typeof ev.data.url === "string") {
+        const destino = new URL(ev.data.url, window.location.origin);
+        if (destino.origin !== window.location.origin) return;
+        window.history.pushState(null, "", destino.pathname + destino.search);
+        aplicarRota(caminhoParaRota(destino.pathname, destino.search));
+        return;
+      }
       if (ev.data?.tipo === "abrir-notificacoes") {
         setPainelNotificacaoAberto(true);
         buscarNovidades();

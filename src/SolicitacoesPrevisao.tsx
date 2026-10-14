@@ -524,7 +524,7 @@ export function CartaoSolicitacao({
     <button
       onClick={onClick}
       disabled={ocupado}
-      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 ${estilo}`}
+      className={`w-full sm:w-auto justify-center px-4 py-3 sm:px-3 sm:py-1.5 rounded-lg text-sm sm:text-xs font-bold flex items-center gap-1.5 disabled:opacity-60 ${estilo}`}
     >
       <Icone size={14} /> {rotulo}
     </button>
@@ -613,13 +613,18 @@ export function CartaoSolicitacao({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 justify-end">
+      <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap gap-2 sm:justify-end">
         {aprovador && s.status === "aguardando_aprovacao" && (
           <>
             {botao("Recusar", () => setRecusando((v) => !v), "border border-red-200 text-red-700 hover:bg-red-50", XCircle)}
             {botao(
               "Aprovar e gravar no ERP",
-              () => acao("aprovar_solicitacao_previsao", { p_id: s.id, p_codigo: s.codigo_plano }),
+              () => {
+                // grava no ERP: confirma antes (no celular um toque sem querer e facil)
+                const resumo = `${s.tipo === "aumento" ? "Aumento" : "Transferência"} de ${formatarMoeda(s.valor)} para ${s.familia_destino} (obra ${s.codigo_obra})`;
+                if (!window.confirm(`Aprovar e gravar no ERP?\n\n${resumo}`)) return;
+                acao("aprovar_solicitacao_previsao", { p_id: s.id, p_codigo: s.codigo_plano });
+              },
               "bg-emerald-600 text-white hover:bg-emerald-700",
               CheckCircle2,
             )}
