@@ -88,12 +88,12 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
     if (filtroObra !== "todas") consulta = consulta.eq("id_obra", filtroObra);
     if (filtroUsuario !== "todos") consulta = consulta.eq("email", filtroUsuario);
     if (filtroTabela !== "todas") consulta = consulta.eq("tabela", filtroTabela);
-    consulta
+    Promise.resolve(consulta)
       .then(({ data, error }) => {
         if (error) throw error;
         setRegistros((data as Registro[]) || []);
       })
-      .catch((e) => falhaAoCarregar("o histórico de alterações", e))
+      .catch((e: unknown) => falhaAoCarregar("o histórico de alterações", e))
       .finally(() => setCarregando(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dias, filtroObra, filtroUsuario, filtroTabela]);
