@@ -40,6 +40,7 @@ export type StatusSolicitacaoPrevisao =
   | "desfeita";
 
 export interface SolicitacaoPrevisao {
+  anexos?: { nome: string; caminho: string; tamanho: number }[];
   id: string;
   id_obra: string;
   codigo_obra: string;

@@ -4,6 +4,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Loader2,
+  Paperclip,
   Plus,
   RotateCcw,
   Search,
@@ -14,7 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { supabase } from "./supabase";
-import { formatarMoeda } from "./utils";
+import { formatarMoeda, normalizarNomeArquivo } from "./utils";
 import type { SolicitacaoPrevisao, Usuario } from "./types";
 import { SeloAlertaFamilia } from "./AlertaFamilia";
 
@@ -123,6 +124,16 @@ export function ModalSolicitarPrevisao({
   const [justificativa, setJustificativa] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // cotacao/orcamento anexados (bucket previsao-anexos, caminho obras/<id_obra>/previsoes/...)
+  const [arquivos, setArquivos] = useState<File[]>([]);
+  const escolherArquivos = (lista: FileList | null) => {
+    const novos = [...arquivos, ...Array.from(lista || [])];
+    const grande = novos.find((f) => f.size > 10 * 1024 * 1024);
+    if (grande) return setErro(`O arquivo ${grande.name} passa de 10 MB.`);
+    if (novos.length > 3) return setErro("Anexe no máximo 3 arquivos.");
+    setErro("");
+    setArquivos(novos);
+  };
 
   // Gestor costuma informar "disponivel X / necessario Y": o aumento e Y - X
   useEffect(() => {
@@ -180,7 +191,18 @@ export function ModalSolicitarPrevisao({
     if (msg) return;
     setEnviando(true);
     try {
+      const anexos: { nome: string; caminho: string; tamanho: number }[] = [];
+      for (const arq of arquivos) {
+        const caminho = `obras/${obra.id}/previsoes/${Date.now()}_${normalizarNomeArquivo(arq.name)}`;
+        const { error: erroUpload } = await supabase.storage.from("previsao-anexos").upload(caminho, arq);
+        if (erroUpload) {
+          if (anexos.length) await supabase.storage.from("previsao-anexos").remove(anexos.map((a) => a.caminho));
+          throw new Error(`Não foi possível enviar o anexo ${arq.name}: ${erroUpload.message}`);
+        }
+        anexos.push({ nome: arq.name, caminho, tamanho: arq.size });
+      }
       const registro: any = {
+        anexos,
         id_obra: obra.id,
         codigo_obra: obra.codigo_externo || "",
         tipo,
@@ -197,7 +219,11 @@ export function ModalSolicitarPrevisao({
         registro.origens = origens.map((o) => ({ familia: o.familia, valor: parseValorBR(o.valor).toFixed(2) }));
       }
       const { error } = await supabase.from("solicitacoes_previsao").insert([registro]);
-      if (error) throw error;
+      if (error) {
+        // solicitacao nao gravou: nao deixa arquivo solto no armazenamento
+        if (anexos.length) await supabase.storage.from("previsao-anexos").remove(anexos.map((a) => a.caminho));
+        throw error;
+      }
       onEnviado?.();
       onFechar();
     } catch (e: any) {
@@ -371,6 +397,41 @@ export function ModalSolicitarPrevisao({
               placeholder="Por que a previsão é necessária?"
               className="w-full border rounded-lg px-3 py-2 text-sm"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold mb-1">Anexos (opcional)</label>
+            <label className="inline-flex items-center gap-2 px-3 py-2 border rounded-lg text-sm text-slate-600 cursor-pointer hover:bg-slate-50">
+              <Paperclip size={15} /> Anexar cotação ou orçamento
+              <input
+                type="file"
+                multiple
+                accept=".pdf,image/*"
+                className="hidden"
+                onChange={(e) => {
+                  escolherArquivos(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <span className="ml-2 text-[11px] text-slate-400">PDF ou imagem, até 3 arquivos de 10 MB</span>
+            {arquivos.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {arquivos.map((a, i) => (
+                  <li key={i} className="text-xs text-slate-600 flex items-center gap-2">
+                    <Paperclip size={12} /> {a.name}
+                    <span className="text-slate-400">({(a.size / 1024 / 1024).toFixed(1)} MB)</span>
+                    <button
+                      onClick={() => setArquivos((prev) => prev.filter((_, k) => k !== i))}
+                      className="text-red-500 hover:text-red-700"
+                      title="Remover anexo"
+                    >
+                      <X size={13} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="text-xs text-slate-500 bg-slate-50 border rounded-lg p-3 space-y-1">
@@ -557,6 +618,25 @@ export function CartaoSolicitacao({
       </div>
 
       <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{s.justificativa}</p>
+
+      {(s.anexos || []).length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {(s.anexos || []).map((a) => (
+            <button
+              key={a.caminho}
+              onClick={async () => {
+                const { data, error } = await supabase.storage.from("previsao-anexos").createSignedUrl(a.caminho, 300);
+                if (error || !data?.signedUrl) return setErro("Não foi possível abrir o anexo.");
+                window.open(data.signedUrl, "_blank");
+              }}
+              className="text-xs px-2.5 py-1.5 rounded-lg border bg-slate-50 hover:bg-slate-100 text-[#2A6377] font-semibold flex items-center gap-1.5"
+              title="Abrir anexo"
+            >
+              <Paperclip size={13} /> {a.nome}
+            </button>
+          ))}
+        </div>
+      )}
 
       {s.mensagem && (
         <div
