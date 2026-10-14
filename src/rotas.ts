@@ -21,6 +21,7 @@ const TELAS_FIXAS: Record<string, string> = {
   reunioes: "/reunioes",
   solicitacoes_previsao: "/previsoes",
   compras: "/compras",
+  historico: "/historico",
   cadastros_obras: "/cadastros/obras",
   cadastros_equipe: "/cadastros/equipe",
 };
@@ -66,6 +67,8 @@ export function caminhoParaRota(pathname: string, search: string): Rota {
       return { tela: "reunioes", dataReuniao: /^\d{4}-\d{2}-\d{2}$/.test(p1 || "") ? p1 : undefined, ...extras };
     case "previsoes":
       return { tela: "solicitacoes_previsao", idSolicitacao: p1, ...extras };
+    case "historico":
+      return { tela: "historico", ...extras };
     case "compras":
       return { tela: "compras", ...extras };
     case "cadastros":

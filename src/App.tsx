@@ -43,6 +43,7 @@ import {
 } from "./utils";
 import {
   Briefcase,
+  History,
   ShoppingCart,
   Calendar,
   CheckSquare,
@@ -97,6 +98,7 @@ const AbaFinanceiro = lazy(() => import("./telas/painel/AbaFinanceiro"));
 const AbaResumo = lazy(() => import("./telas/painel/AbaResumo"));
 const ListaMateriaisSMA = lazy(() => import("./ListaMateriaisSMA"));
 const RentabilidadeProjeto = lazy(() => import("./RentabilidadeProjeto"));
+const TelaAuditoria = lazy(() => import("./telas/TelaAuditoria"));
 const TelaCadastroObras = lazy(() => import("./telas/TelaCadastroObras"));
 const TelaCompras = lazy(() => import("./telas/TelaCompras"));
 const TelaEquipe = lazy(() => import("./telas/TelaEquipe"));
@@ -555,6 +557,7 @@ export default function App() {
       if (tela === "solicitacoes_previsao" && !podeSolicitarPrevisao(usuarioAtual)) tela = "dashboard";
       if (tela === "cadastros_equipe" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
       if (tela === "compras" && !podeVerCompras) tela = "dashboard";
+      if (tela === "historico" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
 
       if (tela === "painel_obra" && rota.codigoObra) {
         const aba = abaObraPermitida(rota.abaObra || "") ? rota.abaObra! : abaInicialObra;
@@ -3451,6 +3454,7 @@ export default function App() {
                 {itemMenu("cadastros_obras", "Obras", HardHat, telaAtiva === "cadastros_obras")}
                 {isAdmin &&
                   itemMenu("cadastros_equipe", "Equipe", Users, telaAtiva === "cadastros_equipe")}
+                {isAdmin && itemMenu("historico", "Histórico", History, telaAtiva === "historico")}
               </div>
             </div>
           </div>
@@ -3818,6 +3822,8 @@ export default function App() {
         )}
 
         {telaAtiva === "compras" && podeVerCompras && <TelaCompras falhaAoCarregar={falhaAoCarregar} />}
+
+        {telaAtiva === "historico" && isAdmin && <TelaAuditoria falhaAoCarregar={falhaAoCarregar} />}
 
         {telaAtiva === "solicitacoes_previsao" && podeSolicitarPrevisao(usuarioAtual) && (
           <div className="animate-in fade-in space-y-4">
