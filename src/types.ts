@@ -345,7 +345,8 @@ export type TipoNotificacao =
   | "nf_nova"
   | "recebimento_novo"
   | "previsao_aprovacao"
-  | "previsao_resultado";
+  | "previsao_resultado"
+  | "familia_alerta";
 
 export interface Notificacao {
   id: string;

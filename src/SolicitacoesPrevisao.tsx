@@ -16,6 +16,7 @@ import {
 import { supabase } from "./supabase";
 import { formatarMoeda } from "./utils";
 import type { SolicitacaoPrevisao, Usuario } from "./types";
+import { SeloAlertaFamilia } from "./AlertaFamilia";
 
 // Familia da obra como vem de obra_rentabilidade_familias (saldo de previsoes em aberto sincronizado do ERP)
 export interface FamiliaPrevisao {
@@ -24,6 +25,7 @@ export interface FamiliaPrevisao {
   previsoes_em_aberto?: number | string | null;
   previsoes_numeros?: string | null;
   eh_obra?: boolean;
+  nivel_alerta?: string | null; // alerta de verba (material da SMA x verba disponivel)
 }
 
 interface ObraBasica {
@@ -787,7 +789,10 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
   const lista = familias
     .filter((f) => !f.eh_obra)
     .sort((a, b) => String(a.codigo_projeto).localeCompare(String(b.codigo_projeto), "pt-BR", { numeric: true }));
-  const comSaldo = lista.filter((f) => Math.abs(Number(f.previsoes_em_aberto || 0)) >= 0.005);
+  // familias com saldo, e tambem as com alerta de verba (ex.: SMA pendente e verba zerada)
+  const comSaldo = lista.filter(
+    (f) => Math.abs(Number(f.previsoes_em_aberto || 0)) >= 0.005 || (f.nivel_alerta && f.nivel_alerta !== "ok"),
+  );
   const total = lista.reduce((acc, f) => acc + Number(f.previsoes_em_aberto || 0), 0);
   const pode = podeSolicitarPrevisao(usuario);
 
@@ -830,7 +835,10 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
               ) : (
                 comSaldo.map((f) => (
                   <tr key={f.codigo_projeto} className="border-t hover:bg-slate-50">
-                    <td className="px-3 py-2.5 text-slate-700">{rotuloFamilia(f)}</td>
+                    <td className="px-3 py-2.5 text-slate-700">
+                      {rotuloFamilia(f)}
+                      <SeloAlertaFamilia nivel={f.nivel_alerta} />
+                    </td>
                     <td className="px-3 py-2.5 text-right font-semibold text-blue-700 whitespace-nowrap">
                       {formatarMoeda(f.previsoes_em_aberto)}
                     </td>

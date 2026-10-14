@@ -5,6 +5,7 @@ import { supabase } from "./supabase";
 import type { Obra, ObraRentabilidadeFamilia, Usuario } from "./types";
 import GraficoRentabilidade from "./GraficoRentabilidade";
 import { ModalSolicitarPrevisao, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
+import { ModalItensSma, SeloAlertaFamilia, type AlertaFamilia, type ItemSmaACaminho } from "./AlertaFamilia";
 
 interface Props {
   familias: ObraRentabilidadeFamilia[];
@@ -46,6 +47,35 @@ const CelulaValor = ({
 export default function RentabilidadeProjeto({ familias, valorVendido, obra, usuario }: Props) {
   const [aba, setAba] = useState<"tabela" | "grafico">("tabela");
   const [solicitando, setSolicitando] = useState(false);
+  const [familiaSolicitar, setFamiliaSolicitar] = useState<string | undefined>(undefined);
+  // material da SMA ainda nao comprado ("a caminho") e alerta de verba por familia
+  const [alertas, setAlertas] = useState<Record<string, AlertaFamilia>>({});
+  const [itensSma, setItensSma] = useState<ItemSmaACaminho[]>([]);
+  const [familiaItens, setFamiliaItens] = useState<string | null>(null);
+  useEffect(() => {
+    if (!obra?.id) return;
+    let cancelado = false;
+    Promise.all([
+      supabase
+        .from("obra_familia_alerta")
+        .select("codigo_projeto, nivel, disponivel, a_caminho, itens_sem_preco, pct_projetado")
+        .eq("id_obra", obra.id),
+      supabase
+        .from("obra_sma_projecao")
+        .select("id, codigo_projeto, nr_sma, codigo_material, descricao_material, quantidade_pendente, situacao_compra, preco_unitario, origem_preco, valor")
+        .eq("id_obra", obra.id)
+        .order("valor", { ascending: false }),
+    ]).then(([a, i]) => {
+      if (cancelado) return;
+      const mapa: Record<string, AlertaFamilia> = {};
+      ((a.data as AlertaFamilia[]) || []).forEach((x) => (mapa[x.codigo_projeto] = x));
+      setAlertas(mapa);
+      setItensSma((i.data as ItemSmaACaminho[]) || []);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [obra?.id]);
   const [busca, setBusca] = useState("");
   const [ordenacao, setOrdenacao] = useState<{ coluna: Coluna; direcao: "asc" | "desc" }>({
     coluna: "codigo_projeto",
@@ -90,11 +120,13 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
       familias.filter(
         (f) =>
           !f.eh_obra &&
-          [f.custo_previsto, f.custo_realizado, f.previsoes_em_aberto, f.pedidos_em_aberto].some(
+          ([f.custo_previsto, f.custo_realizado, f.previsoes_em_aberto, f.pedidos_em_aberto].some(
             (v) => Math.abs(Number(v || 0)) >= 0.005,
-          ),
+          ) ||
+            // familia zerada mas com material a caminho (ex.: alerta "sem verba") tambem aparece
+            (alertas[f.codigo_projeto || ""]?.nivel ?? "ok") !== "ok"),
       ),
-    [familias],
+    [familias, alertas],
   );
 
   const panorama = useMemo(() => {
@@ -304,7 +336,10 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
         </div>
         {obra && podeSolicitarPrevisao(usuario) && (
           <button
-            onClick={() => setSolicitando(true)}
+            onClick={() => {
+              setFamiliaSolicitar(undefined);
+              setSolicitando(true);
+            }}
             className="bg-[#2A6377] text-white px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-[#1e4857]"
           >
             <Plus size={16} /> Solicitar previsão
@@ -317,7 +352,27 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
           obra={obra}
           familias={familias}
           usuario={usuario || null}
+          familiaInicial={familiaSolicitar}
           onFechar={() => setSolicitando(false)}
+        />
+      )}
+
+      {familiaItens && (
+        <ModalItensSma
+          familia={familiaItens}
+          descricao={familias.find((f) => f.codigo_projeto === familiaItens)?.descricao}
+          alerta={alertas[familiaItens]}
+          itens={itensSma.filter((i) => i.codigo_projeto === familiaItens)}
+          onFechar={() => setFamiliaItens(null)}
+          onSolicitar={
+            obra && podeSolicitarPrevisao(usuario)
+              ? () => {
+                  setFamiliaSolicitar(familiaItens);
+                  setFamiliaItens(null);
+                  setSolicitando(true);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -368,12 +423,18 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
                 <Cab rotulo="Previsões em Aberto" coluna="previsoes_em_aberto" />
                 <Cab rotulo="Nº Previsão" coluna="previsoes_numeros" alinhar="center" />
                 <Cab rotulo="Saldo Projetado" coluna="saldo_projetado" />
+                <th
+                  className="px-2 py-3 align-bottom leading-tight text-right"
+                  title="Material solicitado na SMA e ainda sem pedido de compra, pelo preço provável"
+                >
+                  SMA a caminho
+                </th>
               </tr>
             </thead>
             <tbody>
               {filtradas.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-6 text-center text-slate-500">
+                  <td colSpan={10} className="p-6 text-center text-slate-500">
                     Nenhuma família encontrada.
                   </td>
                 </tr>
@@ -382,6 +443,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
                   <tr key={f.id} className="border-t hover:bg-slate-50">
                     <td className="px-2 py-3 text-slate-700 min-w-[150px]">
                       {f.codigo_projeto} - {f.descricao}
+                      <SeloAlertaFamilia nivel={alertas[f.codigo_projeto || ""]?.nivel} />
                     </td>
                     <CelulaValor valor={Number(f.custo_previsto || 0)} />
                     <CelulaValor valor={Number(f.custo_realizado || 0)} />
@@ -396,6 +458,19 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
                       {f.previsoes_numeros || ""}
                     </td>
                     <CelulaValor valor={Number(f.saldo_projetado || 0)} negativoVermelho />
+                    <td className="px-2 py-3 text-right whitespace-nowrap">
+                      {itensSma.some((i) => i.codigo_projeto === f.codigo_projeto) ? (
+                        <button
+                          onClick={() => setFamiliaItens(f.codigo_projeto || null)}
+                          className="text-amber-700 font-semibold hover:underline"
+                          title="Ver os materiais da SMA ainda não comprados"
+                        >
+                          {formatarMoeda(Number(alertas[f.codigo_projeto || ""]?.a_caminho || 0))}
+                        </button>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -412,6 +487,11 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
                   <CelulaValor valor={totais.previsoes_em_aberto} cor="text-blue-700" />
                   <td className="px-2 py-3" />
                   <CelulaValor valor={totais.saldo_projetado} negativoVermelho />
+                  <td className="px-2 py-3 text-right text-amber-700 whitespace-nowrap">
+                    {formatarMoeda(
+                      filtradas.reduce((a, f) => a + Number(alertas[f.codigo_projeto || ""]?.a_caminho || 0), 0),
+                    )}
+                  </td>
                 </tr>
               </tfoot>
             )}

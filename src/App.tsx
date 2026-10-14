@@ -1693,6 +1693,7 @@ export default function App() {
         if (notif.tipo === "nf_nova") setAbaPainelObra("faturamento");
         if (notif.tipo === "recebimento_novo") setAbaPainelObra("financeiro");
         if (notif.tipo === "previsao_resultado") setAbaPainelObra("previsoes");
+        if (notif.tipo === "familia_alerta") setAbaPainelObra("previsoes");
       }
     } catch (error) {
       falhaAoCarregar("a obra da notificação", error);
