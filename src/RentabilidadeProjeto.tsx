@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import HistoricoRentabilidade from "./HistoricoRentabilidade";
 import { Download, Plus, Search } from "lucide-react";
 import { formatarMoeda } from "./utils";
 import { supabase } from "./supabase";
@@ -316,6 +317,16 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
             : " Obra sem margem de orçamento cadastrada no ERP: % calculado como venda − custo sobre o valor vendido."}
         </p>
       </div>
+
+      {obra?.id && (
+        <HistoricoRentabilidade
+          idObra={obra.id}
+          atualPct={panorama.rentabilidadeAtual}
+          margemAtual={panorama.margemAtual}
+          resultadoAtual={panorama.resultadoProjetado}
+          previstaPct={panorama.rentabilidadeOriginal}
+        />
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-lg border overflow-hidden text-sm bg-white">
