@@ -778,10 +778,9 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
 
   useEffect(() => {
     if (!obra?.id) return;
+    // RPC so com o saldo de previsoes: a tabela de rentabilidade (custo/margem) e restrita
     supabase
-      .from("obra_rentabilidade_familias")
-      .select("codigo_projeto, descricao, previsoes_em_aberto, previsoes_numeros, eh_obra")
-      .eq("id_obra", obra.id)
+      .rpc("previsoes_familias_obra", { p_id_obra: obra.id })
       .then(({ data }) => setFamilias((data as FamiliaPrevisao[]) || []));
   }, [obra?.id, recarregar]);
 

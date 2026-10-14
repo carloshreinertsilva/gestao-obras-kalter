@@ -414,6 +414,11 @@ export default function App() {
     );
   };
 
+  // texto digitado pelos usuarios vai escapado no HTML da ata (a ata e aberta numa
+  // janela do proprio app para imprimir e vai por e-mail)
+  const escHtml = (t: any) =>
+    String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
   const montarHtmlAta = (
     listaObrasParaAta: any[],
     dataAta: string,
@@ -456,13 +461,13 @@ export default function App() {
     `;
 
     agruparObrasPorGestor(listaObrasParaAta).forEach(({ nomeGestor, obras }) => {
-      html += `<div class="gestor-title">GESTOR: ${nomeGestor.toUpperCase()}</div>`;
+      html += `<div class="gestor-title">GESTOR: ${escHtml(nomeGestor.toUpperCase())}</div>`;
       obras.forEach((obra: any) => {
         html += `
           <div class="obra-section">
-            <div class="obra-title">OBRA: ${obra.nome_obra.toUpperCase()}</div>
+            <div class="obra-title">OBRA: ${escHtml(obra.nome_obra.toUpperCase())}</div>
             <div class="info-box">
-              <p><strong>Resumo da Reunião:</strong><br/>${obra.resumo ? obra.resumo.replace(/\n/g, "<br/>") : "Nenhum resumo registrado."}</p>
+              <p><strong>Resumo da Reunião:</strong><br/>${obra.resumo ? escHtml(obra.resumo).replace(/\n/g, "<br/>") : "Nenhum resumo registrado."}</p>
             </div>
         `;
 
@@ -471,7 +476,7 @@ export default function App() {
             <h4>Ocorrências Registradas</h4>
             <table>
               <tr><th width="20%">Tipo</th><th>Descrição</th></tr>
-              ${obra.ocorrencias.map((o: any) => `<tr><td><strong>${labelOcorrencia(o.tipo).toUpperCase()}</strong></td><td style="white-space:pre-wrap">${o.descricao}</td></tr>`).join("")}
+              ${obra.ocorrencias.map((o: any) => `<tr><td><strong>${labelOcorrencia(o.tipo).toUpperCase()}</strong></td><td style="white-space:pre-wrap">${escHtml(o.descricao)}</td></tr>`).join("")}
             </table>
           `;
         }
@@ -481,7 +486,7 @@ export default function App() {
             <h4>Tarefas e Prazos Definidos</h4>
             <table>
               <tr><th width="45%">Tarefa</th><th width="30%">Responsável</th><th width="25%">Prazo</th></tr>
-              ${obra.tarefas.map((t: any) => `<tr><td>${t.titulo}</td><td>${t.nome_responsavel || t.usuarios?.nome || "Geral"}</td><td>${formatarDataSegura(t.data_vencimento)}</td></tr>`).join("")}
+              ${obra.tarefas.map((t: any) => `<tr><td>${escHtml(t.titulo)}</td><td>${escHtml(t.nome_responsavel || t.usuarios?.nome || "Geral")}</td><td>${formatarDataSegura(t.data_vencimento)}</td></tr>`).join("")}
             </table>
           `;
         }
@@ -585,6 +590,13 @@ export default function App() {
         .select("*")
         .eq("email", email)
         .single();
+      if (data && data.ativo === false) {
+        // usuario desativado: o banco ja bloqueia os dados; aqui so encerra a sessao
+        await supabase.auth.signOut();
+        setUsuarioAtual(null);
+        setErroLogin("Seu acesso ao sistema está desativado. Fale com o administrador.");
+        return;
+      }
       if (data) setUsuarioAtual(data);
     } catch (error) {
       console.error(error);
@@ -607,6 +619,8 @@ export default function App() {
         if (error) throw error;
       } else if (modoAuth === "cadastro") {
         if (!nomeAuth) throw new Error("Preencha o seu nome.");
+        if (!/@kalter\.com\.br$/i.test(emailAuth.trim()))
+          throw new Error("Use o seu e-mail da empresa (@kalter.com.br).");
         const { data, error } = await supabase.auth.signUp({
           email: emailAuth,
           password: senhaAuth,
