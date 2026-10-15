@@ -30,6 +30,8 @@ export interface Usuario {
   recebe_copia_previsao?: boolean;
   aprova_faturamento?: boolean;
   recebe_copia_faturamento?: boolean;
+  // login do usuario no ERP (gravado no romaneio gerado pela aprovacao da logistica)
+  login_erp?: string | null;
   created_at?: string;
 }
 

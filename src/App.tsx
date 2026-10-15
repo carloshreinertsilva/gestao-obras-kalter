@@ -690,7 +690,7 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from("usuarios")
-        .select("id, nome, email, perfil, id_engenheiro_vinculado, aprova_previsao, recebe_copia_previsao, aprova_faturamento, recebe_copia_faturamento")
+        .select("id, nome, email, perfil, id_engenheiro_vinculado, aprova_previsao, recebe_copia_previsao, aprova_faturamento, recebe_copia_faturamento, login_erp")
         .eq("ativo", true);
       if (error) throw error;
       setListaUsuarios(data || []);

@@ -5,6 +5,7 @@ import {
   Clock,
   FileText,
   Loader2,
+  Package,
   Paperclip,
   Plus,
   Printer,
@@ -80,7 +81,28 @@ interface ItemSolicitacao {
   numero_nf: string | null;
   quantidade_faturada: number | null;
   valor_faturado: number | null;
+  volumes: number | null;
 }
+
+// romaneio gerado no ERP pelo robo (sync_romaneios.py) quando a logistica aprova um faturamento de produto
+interface RomaneioSolicitacao {
+  id: string;
+  situacao: "pendente" | "criado" | "faturado" | "cancelar" | "cancelado" | "descartado" | "erro";
+  numero_romaneio: number | null;
+  login_erp: string;
+  erro: string | null;
+  created_at: string;
+}
+
+const textoRomaneio: Record<RomaneioSolicitacao["situacao"], string> = {
+  pendente: "sendo gerado no ERP (alguns minutos)",
+  criado: "liberado para faturar no ERP",
+  faturado: "faturado",
+  cancelar: "sendo cancelado no ERP",
+  cancelado: "cancelado no ERP",
+  descartado: "descartado (não chegou a ser gerado)",
+  erro: "erro",
+};
 
 interface ItemDisponivel {
   sequencia: number;
@@ -116,6 +138,9 @@ const EVENTO: Record<string, string> = {
   cancelada: "Cancelou",
   nf_vinculada: "NF emitida e ligada",
   lembrete: "Lembrete enviado",
+  romaneio_criado: "Romaneio gerado no ERP",
+  romaneio_cancelado: "Romaneio cancelado no ERP",
+  romaneio_erro: "Erro no romaneio",
 };
 
 const num = (v: unknown) => Number(v || 0);
@@ -542,10 +567,10 @@ function ModalConferencia({
   );
   const [transportadoras, setTransportadoras] = useState<{ codigo: number; nome: string; cidade: string | null; uf: string | null }[]>([]);
   const [codTransp, setCodTransp] = useState<string>("");
-  const [outraTransp, setOutraTransp] = useState("");
   const [pesoBruto, setPesoBruto] = useState("");
   const [pesoLiquido, setPesoLiquido] = useState("");
-  const [volumes, setVolumes] = useState("");
+  // volumes por item, como no romaneio do ERP; o total do romaneio e a soma
+  const [volumes, setVolumes] = useState<Record<number, string>>({});
   const [especie, setEspecie] = useState("");
   const [obs, setObs] = useState("");
   const [erro, setErro] = useState("");
@@ -566,28 +591,38 @@ function ModalConferencia({
     return Number.isFinite(v) ? arred4(v) : 0;
   };
   const total = itens.reduce((a, i) => a + Math.round(qtdNum(i) * num(i.valor_unitario_ipi) * 100) / 100, 0);
+  const volNum = (i: ItemSolicitacao) => {
+    const t = (volumes[i.sequencia] ?? "").trim();
+    return t === "" ? null : parseInt(t, 10);
+  };
+  const totalVolumes = itens.reduce((a, i) => a + (qtdNum(i) > 0 ? volNum(i) || 0 : 0), 0);
 
   const aprovar = async () => {
     setErro("");
     let transportadora = "";
     let codigo: number | null = null;
     if (produto) {
-      if (codTransp === "cliente") transportadora = "Cliente retira";
-      else if (codTransp === "outra") transportadora = outraTransp.trim();
-      else if (codTransp) {
-        codigo = Number(codTransp);
-        transportadora = transportadoras.find((t) => t.codigo === codigo)?.nome || "";
-      }
-      if (!transportadora) return setErro("Informe a transportadora.");
+      codigo = codTransp ? Number(codTransp) : null;
+      transportadora = transportadoras.find((t) => t.codigo === codigo)?.nome || "";
+      if (!transportadora) return setErro("Escolha a transportadora.");
+      const semVolume = itens.find((i) => qtdNum(i) > 0 && (volNum(i) === null || !Number.isInteger(volNum(i)) || (volNum(i) as number) < 0));
+      if (semVolume) return setErro(`Informe os volumes do item ${semVolume.sequencia} (0 se vai junto com outro item).`);
+      if (totalVolumes <= 0) return setErro("Informe ao menos 1 volume.");
     }
-    if (!window.confirm(`Aprovar o faturamento SF ${solicitacao.numero} (${formatarMoeda(total)}) e enviar para o fiscal?`)) return;
+    if (
+      !window.confirm(
+        `Aprovar o faturamento SF ${solicitacao.numero} (${formatarMoeda(total)}) e enviar para o fiscal?` +
+          (produto ? "\n\nO romaneio será gerado no ERP automaticamente em alguns minutos." : ""),
+      )
+    )
+      return;
     setEnviando(true);
     const { error } = await supabase.rpc("faturamento_logistica_aprovar", {
       p_id: solicitacao.id,
-      p_itens: itens.map((i) => ({ sequencia: i.sequencia, quantidade: qtdNum(i) })),
+      p_itens: itens.map((i) => ({ sequencia: i.sequencia, quantidade: qtdNum(i), volumes: produto ? volNum(i) : null })),
       p_peso_bruto: produto ? n(pesoBruto) || null : null,
       p_peso_liquido: produto ? n(pesoLiquido) || null : null,
-      p_volumes: produto ? parseInt(volumes, 10) || null : null,
+      p_volumes: produto ? totalVolumes : null,
       p_especie: produto ? especie : null,
       p_codigo_transportadora: codigo,
       p_transportadora: produto ? transportadora : null,
@@ -618,6 +653,7 @@ function ModalConferencia({
                 <th className="px-3 py-2 text-left">Item</th>
                 <th className="px-3 py-2 text-right">Solicitado</th>
                 <th className="px-3 py-2 text-center w-32">Qtd. aprovada</th>
+                {produto && <th className="px-3 py-2 text-center w-24">Volumes *</th>}
                 <th className="px-3 py-2 text-right">Valor</th>
               </tr>
             </thead>
@@ -640,6 +676,17 @@ function ModalConferencia({
                       inputMode="decimal"
                     />
                   </td>
+                  {produto && (
+                    <td className="px-3 py-2">
+                      <input
+                        value={volumes[i.sequencia] ?? ""}
+                        onChange={(e) => setVolumes((p) => ({ ...p, [i.sequencia]: e.target.value.replace(/\D/g, "") }))}
+                        disabled={qtdNum(i) <= 0}
+                        className="border rounded px-2 py-1 w-full text-right disabled:bg-slate-50"
+                        inputMode="numeric"
+                      />
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">
                     {formatarMoeda(Math.round(qtdNum(i) * num(i.valor_unitario_ipi) * 100) / 100)}
                   </td>
@@ -652,27 +699,26 @@ function ModalConferencia({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <Campo rotulo="Peso bruto (kg) *" valor={pesoBruto} onChange={setPesoBruto} />
               <Campo rotulo="Peso líquido (kg) *" valor={pesoLiquido} onChange={setPesoLiquido} />
-              <Campo rotulo="Volumes *" valor={volumes} onChange={setVolumes} />
+              <div>
+                <label className="block text-xs font-semibold mb-1">Volumes (soma dos itens)</label>
+                <p className="border rounded-lg px-2 py-2 w-full text-sm bg-slate-50 font-semibold">{totalVolumes}</p>
+              </div>
               <Campo rotulo="Espécie" valor={especie} onChange={setEspecie} placeholder="caixa, palete..." />
-              <div className="col-span-2">
+              <div className="col-span-2 md:col-span-4">
                 <label className="block text-xs font-semibold mb-1">Transportadora *</label>
                 <select value={codTransp} onChange={(e) => setCodTransp(e.target.value)} className="border rounded-lg px-2 py-2 w-full bg-white text-sm">
                   <option value="">Selecione...</option>
-                  <option value="cliente">Cliente retira</option>
                   {transportadoras.map((t) => (
                     <option key={t.codigo} value={t.codigo}>
                       {t.nome}
                       {t.cidade ? ` (${t.cidade}/${t.uf})` : ""}
                     </option>
                   ))}
-                  <option value="outra">Outra (não cadastrada no ERP)</option>
                 </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Lista do cadastro do ERP (o romaneio exige o código). Não achou? Cadastre no ERP; aparece aqui na próxima sincronização.
+                </p>
               </div>
-              {codTransp === "outra" && (
-                <div className="col-span-2">
-                  <Campo rotulo="Nome da transportadora *" valor={outraTransp} onChange={setOutraTransp} />
-                </div>
-              )}
             </div>
           ) : (
             <p className="text-xs text-slate-500 bg-slate-50 border rounded-lg p-3">Faturamento de serviço: sem dados de transporte.</p>
@@ -727,6 +773,7 @@ export function DetalheSolicitacaoFaturamento({
   const [sol, setSol] = useState<SolicitacaoFaturamento | null>(null);
   const [itens, setItens] = useState<ItemSolicitacao[]>([]);
   const [nfs, setNfs] = useState<any[]>([]);
+  const [romaneios, setRomaneios] = useState<RomaneioSolicitacao[]>([]);
   const [eventos, setEventos] = useState<any[]>([]);
   const [erro, setErro] = useState("");
   const [editando, setEditando] = useState(false);
@@ -734,17 +781,19 @@ export function DetalheSolicitacaoFaturamento({
   const [ocupado, setOcupado] = useState(false);
 
   const carregar = async () => {
-    const [s, i, n, e] = await Promise.all([
+    const [s, i, n, e, r] = await Promise.all([
       supabase.from("solicitacoes_faturamento").select("*").eq("id", id).maybeSingle(),
       supabase.from("solicitacoes_faturamento_itens").select("*").eq("id_solicitacao", id).order("sequencia"),
       supabase.from("solicitacoes_faturamento_nfs").select("*").eq("id_solicitacao", id).order("data_emissao"),
       supabase.from("solicitacoes_faturamento_eventos").select("*").eq("id_solicitacao", id).order("id"),
+      supabase.from("solicitacoes_faturamento_romaneios").select("*").eq("id_solicitacao", id).order("created_at"),
     ]);
     if (s.error || !s.data) setErro("Solicitação não encontrada ou sem acesso.");
     setSol(s.data as SolicitacaoFaturamento);
     setItens((i.data as ItemSolicitacao[]) || []);
     setNfs(n.data || []);
     setEventos(e.data || []);
+    setRomaneios((r.data as RomaneioSolicitacao[]) || []);
   };
   useEffect(() => {
     carregar();
@@ -869,7 +918,10 @@ export function DetalheSolicitacaoFaturamento({
                       ) : (
                         <>
                           {fmtQtd(i.quantidade_aprovada)} {i.unidade}
-                          <span className="block text-[11px]">{formatarMoeda(num(i.valor_aprovado))}</span>
+                          <span className="block text-[11px]">
+                            {formatarMoeda(num(i.valor_aprovado))}
+                            {i.volumes !== null && num(i.quantidade_aprovada) > 0 && ` · ${i.volumes} vol.`}
+                          </span>
                         </>
                       )}
                     </td>
@@ -911,6 +963,28 @@ export function DetalheSolicitacaoFaturamento({
                 <p className="text-slate-500">Serviço: sem transporte.</p>
               )}
               {sol.observacao_logistica && <p className="mt-1 whitespace-pre-wrap text-slate-600">{sol.observacao_logistica}</p>}
+            </Bloco>
+          )}
+          {romaneios.length > 0 && (
+            <Bloco titulo="Romaneio no ERP" icone={<Package size={14} />}>
+              {romaneios.map((r) => (
+                <p
+                  key={r.id}
+                  className={
+                    r.situacao === "erro"
+                      ? "text-red-700"
+                      : ["cancelado", "descartado"].includes(r.situacao)
+                        ? "text-slate-400"
+                        : r.situacao === "pendente" || r.situacao === "cancelar"
+                          ? "text-amber-700"
+                          : "text-emerald-700"
+                  }
+                >
+                  <b>{r.numero_romaneio ? `Romaneio ${r.numero_romaneio}` : "Romaneio"}</b> · {textoRomaneio[r.situacao]}
+                  {r.situacao !== "descartado" && <span className="text-slate-400"> · usuário ERP {r.login_erp}</span>}
+                  {r.erro && <span className="block text-[11px]">{r.erro}</span>}
+                </p>
+              ))}
             </Bloco>
           )}
           {nfs.length > 0 && (

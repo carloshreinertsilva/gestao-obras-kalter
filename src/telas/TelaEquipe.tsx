@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Edit2, Plus, Save, User } from "lucide-react";
 import { supabase } from "../supabase";
 import { perfisUsuario } from "../constants";
@@ -24,8 +24,18 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
     recebe_copia_previsao: false,
     aprova_faturamento: false,
     recebe_copia_faturamento: false,
+    login_erp: "",
   });
   const [salvando, setSalvando] = useState(false);
+  // logins do ERP espelhados pelo robo (sync_romaneios.py)
+  const [loginsErp, setLoginsErp] = useState<string[]>([]);
+  useEffect(() => {
+    supabase
+      .from("usuarios_erp")
+      .select("login")
+      .order("login")
+      .then(({ data }) => setLoginsErp(((data as { login: string }[]) || []).map((r) => r.login)));
+  }, []);
 
   const nomeUsuarioPorId = (id: any) => listaUsuarios.find((u) => u.id === id)?.nome || "";
 
@@ -45,6 +55,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
         recebe_copia_previsao: Boolean(novoUsuario.recebe_copia_previsao),
         aprova_faturamento: Boolean(novoUsuario.aprova_faturamento),
         recebe_copia_faturamento: Boolean(novoUsuario.recebe_copia_faturamento),
+        login_erp: novoUsuario.login_erp || null,
       };
 
       if (novoUsuario.id) {
@@ -69,6 +80,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
         recebe_copia_previsao: false,
         aprova_faturamento: false,
         recebe_copia_faturamento: false,
+        login_erp: "",
       });
       onAtualizar();
     } catch (error: any) {
@@ -89,6 +101,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       recebe_copia_previsao: Boolean(usuario.recebe_copia_previsao),
       aprova_faturamento: Boolean(usuario.aprova_faturamento),
       recebe_copia_faturamento: Boolean(usuario.recebe_copia_faturamento),
+      login_erp: usuario.login_erp || "",
     });
     setTimeout(() => {
       document
@@ -108,6 +121,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       recebe_copia_previsao: false,
       aprova_faturamento: false,
       recebe_copia_faturamento: false,
+      login_erp: "",
     });
   };
 
@@ -242,6 +256,27 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
           </div>
           <div className="mt-4 pt-4 border-t space-y-2">
             <p className="text-xs font-bold uppercase text-slate-400 tracking-wider">Faturamento</p>
+            <div>
+              <label className="block text-sm font-bold mb-1">Usuário no ERP</label>
+              <select
+                value={novoUsuario.login_erp || ""}
+                onChange={(e) => setNovoUsuario({ ...novoUsuario, login_erp: e.target.value })}
+                className="border rounded-lg px-3 py-2 w-full bg-white text-sm"
+              >
+                <option value="">Sem vínculo</option>
+                {novoUsuario.login_erp && !loginsErp.includes(novoUsuario.login_erp) && (
+                  <option value={novoUsuario.login_erp}>{novoUsuario.login_erp} (não encontrado no ERP)</option>
+                )}
+                {loginsErp.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <span className="block text-[11px] text-slate-400 mt-1">
+                Gravado no romaneio que o app gera no ERP quando este usuário aprova um faturamento de produto (obrigatório para quem aprova).
+              </span>
+            </div>
             <label className="flex items-start gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
@@ -324,6 +359,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                   </p>
                   <p className="text-xs text-slate-500 truncate max-w-full">
                     {user.email}
+                    {user.login_erp && <span className="text-slate-400"> · ERP {user.login_erp}</span>}
                   </p>
                   {(user.aprova_previsao || user.recebe_copia_previsao || user.aprova_faturamento || user.recebe_copia_faturamento) && (
                     <p className="flex flex-wrap gap-1 mt-1">
@@ -340,6 +376,11 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                       {user.aprova_faturamento && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                           Aprova faturamento
+                        </span>
+                      )}
+                      {user.aprova_faturamento && !user.login_erp && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                          Sem usuário do ERP
                         </span>
                       )}
                       {user.recebe_copia_faturamento && (
