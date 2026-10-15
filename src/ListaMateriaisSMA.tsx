@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronUp, Download, Filter, Search } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Download, Filter, Search } from "lucide-react";
 import { formatarDataSegura } from "./utils";
 import type { ObraSmaMaterial, SituacaoSma } from "./types";
 
@@ -215,6 +215,11 @@ type ColunaOrdenavel =
 
 // Saldo so faz sentido pra SMA ativa: encerrada ja foi atendida e cancelada nao vai mais
 // ser atendida - nesses casos nao ha "pendencia" pro gestor acompanhar.
+// Prazo vencido: data de necessidade ja passou e o item ainda tem saldo a atender (SMA ativa)
+const hojeISO = () => new Date().toISOString().slice(0, 10);
+const necessidadeVencida = (m: ObraSmaMaterial) =>
+  Boolean(m.data_necessidade && String(m.data_necessidade).slice(0, 10) < hojeISO() && saldoAtender(m));
+
 const saldoAtender = (m: ObraSmaMaterial): number | null => {
   if ((m.situacao || "A") !== "A") return null;
   return Math.max((Number(m.quantidade_solicitada) || 0) - (Number(m.quantidade_atendida) || 0), 0);
@@ -722,8 +727,12 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                     <td className="p-3 text-center text-slate-600 whitespace-nowrap">
                       {m.data_cadastro ? formatarDataSegura(m.data_cadastro) : "-"}
                     </td>
-                    <td className="p-3 text-center text-slate-600 whitespace-nowrap">
+                    <td
+                      className={`p-3 text-center whitespace-nowrap ${necessidadeVencida(m) ? "text-red-600 font-semibold" : "text-slate-600"}`}
+                      title={necessidadeVencida(m) ? "Data de necessidade vencida e item ainda com saldo a atender" : undefined}
+                    >
                       {m.data_necessidade ? formatarDataSegura(m.data_necessidade) : "-"}
+                      {necessidadeVencida(m) && <AlertTriangle size={12} className="inline ml-1 -mt-0.5" />}
                     </td>
                     <td className="p-3 text-slate-600 max-w-[320px] whitespace-normal break-words">
                       {m.observacao || "-"}
