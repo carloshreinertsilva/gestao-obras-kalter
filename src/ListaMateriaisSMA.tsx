@@ -269,6 +269,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
   const [filtroProjeto, setFiltroProjeto] = useState<Set<string> | null>(null);
   const [filtroTipoMovimento, setFiltroTipoMovimento] = useState<Set<string> | null>(null);
   const [filtroSolicitante, setFiltroSolicitante] = useState<Set<string> | null>(null);
+  const [filtroObservacao, setFiltroObservacao] = useState<Set<string> | null>(null);
   const [ordenacao, setOrdenacao] = useState<{
     coluna: ColunaOrdenavel;
     direcao: "asc" | "desc";
@@ -328,6 +329,16 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
     [materiais],
   );
 
+  // Observacao e texto livre da SMA inteira (repete em todos os itens dela); "" = sem observacao
+  const opcoesObservacao = useMemo(() => {
+    const textos = [...new Set(materiais.map((m) => (m.observacao || "").trim()))];
+    const opcoes = textos
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .map((o) => ({ valor: o, rotulo: o }));
+    return textos.includes("") ? [{ valor: "", rotulo: "(Sem observação)" }, ...opcoes] : opcoes;
+  }, [materiais]);
+
   const opcoesSolicitante = useMemo(
     () =>
       [...new Set(materiais.map((m) => m.solicitante).filter((s): s is string => !!s))]
@@ -342,7 +353,8 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
     filtroMaterial !== null ||
     filtroProjeto !== null ||
     filtroTipoMovimento !== null ||
-    filtroSolicitante !== null;
+    filtroSolicitante !== null ||
+    filtroObservacao !== null;
 
   const limparFiltros = () => {
     setFiltroSituacao("todas");
@@ -351,6 +363,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
     setFiltroProjeto(null);
     setFiltroTipoMovimento(null);
     setFiltroSolicitante(null);
+    setFiltroObservacao(null);
   };
 
   const exportarExcel = () => {
@@ -408,6 +421,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
       .filter((m) => !filtroProjeto || filtroProjeto.has(m.projeto_sma || ""))
       .filter((m) => !filtroTipoMovimento || filtroTipoMovimento.has(m.tipo_movimento_descricao || ""))
       .filter((m) => !filtroSolicitante || filtroSolicitante.has(m.solicitante || ""))
+      .filter((m) => !filtroObservacao || filtroObservacao.has((m.observacao || "").trim()))
       .filter((m) => {
         if (!termo) return true;
         const textos = [
@@ -442,6 +456,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
     filtroProjeto,
     filtroTipoMovimento,
     filtroSolicitante,
+    filtroObservacao,
     ordenacao,
   ]);
 
@@ -645,6 +660,11 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                     coluna="observacao"
                     ordenacao={ordenacao}
                     onClick={alternarOrdenacao}
+                  />
+                  <FiltroColuna
+                    opcoes={opcoesObservacao}
+                    selecionado={filtroObservacao}
+                    onChange={setFiltroObservacao}
                   />
                 </th>
               </tr>
