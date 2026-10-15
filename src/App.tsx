@@ -5,6 +5,7 @@ import TelaDashboard from "./telas/TelaDashboard";
 import TelaReunioes from "./telas/TelaReunioes";
 import { AbaPrevisoes, PainelSolicitacoes, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
 import { SolicitacoesFaturamentoObra, TelaFaturamento } from "./SolicitacoesFaturamento";
+import { TelaNfsTerceiros } from "./NfsTerceiros";
 import { AtivarPush, ItemNotificacao } from "./Notificacoes";
 import { removerPushAoSair } from "./push";
 import { caminhoParaRota, rotaParaCaminho, type Rota } from "./rotas";
@@ -46,6 +47,7 @@ import {
   Briefcase,
   History,
   ShoppingCart,
+  FileInput,
   Calendar,
   CheckSquare,
   HardHat,
@@ -474,12 +476,17 @@ export default function App() {
   const ehLogistica = usuarioAtual?.perfil === "logistica";
   // Fiscal: emite as NFs das solicitacoes de faturamento; ve todas as obras so na aba Faturamento
   const ehFiscal = usuarioAtual?.perfil === "fiscal";
+  // Financeiro: lanca/paga as NFs de terceiros; ve todas as obras so na aba Compras (secao Servicos)
+  const ehFinanceiro = usuarioAtual?.perfil === "financeiro";
+  // tela geral "NFs de terceiros": todos menos logistica e cliente (gestor ve as das suas obras)
+  const podeVerNfsTerceiros = !ehLogistica && usuarioAtual?.perfil !== "cliente";
   // painel de compras (so consulta): logistica e admin
   const podeVerCompras = ehLogistica || veTudo;
-  const veTodasObras = veTudo || ehLogistica || ehFiscal;
-  const abaInicialObra = ehLogistica || ehFiscal ? "faturamento" : "resumo";
+  const veTodasObras = veTudo || ehLogistica || ehFiscal || ehFinanceiro;
+  const abaInicialObra = ehFinanceiro ? "compras" : ehLogistica || ehFiscal ? "faturamento" : "resumo";
   const abaObraPermitida = (aba: string) => {
-    if (ehFiscal) return aba === "faturamento";
+    if (ehFiscal) return aba === "faturamento" || aba === "compras";
+    if (ehFinanceiro) return aba === "compras";
     if (ehLogistica) return ["faturamento", "lista_materiais", "compras", "diario_tarefas", "previsoes"].includes(aba);
     if (aba === "rentabilidade") return podeVerRentabilidade;
     if (aba === "previsoes") return podeSolicitarPrevisao(usuarioAtual);
@@ -566,6 +573,7 @@ export default function App() {
       if (tela === "solicitacoes_previsao" && !podeSolicitarPrevisao(usuarioAtual)) tela = "dashboard";
       if (tela === "cadastros_equipe" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
       if (tela === "compras" && !podeVerCompras) tela = "dashboard";
+      if (tela === "nfs_terceiros" && !podeVerNfsTerceiros) tela = "dashboard";
       if (tela === "historico" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
       if (tela === "cadastros_obras" && !podeCadastrarObras) tela = "dashboard";
 
@@ -596,7 +604,7 @@ export default function App() {
         setAbaReunioes(rota.novaReuniao ? "nova" : "historico");
         setDataReuniaoSelecionada(rota.dataReuniao || null);
       }
-      setSolicitacaoDestaque(tela === "solicitacoes_previsao" || tela === "faturamento" ? rota.idSolicitacao || null : null);
+      setSolicitacaoDestaque(tela === "solicitacoes_previsao" || tela === "faturamento" || tela === "nfs_terceiros" ? rota.idSolicitacao || null : null);
 
       if (rota.idTarefa) {
         if (tarefaSelecionada?.id !== rota.idTarefa) {
@@ -690,7 +698,7 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from("usuarios")
-        .select("id, nome, email, perfil, id_engenheiro_vinculado, aprova_previsao, recebe_copia_previsao, aprova_faturamento, recebe_copia_faturamento, login_erp")
+        .select("id, nome, email, perfil, id_engenheiro_vinculado, aprova_previsao, recebe_copia_previsao, aprova_faturamento, recebe_copia_faturamento, login_erp, recebe_nf_terceiros")
         .eq("ativo", true);
       if (error) throw error;
       setListaUsuarios(data || []);
@@ -1728,6 +1736,12 @@ export default function App() {
     if (notif.tipo === "faturamento") {
       const id = /^fat:([0-9a-f-]{36})/.exec(notif.chave || "")?.[1] || null;
       setTelaAtiva("faturamento");
+      setSolicitacaoDestaque(id);
+      return;
+    }
+    if (notif.tipo === "nf_terceiros") {
+      const id = /^nft:([0-9a-f-]{36})/.exec(notif.chave || "")?.[1] || null;
+      setTelaAtiva("nfs_terceiros");
       setSolicitacaoDestaque(id);
       return;
     }
@@ -3459,6 +3473,7 @@ export default function App() {
                   itemMenu("solicitacoes_previsao", "Previsões", Wallet, telaAtiva === "solicitacoes_previsao")}
                 {podeVerCompras && itemMenu("compras", "Compras", ShoppingCart, telaAtiva === "compras")}
                 {itemMenu("faturamento", "Faturamento", Receipt, telaAtiva === "faturamento")}
+                {podeVerNfsTerceiros && itemMenu("nfs_terceiros", "NFs de terceiros", FileInput, telaAtiva === "nfs_terceiros")}
               </div>
             </div>
 
@@ -3767,7 +3782,12 @@ export default function App() {
               <ListaMateriaisSMA materiais={materiaisSma} />
             )}
             {abaPainelObra === "compras" && abaObraPermitida("compras") && obraEcoSelecionada && (
-              <AbaComprasObra idObra={obraEcoSelecionada.id} codigoObra={obraEcoSelecionada.codigo_externo || ""} />
+              <AbaComprasObra
+                idObra={obraEcoSelecionada.id}
+                codigoObra={obraEcoSelecionada.codigo_externo || ""}
+                usuario={usuarioAtual}
+                podeEncaminharNf={podeEditarObraSelecionada && !ehLogistica && !ehFiscal && !ehFinanceiro}
+              />
             )}
 
             {abaPainelObra === "rentabilidade" && podeVerRentabilidade && (
@@ -3858,6 +3878,10 @@ export default function App() {
 
         {telaAtiva === "faturamento" && (
           <TelaFaturamento usuario={usuarioAtual} idAberto={solicitacaoDestaque} onAbrir={setSolicitacaoDestaque} podeGerenciar={veTudo} />
+        )}
+
+        {telaAtiva === "nfs_terceiros" && podeVerNfsTerceiros && (
+          <TelaNfsTerceiros usuario={usuarioAtual} idAberto={solicitacaoDestaque} onAbrir={setSolicitacaoDestaque} />
         )}
 
         {telaAtiva === "historico" && isAdmin && <TelaAuditoria falhaAoCarregar={falhaAoCarregar} />}

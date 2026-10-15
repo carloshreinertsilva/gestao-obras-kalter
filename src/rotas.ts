@@ -22,6 +22,7 @@ const TELAS_FIXAS: Record<string, string> = {
   solicitacoes_previsao: "/previsoes",
   compras: "/compras",
   faturamento: "/faturamento",
+  nfs_terceiros: "/nfs-terceiros",
   historico: "/historico",
   cadastros_obras: "/cadastros/obras",
   cadastros_equipe: "/cadastros/equipe",
@@ -38,7 +39,7 @@ export function rotaParaCaminho(r: Rota): string {
   } else if (r.tela === "reunioes") {
     if (r.novaReuniao) caminho += "/nova";
     else if (r.dataReuniao) caminho += `/${r.dataReuniao}`;
-  } else if ((r.tela === "solicitacoes_previsao" || r.tela === "faturamento") && r.idSolicitacao) {
+  } else if ((r.tela === "solicitacoes_previsao" || r.tela === "faturamento" || r.tela === "nfs_terceiros") && r.idSolicitacao) {
     caminho += `/${r.idSolicitacao}`;
   }
   return r.idTarefa ? `${caminho}?tarefa=${r.idTarefa}` : caminho;
@@ -72,6 +73,8 @@ export function caminhoParaRota(pathname: string, search: string): Rota {
       return { tela: "historico", ...extras };
     case "faturamento":
       return { tela: "faturamento", idSolicitacao: p1, ...extras };
+    case "nfs-terceiros":
+      return { tela: "nfs_terceiros", idSolicitacao: p1, ...extras };
     case "compras":
       return { tela: "compras", ...extras };
     case "cadastros":

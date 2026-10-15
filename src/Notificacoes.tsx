@@ -27,6 +27,7 @@ const iconePorTipo: Record<string, { Icone: any; cor: string }> = {
   previsao_resultado: { Icone: Wallet, cor: "text-[#2A6377] bg-[#2A6377]/10" },
   familia_alerta: { Icone: AlertTriangle, cor: "text-red-600 bg-red-50" },
   faturamento: { Icone: Receipt, cor: "text-blue-700 bg-blue-50" },
+  nf_terceiros: { Icone: Receipt, cor: "text-teal-700 bg-teal-50" },
 };
 
 export const tempoRelativo = (iso: string) => {

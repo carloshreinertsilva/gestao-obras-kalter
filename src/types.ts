@@ -13,6 +13,7 @@ export type PerfilUsuario =
   | "admin"
   | "coordenador"
   | "fiscal"
+  | "financeiro"
   | "engenheiro"
   | "assistente"
   | "logistica"
@@ -32,6 +33,8 @@ export interface Usuario {
   recebe_copia_faturamento?: boolean;
   // login do usuario no ERP (gravado no romaneio gerado pela aprovacao da logistica)
   login_erp?: string | null;
+  // recebe as NFs de terceiros encaminhadas pelos gestores (fiscal/financeiro)
+  recebe_nf_terceiros?: boolean;
   created_at?: string;
 }
 
@@ -354,7 +357,8 @@ export type TipoNotificacao =
   | "previsao_aprovacao"
   | "previsao_resultado"
   | "familia_alerta"
-  | "faturamento";
+  | "faturamento"
+  | "nf_terceiros";
 
 export interface Notificacao {
   id: string;

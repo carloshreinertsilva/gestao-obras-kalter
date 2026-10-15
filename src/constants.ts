@@ -16,4 +16,5 @@ export const perfisUsuario = [
   { valor: "assistente", label: "Assistente" },
   { valor: "logistica", label: "Logística/Suprimentos" },
   { valor: "fiscal", label: "Fiscal" },
+  { valor: "financeiro", label: "Financeiro" },
 ];

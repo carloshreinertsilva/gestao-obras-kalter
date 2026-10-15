@@ -24,6 +24,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
     recebe_copia_previsao: false,
     aprova_faturamento: false,
     recebe_copia_faturamento: false,
+    recebe_nf_terceiros: false,
     login_erp: "",
   });
   const [salvando, setSalvando] = useState(false);
@@ -55,6 +56,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
         recebe_copia_previsao: Boolean(novoUsuario.recebe_copia_previsao),
         aprova_faturamento: Boolean(novoUsuario.aprova_faturamento),
         recebe_copia_faturamento: Boolean(novoUsuario.recebe_copia_faturamento),
+        recebe_nf_terceiros: Boolean(novoUsuario.recebe_nf_terceiros),
         login_erp: novoUsuario.login_erp || null,
       };
 
@@ -80,6 +82,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
         recebe_copia_previsao: false,
         aprova_faturamento: false,
         recebe_copia_faturamento: false,
+        recebe_nf_terceiros: false,
         login_erp: "",
       });
       onAtualizar();
@@ -101,6 +104,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       recebe_copia_previsao: Boolean(usuario.recebe_copia_previsao),
       aprova_faturamento: Boolean(usuario.aprova_faturamento),
       recebe_copia_faturamento: Boolean(usuario.recebe_copia_faturamento),
+      recebe_nf_terceiros: Boolean(usuario.recebe_nf_terceiros),
       login_erp: usuario.login_erp || "",
     });
     setTimeout(() => {
@@ -121,6 +125,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       recebe_copia_previsao: false,
       aprova_faturamento: false,
       recebe_copia_faturamento: false,
+      recebe_nf_terceiros: false,
       login_erp: "",
     });
   };
@@ -305,6 +310,20 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 </span>
               </span>
             </label>
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(novoUsuario.recebe_nf_terceiros)}
+                onChange={(e) => setNovoUsuario({ ...novoUsuario, recebe_nf_terceiros: e.target.checked })}
+                className="mt-0.5 accent-[#2A6377]"
+              />
+              <span>
+                <b>Recebe NFs de terceiros</b>
+                <span className="block text-[11px] text-slate-400">
+                  Recebe por e-mail (com a NF anexada) as NFs de prestadores de serviço que os gestores encaminham, para lançar e pagar; e os lembretes de vencimento.
+                </span>
+              </span>
+            </label>
           </div>
           <div className="flex justify-end gap-2 pt-6">
             {novoUsuario.id && (
@@ -361,7 +380,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                     {user.email}
                     {user.login_erp && <span className="text-slate-400"> · ERP {user.login_erp}</span>}
                   </p>
-                  {(user.aprova_previsao || user.recebe_copia_previsao || user.aprova_faturamento || user.recebe_copia_faturamento) && (
+                  {(user.aprova_previsao || user.recebe_copia_previsao || user.aprova_faturamento || user.recebe_copia_faturamento || user.recebe_nf_terceiros) && (
                     <p className="flex flex-wrap gap-1 mt-1">
                       {user.aprova_previsao && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -386,6 +405,11 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                       {user.recebe_copia_faturamento && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
                           Cópia do faturamento
+                        </span>
+                      )}
+                      {user.recebe_nf_terceiros && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">
+                          NFs de terceiros
                         </span>
                       )}
                     </p>

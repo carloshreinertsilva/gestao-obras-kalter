@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, Loader2, Search } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Package, Search, Wrench } from "lucide-react";
 import { supabase } from "../../supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda } from "../../utils";
+import { ServicosTerceirosObra } from "../../NfsTerceiros";
+import type { Usuario } from "../../types";
 
-// Aba "Compras" da obra: solicitacoes de compra em aberto no ERP (tabela obra_compras_abertas,
-// espelhada pelo robo). E a mesma regra que deixa a fase Compras do cronograma "em andamento":
-// solicitacao ativa sem pedido de compra encerrado. So consulta.
+// Aba "Compras" da obra, em duas secoes:
+// - Material: solicitacoes de compra em aberto no ERP (tabela obra_compras_abertas, espelhada pelo
+//   robo). E a mesma regra que deixa a fase Compras do cronograma "em andamento": solicitacao ativa
+//   sem pedido de compra encerrado. So consulta.
+// - Servicos (terceiros): pedidos de servico com NFs/pagamentos e o "Encaminhar NF" (NfsTerceiros.tsx).
 interface CompraAberta {
   nr_solicitacao: number;
   codigo_material: string | null;
@@ -22,6 +26,7 @@ interface CompraAberta {
   data_solicitacao: string | null;
   data_entrega: string | null;
   nr_sma: number | null;
+  servico: boolean;
 }
 
 const SITUACAO: Record<CompraAberta["situacao"], { rotulo: string; classe: string; dica: string }> = {
@@ -34,7 +39,43 @@ const SITUACAO: Record<CompraAberta["situacao"], { rotulo: string; classe: strin
 const num = (v: unknown) => Number(v || 0);
 const fmtQtd = (v: number) => num(v).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
-export default function AbaComprasObra({ idObra, codigoObra }: { idObra: string; codigoObra: string }) {
+export default function AbaComprasObra({
+  idObra,
+  codigoObra,
+  usuario,
+  podeEncaminharNf,
+}: {
+  idObra: string;
+  codigoObra: string;
+  usuario: Usuario | null;
+  podeEncaminharNf: boolean;
+}) {
+  // financeiro so trabalha com servicos de terceiros
+  const [secao, setSecao] = useState<"material" | "servicos">(usuario?.perfil === "financeiro" ? "servicos" : "material");
+  const botao = (id: "material" | "servicos", rotulo: string, Icone: typeof Package) => (
+    <button
+      onClick={() => setSecao(id)}
+      className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 border ${secao === id ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+    >
+      <Icone size={15} /> {rotulo}
+    </button>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        {usuario?.perfil !== "financeiro" && botao("material", "Material", Package)}
+        {botao("servicos", "Serviços (terceiros)", Wrench)}
+      </div>
+      {secao === "material" ? (
+        <ComprasMaterial idObra={idObra} codigoObra={codigoObra} />
+      ) : (
+        <ServicosTerceirosObra idObra={idObra} codigoObra={codigoObra} usuario={usuario} podeEncaminhar={podeEncaminharNf} />
+      )}
+    </div>
+  );
+}
+
+function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: string }) {
   const [compras, setCompras] = useState<CompraAberta[] | null>(null);
   const [erro, setErro] = useState("");
   const [situacao, setSituacao] = useState("pendentes"); // pendentes = tudo menos "recebido"
@@ -49,6 +90,7 @@ export default function AbaComprasObra({ idObra, codigoObra }: { idObra: string;
       .from("obra_compras_abertas")
       .select("*")
       .eq("id_obra", idObra)
+      .eq("servico", false)
       .order("data_entrega", { ascending: true, nullsFirst: false })
       .then(({ data, error }) => {
         if (!ativo) return;
