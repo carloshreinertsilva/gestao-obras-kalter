@@ -12,6 +12,7 @@
 export type PerfilUsuario =
   | "admin"
   | "coordenador"
+  | "fiscal"
   | "engenheiro"
   | "assistente"
   | "logistica"
@@ -27,6 +28,8 @@ export interface Usuario {
   id_engenheiro_vinculado?: string | null;
   aprova_previsao?: boolean;
   recebe_copia_previsao?: boolean;
+  aprova_faturamento?: boolean;
+  recebe_copia_faturamento?: boolean;
   created_at?: string;
 }
 
@@ -348,7 +351,8 @@ export type TipoNotificacao =
   | "recebimento_novo"
   | "previsao_aprovacao"
   | "previsao_resultado"
-  | "familia_alerta";
+  | "familia_alerta"
+  | "faturamento";
 
 export interface Notificacao {
   id: string;
@@ -358,6 +362,7 @@ export interface Notificacao {
   id_obra?: string | null;
   id_tarefa?: string | null;
   financeira?: boolean;
+  chave?: string | null;
   lida_em?: string | null;
   created_at: string;
 }

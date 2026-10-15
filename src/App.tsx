@@ -4,6 +4,7 @@ import { supabase } from "./supabase";
 import TelaDashboard from "./telas/TelaDashboard";
 import TelaReunioes from "./telas/TelaReunioes";
 import { AbaPrevisoes, PainelSolicitacoes, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
+import { SolicitacoesFaturamentoObra, TelaFaturamento } from "./SolicitacoesFaturamento";
 import { AtivarPush, ItemNotificacao } from "./Notificacoes";
 import { removerPushAoSair } from "./push";
 import { caminhoParaRota, rotaParaCaminho, type Rota } from "./rotas";
@@ -471,11 +472,14 @@ export default function App() {
   // gestores pedem), so para consulta e so nas abas de que precisa; pode pedir previsao.
   // Resumo e Financeiro ficam de fora (mostram recebimentos do cliente).
   const ehLogistica = usuarioAtual?.perfil === "logistica";
+  // Fiscal: emite as NFs das solicitacoes de faturamento; ve todas as obras so na aba Faturamento
+  const ehFiscal = usuarioAtual?.perfil === "fiscal";
   // painel de compras (so consulta): logistica e admin
   const podeVerCompras = ehLogistica || veTudo;
-  const veTodasObras = veTudo || ehLogistica;
-  const abaInicialObra = ehLogistica ? "faturamento" : "resumo";
+  const veTodasObras = veTudo || ehLogistica || ehFiscal;
+  const abaInicialObra = ehLogistica || ehFiscal ? "faturamento" : "resumo";
   const abaObraPermitida = (aba: string) => {
+    if (ehFiscal) return aba === "faturamento";
     if (ehLogistica) return ["faturamento", "lista_materiais", "compras", "diario_tarefas", "previsoes"].includes(aba);
     if (aba === "rentabilidade") return podeVerRentabilidade;
     if (aba === "previsoes") return podeSolicitarPrevisao(usuarioAtual);
@@ -518,7 +522,7 @@ export default function App() {
     try {
       const { data } = await supabase
         .from("notificacoes")
-        .select("id, tipo, titulo, detalhe, id_obra, id_tarefa, financeira, lida_em, created_at")
+        .select("id, tipo, titulo, detalhe, id_obra, id_tarefa, financeira, lida_em, created_at, chave")
         .order("created_at", { ascending: false })
         .limit(50);
       if (data) setNovidades(data);
@@ -592,7 +596,7 @@ export default function App() {
         setAbaReunioes(rota.novaReuniao ? "nova" : "historico");
         setDataReuniaoSelecionada(rota.dataReuniao || null);
       }
-      setSolicitacaoDestaque(tela === "solicitacoes_previsao" ? rota.idSolicitacao || null : null);
+      setSolicitacaoDestaque(tela === "solicitacoes_previsao" || tela === "faturamento" ? rota.idSolicitacao || null : null);
 
       if (rota.idTarefa) {
         if (tarefaSelecionada?.id !== rota.idTarefa) {
@@ -686,7 +690,7 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from("usuarios")
-        .select("id, nome, email, perfil, id_engenheiro_vinculado, aprova_previsao, recebe_copia_previsao")
+        .select("id, nome, email, perfil, id_engenheiro_vinculado, aprova_previsao, recebe_copia_previsao, aprova_faturamento, recebe_copia_faturamento")
         .eq("ativo", true);
       if (error) throw error;
       setListaUsuarios(data || []);
@@ -1719,6 +1723,12 @@ export default function App() {
     }
     if (notif.tipo === "previsao_aprovacao") {
       setTelaAtiva("solicitacoes_previsao");
+      return;
+    }
+    if (notif.tipo === "faturamento") {
+      const id = /^fat:([0-9a-f-]{36})/.exec(notif.chave || "")?.[1] || null;
+      setTelaAtiva("faturamento");
+      setSolicitacaoDestaque(id);
       return;
     }
     if (!notif.id_obra) return;
@@ -3448,6 +3458,7 @@ export default function App() {
                 {podeSolicitarPrevisao(usuarioAtual) &&
                   itemMenu("solicitacoes_previsao", "Previsões", Wallet, telaAtiva === "solicitacoes_previsao")}
                 {podeVerCompras && itemMenu("compras", "Compras", ShoppingCart, telaAtiva === "compras")}
+                {itemMenu("faturamento", "Faturamento", Receipt, telaAtiva === "faturamento")}
               </div>
             </div>
 
@@ -3722,6 +3733,16 @@ export default function App() {
               />
             )}
 
+            {abaPainelObra === "faturamento" && obraEcoSelecionada && (
+              <div className="mb-6">
+                <SolicitacoesFaturamentoObra
+                  idObra={obraEcoSelecionada.id}
+                  codigoObra={obraEcoSelecionada.codigo_externo || ""}
+                  usuario={usuarioAtual}
+                  podeSolicitar={podeEditarObraSelecionada && !ehLogistica && !ehFiscal}
+                />
+              </div>
+            )}
             {abaPainelObra === "faturamento" && (
               <AbaFaturamento
                 competenciasFaturamento={competenciasFaturamento}
@@ -3834,6 +3855,10 @@ export default function App() {
         )}
 
         {telaAtiva === "compras" && podeVerCompras && <TelaCompras falhaAoCarregar={falhaAoCarregar} />}
+
+        {telaAtiva === "faturamento" && (
+          <TelaFaturamento usuario={usuarioAtual} idAberto={solicitacaoDestaque} onAbrir={setSolicitacaoDestaque} podeGerenciar={veTudo} />
+        )}
 
         {telaAtiva === "historico" && isAdmin && <TelaAuditoria falhaAoCarregar={falhaAoCarregar} />}
 

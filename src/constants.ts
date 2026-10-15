@@ -15,4 +15,5 @@ export const perfisUsuario = [
   { valor: "engenheiro", label: "Engenheiro/Gestor" },
   { valor: "assistente", label: "Assistente" },
   { valor: "logistica", label: "Logística/Suprimentos" },
+  { valor: "fiscal", label: "Fiscal" },
 ];

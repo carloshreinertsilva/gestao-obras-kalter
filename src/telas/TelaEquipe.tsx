@@ -22,6 +22,8 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
     id_engenheiro_vinculado: "",
     aprova_previsao: false,
     recebe_copia_previsao: false,
+    aprova_faturamento: false,
+    recebe_copia_faturamento: false,
   });
   const [salvando, setSalvando] = useState(false);
 
@@ -41,6 +43,8 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
             : null,
         aprova_previsao: Boolean(novoUsuario.aprova_previsao),
         recebe_copia_previsao: Boolean(novoUsuario.recebe_copia_previsao),
+        aprova_faturamento: Boolean(novoUsuario.aprova_faturamento),
+        recebe_copia_faturamento: Boolean(novoUsuario.recebe_copia_faturamento),
       };
 
       if (novoUsuario.id) {
@@ -63,6 +67,8 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
         id_engenheiro_vinculado: "",
         aprova_previsao: false,
         recebe_copia_previsao: false,
+        aprova_faturamento: false,
+        recebe_copia_faturamento: false,
       });
       onAtualizar();
     } catch (error: any) {
@@ -81,6 +87,8 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       id_engenheiro_vinculado: usuario.id_engenheiro_vinculado || "",
       aprova_previsao: Boolean(usuario.aprova_previsao),
       recebe_copia_previsao: Boolean(usuario.recebe_copia_previsao),
+      aprova_faturamento: Boolean(usuario.aprova_faturamento),
+      recebe_copia_faturamento: Boolean(usuario.recebe_copia_faturamento),
     });
     setTimeout(() => {
       document
@@ -98,6 +106,8 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       id_engenheiro_vinculado: "",
       aprova_previsao: false,
       recebe_copia_previsao: false,
+      aprova_faturamento: false,
+      recebe_copia_faturamento: false,
     });
   };
 
@@ -230,6 +240,37 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               </span>
             </label>
           </div>
+          <div className="mt-4 pt-4 border-t space-y-2">
+            <p className="text-xs font-bold uppercase text-slate-400 tracking-wider">Faturamento</p>
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(novoUsuario.aprova_faturamento)}
+                onChange={(e) => setNovoUsuario({ ...novoUsuario, aprova_faturamento: e.target.checked })}
+                className="mt-0.5 accent-[#2A6377]"
+              />
+              <span>
+                <b>Aprova faturamento (logística)</b>
+                <span className="block text-[11px] text-slate-400">
+                  Recebe as solicitações de faturamento para conferir itens, pesos, volumes e transportadora, e aprova ou devolve.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(novoUsuario.recebe_copia_faturamento)}
+                onChange={(e) => setNovoUsuario({ ...novoUsuario, recebe_copia_faturamento: e.target.checked })}
+                className="mt-0.5 accent-[#2A6377]"
+              />
+              <span>
+                <b>Recebe cópia do faturamento</b>
+                <span className="block text-[11px] text-slate-400">
+                  Cópia de todas as etapas das solicitações de faturamento (envio, aprovação, devolução, NF emitida).
+                </span>
+              </span>
+            </label>
+          </div>
           <div className="flex justify-end gap-2 pt-6">
             {novoUsuario.id && (
               <button
@@ -284,7 +325,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                   <p className="text-xs text-slate-500 truncate max-w-full">
                     {user.email}
                   </p>
-                  {(user.aprova_previsao || user.recebe_copia_previsao) && (
+                  {(user.aprova_previsao || user.recebe_copia_previsao || user.aprova_faturamento || user.recebe_copia_faturamento) && (
                     <p className="flex flex-wrap gap-1 mt-1">
                       {user.aprova_previsao && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -294,6 +335,16 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                       {user.recebe_copia_previsao && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
                           Cópia das previsões
+                        </span>
+                      )}
+                      {user.aprova_faturamento && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          Aprova faturamento
+                        </span>
+                      )}
+                      {user.recebe_copia_faturamento && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
+                          Cópia do faturamento
                         </span>
                       )}
                     </p>
