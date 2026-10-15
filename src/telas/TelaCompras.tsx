@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, Loader2, Search } from "lucide-react";
 import { supabase } from "../supabase";
-import { formatarDataSegura, formatarMoeda } from "../utils";
+import { exportarCsv, formatarDataSegura, formatarMoeda } from "../utils";
 import { SeloAlertaFamilia } from "../AlertaFamilia";
 
 // Compras (logistica e admin): material da SMA pendente em todas as obras, previsoes
@@ -55,19 +55,6 @@ const SITUACAO: Record<string, { rotulo: string; classe: string }> = {
 };
 
 const hojeISO = () => new Date().toISOString().slice(0, 10);
-
-function exportarCsv(nome: string, cabecalho: string[], linhas: (string | number)[][]) {
-  const escapar = (v: string | number) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const csv = [cabecalho, ...linhas].map((l) => l.map(escapar).join(";")).join("\r\n");
-  const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${nome}_${hojeISO()}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
 
 export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oque: string, error: unknown) => void }) {
   const [carregando, setCarregando] = useState(true);

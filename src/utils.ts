@@ -304,3 +304,17 @@ export const isAtrasada = (dataVencimento: any, status: any) => {
     if (!dataVencimento || status === "concluida" || status === "cancelada") return false;
     return dataVencimento < new Date().toISOString().split("T")[0];
   };
+
+// CSV para Excel (separador ;, BOM UTF-8 para acentos), com a data no nome do arquivo.
+export function exportarCsv(nome: string, cabecalho: string[], linhas: (string | number)[][]) {
+  const escapar = (v: string | number) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = [cabecalho, ...linhas].map((l) => l.map(escapar).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${nome}_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

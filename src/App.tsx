@@ -90,6 +90,7 @@ const ENTROU_POR_RECUPERACAO =
   /type=recovery/.test(window.location.hash + window.location.search);
 
 // Telas e abas carregadas so quando abertas (o Dashboard e a tela inicial e vem junto).
+const AbaComprasObra = lazy(() => import("./telas/painel/AbaComprasObra"));
 const AbaCronograma = lazy(() => import("./telas/painel/AbaCronograma"));
 const AbaDiarioTarefas = lazy(() => import("./telas/painel/AbaDiarioTarefas"));
 const AbaDocumentos = lazy(() => import("./telas/painel/AbaDocumentos"));
@@ -475,10 +476,10 @@ export default function App() {
   const veTodasObras = veTudo || ehLogistica;
   const abaInicialObra = ehLogistica ? "faturamento" : "resumo";
   const abaObraPermitida = (aba: string) => {
-    if (ehLogistica) return ["faturamento", "lista_materiais", "diario_tarefas", "previsoes"].includes(aba);
+    if (ehLogistica) return ["faturamento", "lista_materiais", "compras", "diario_tarefas", "previsoes"].includes(aba);
     if (aba === "rentabilidade") return podeVerRentabilidade;
     if (aba === "previsoes") return podeSolicitarPrevisao(usuarioAtual);
-    return ["resumo", "financeiro", "faturamento", "lista_materiais", "cronograma", "documentos", "diario_tarefas"].includes(aba);
+    return ["resumo", "financeiro", "faturamento", "lista_materiais", "compras", "cronograma", "documentos", "diario_tarefas"].includes(aba);
   };
   // Filtro unico das obras que o usuario enxerga: quem nao ve todas fica com as do
   // seu escopo (engenheiro: as dele; assistente: as do engenheiro vinculado).
@@ -3658,6 +3659,7 @@ export default function App() {
                     { id: "financeiro", label: "Financeiro", icon: DollarSign },
                     { id: "faturamento", label: "Faturamento", icon: Receipt },
                     { id: "lista_materiais", label: "Lista de Materiais", icon: Boxes },
+                    { id: "compras", label: "Compras", icon: ShoppingCart },
                     { id: "cronograma", label: "Cronograma", icon: Calendar },
                     { id: "documentos", label: "Documentos", icon: FileText },
                     {
@@ -3742,6 +3744,9 @@ export default function App() {
 
             {abaPainelObra === "lista_materiais" && (
               <ListaMateriaisSMA materiais={materiaisSma} />
+            )}
+            {abaPainelObra === "compras" && abaObraPermitida("compras") && obraEcoSelecionada && (
+              <AbaComprasObra idObra={obraEcoSelecionada.id} codigoObra={obraEcoSelecionada.codigo_externo || ""} />
             )}
 
             {abaPainelObra === "rentabilidade" && podeVerRentabilidade && (
