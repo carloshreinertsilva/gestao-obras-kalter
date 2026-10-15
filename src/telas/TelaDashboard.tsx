@@ -134,7 +134,8 @@ export default function TelaDashboard({
                 .select(
                   "id, id_obra, titulo, status, data_vencimento, id_responsavel, obras(codigo_externo, nome)",
                 )
-                .in("id_obra", idsObras),
+                .in("id_obra", idsObras)
+                .not("status", "in", "(concluida,cancelada)"),
             ]);
 
           if (parcelasResp.error) throw parcelasResp.error;
