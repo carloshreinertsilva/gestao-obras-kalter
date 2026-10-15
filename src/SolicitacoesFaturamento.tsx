@@ -64,6 +64,7 @@ export interface SolicitacaoFaturamento {
   motivo_cancelamento: string | null;
   faturado_em: string | null;
   created_at: string;
+  romaneios?: Pick<RomaneioSolicitacao, "numero_romaneio" | "situacao" | "erro">[]; // so nas listas (SELECT_LISTA)
 }
 
 interface ItemSolicitacao {
@@ -843,6 +844,7 @@ export function DetalheSolicitacaoFaturamento({
             <h3 className="font-bold text-lg text-slate-800">SF {sol.numero}</h3>
             <BadgeStatusFaturamento status={sol.status} />
             <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">{tipoTexto(sol.tipo)}</span>
+            <RomaneioResumo romaneios={romaneios} grande />
           </div>
           <p className="text-sm text-slate-500">
             Obra{" "}
@@ -1125,6 +1127,27 @@ const Bloco = ({ titulo, icone, children }: { titulo: string; icone?: React.Reac
   </div>
 );
 
+// romaneio ativo da solicitacao (o gerado no ERP; pendente = robo ainda vai gerar)
+const SELECT_LISTA = "*, romaneios:solicitacoes_faturamento_romaneios(numero_romaneio, situacao, erro, created_at)";
+function RomaneioResumo({ romaneios, grande = false }: { romaneios?: Pick<RomaneioSolicitacao, "numero_romaneio" | "situacao" | "erro">[]; grande?: boolean }) {
+  const ativo = (romaneios || []).find((r) => ["criado", "faturado", "pendente", "erro"].includes(r.situacao));
+  if (!ativo) return grande ? null : <span className="text-slate-300">-</span>;
+  const tam = grande ? "text-xs px-2 py-0.5" : "text-[11px] px-2 py-0.5";
+  if (ativo.situacao === "pendente")
+    return <span className={`${tam} font-bold rounded-full border bg-amber-50 text-amber-700 border-amber-200 whitespace-nowrap`}>Romaneio: gerando...</span>;
+  if (ativo.situacao === "erro")
+    return (
+      <span title={ativo.erro || ""} className={`${tam} font-bold rounded-full border bg-red-50 text-red-700 border-red-200 whitespace-nowrap`}>
+        Romaneio: erro
+      </span>
+    );
+  return (
+    <span className={`${tam} font-bold rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 whitespace-nowrap`}>
+      Romaneio {ativo.numero_romaneio}
+    </span>
+  );
+}
+
 // ------------------------------------------------------------------------------------------------
 // Lista (usada na aba Faturamento da obra e na tela geral)
 // ------------------------------------------------------------------------------------------------
@@ -1149,6 +1172,7 @@ function TabelaSolicitacoes({
             <th className="px-3 py-2 text-left">Solicitante</th>
             <th className="px-3 py-2 text-center">Faturar até</th>
             <th className="px-3 py-2 text-right">Valor</th>
+            <th className="px-3 py-2 text-center">Romaneio</th>
             <th className="px-3 py-2 text-center">Situação</th>
           </tr>
         </thead>
@@ -1166,6 +1190,9 @@ function TabelaSolicitacoes({
                   {atrasada && <AlertTriangle size={12} className="inline ml-1 -mt-0.5" />}
                 </td>
                 <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{formatarMoeda(num(s.valor_aprovado ?? s.valor_solicitado))}</td>
+                <td className="px-3 py-2 text-center whitespace-nowrap">
+                  <RomaneioResumo romaneios={s.romaneios} />
+                </td>
                 <td className="px-3 py-2 text-center">
                   <BadgeStatusFaturamento status={s.status} />
                 </td>
@@ -1198,7 +1225,7 @@ export function SolicitacoesFaturamentoObra({
   const carregar = () =>
     supabase
       .from("solicitacoes_faturamento")
-      .select("*")
+      .select(SELECT_LISTA)
       .eq("id_obra", idObra)
       .order("created_at", { ascending: false })
       .then(({ data }) => setLista((data as SolicitacaoFaturamento[]) || []));
@@ -1299,7 +1326,7 @@ export function TelaFaturamento({
   const carregar = () =>
     supabase
       .from("solicitacoes_faturamento")
-      .select("*")
+      .select(SELECT_LISTA)
       .neq("status", "rascunho")
       .order("created_at", { ascending: false })
       .limit(500)
