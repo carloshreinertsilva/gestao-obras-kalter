@@ -1,6 +1,6 @@
 import { linhaClicavel } from "./teclado";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Download, FileText, Loader2, Paperclip, RotateCcw, Search, Send, X, XCircle } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Download, FileText, Loader2, Paperclip, RotateCcw, Search, Send, Trash2, X, XCircle } from "lucide-react";
 import { supabase } from "./supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda, normalizarNomeArquivo } from "./utils";
 import type { Usuario } from "./types";
@@ -52,6 +52,8 @@ export interface NfTerceiros {
   observacao: string | null;
   arquivo_caminho: string;
   arquivo_nome: string;
+  // NF, boleto, fatura... (o 1o e o arquivo da NF; NFs antigas tem so arquivo_caminho/arquivo_nome)
+  anexos?: AnexoNf[] | null;
   status: StatusNf;
   id_encaminhou: string | null;
   nome_encaminhou: string | null;
@@ -92,9 +94,26 @@ export const BadgeStatusNf = ({ status }: { status: StatusNf }) => (
   </span>
 );
 
+export interface AnexoNf {
+  caminho: string;
+  nome: string;
+  url?: string | null;
+  tamanho?: number | null;
+}
+
+const MAX_ANEXOS = 10;
+const MAX_ARQUIVO = 15 * 1048576;
+const MAX_TOTAL = 20 * 1048576; // limite para caber no e-mail ao fiscal/financeiro
+
+const anexosDa = (nf: NfTerceiros): AnexoNf[] =>
+  nf.anexos?.length ? nf.anexos : nf.arquivo_caminho ? [{ caminho: nf.arquivo_caminho, nome: nf.arquivo_nome }] : [];
+
+const tamanhoTxt = (bytes?: number | null) =>
+  !bytes ? "" : bytes < 1048576 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1048576).toFixed(1).replace(".", ",")} MB`;
+
 const abrirArquivo = async (caminho: string) => {
   const { data: d, error } = await supabase.storage.from(BUCKET).createSignedUrl(caminho, 300);
-  if (error || !d?.signedUrl) return alert("Não foi possível abrir a NF.");
+  if (error || !d?.signedUrl) return alert("Não foi possível abrir o arquivo.");
   window.open(d.signedUrl, "_blank");
 };
 
@@ -479,10 +498,16 @@ function ModalEncaminharNf({
   const [valor, setValor] = useState(devolvida ? String(devolvida.valor).replace(".", ",") : "");
   const [vencimento, setVencimento] = useState(devolvida?.vencimento || "");
   const [obs, setObs] = useState(devolvida?.observacao || "");
-  const [arquivo, setArquivo] = useState<File | null>(null);
+  // anexos ja enviados (reenvio de NF devolvida) que o gestor mantem + arquivos novos escolhidos agora
+  const [mantidos, setMantidos] = useState<AnexoNf[]>(devolvida ? anexosDa(devolvida) : []);
+  const [novos, setNovos] = useState<File[]>([]);
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
 
+  const listaAnexos = [
+    ...mantidos.map((a) => ({ chave: a.caminho, nome: a.nome, tamanho: a.tamanho, remover: () => setMantidos((l) => l.filter((x) => x !== a)) })),
+    ...novos.map((f, i) => ({ chave: `novo-${i}-${f.name}`, nome: f.name, tamanho: f.size, remover: () => setNovos((l) => l.filter((x) => x !== f)) })),
+  ];
   const valorNum = parseFloat(valor.replace(/\./g, "").replace(",", ".")) || 0;
   const acimaDoSaldo = valorNum > pedido.saldo + 0.005;
   const hoje = hojeISO();
@@ -494,25 +519,31 @@ function ModalEncaminharNf({
     if (!emissao) return setErro("Informe a data de emissão.");
     if (valorNum <= 0) return setErro("Informe o valor da NF.");
     if (!vencimento) return setErro("Informe o vencimento.");
-    if (!arquivo && !devolvida) return setErro("Anexe a NF (PDF ou imagem).");
-    if (arquivo && arquivo.size > 15 * 1048576) return setErro("O arquivo passa de 15 MB.");
+    if (!mantidos.length && !novos.length) return setErro("Anexe a NF (PDF ou imagem).");
+    if (mantidos.length + novos.length > MAX_ANEXOS) return setErro(`No máximo ${MAX_ANEXOS} anexos.`);
+    const grande = novos.find((f) => f.size > MAX_ARQUIVO);
+    if (grande) return setErro(`${grande.name} passa de 15 MB.`);
+    if (novos.reduce((t, f) => t + f.size, 0) + mantidos.reduce((t, a) => t + (a.tamanho || 0), 0) > MAX_TOTAL)
+      return setErro("Os anexos passam de 20 MB no total (limite do e-mail). Reduza ou compacte os arquivos.");
     if (acimaDoSaldo && !window.confirm(`O valor (${formatarMoeda(valorNum)}) passa do saldo do pedido (${formatarMoeda(pedido.saldo)}). Encaminhar assim mesmo?`))
       return;
     setEnviando(true);
-    let caminho = devolvida?.arquivo_caminho || "";
-    let nome = devolvida?.arquivo_nome || "";
-    let enviado: string | null = null;
+    const enviados: string[] = [];
     try {
-      if (arquivo) {
-        caminho = `nf/${idObra}/${Date.now()}_${normalizarNomeArquivo(arquivo.name)}`;
-        const { error } = await supabase.storage.from(BUCKET).upload(caminho, arquivo);
-        if (error) throw new Error(`Não foi possível enviar a NF: ${error.message}`);
-        enviado = caminho;
-        nome = arquivo.name;
+      const lista: AnexoNf[] = mantidos.map((a) => ({ ...a }));
+      for (const [i, arq] of novos.entries()) {
+        const caminho = `nf/${idObra}/${Date.now()}_${i}_${normalizarNomeArquivo(arq.name)}`;
+        const { error } = await supabase.storage.from(BUCKET).upload(caminho, arq);
+        if (error) throw new Error(`Não foi possível enviar ${arq.name}: ${error.message}`);
+        enviados.push(caminho);
+        lista.push({ caminho, nome: arq.name, tamanho: arq.size });
       }
-      // link temporario que o robo usa para anexar a NF no e-mail (ele nao tem acesso direto aos arquivos)
-      const { data: assinado, error: errUrl } = await supabase.storage.from(BUCKET).createSignedUrl(caminho, 7 * 86400);
-      if (errUrl || !assinado?.signedUrl) throw new Error("Não foi possível preparar a NF para o e-mail.");
+      // links temporarios que o robo usa para anexar os arquivos no e-mail (ele nao tem acesso direto ao Storage)
+      for (const a of lista) {
+        const { data: assinado, error: errUrl } = await supabase.storage.from(BUCKET).createSignedUrl(a.caminho, 7 * 86400);
+        if (errUrl || !assinado?.signedUrl) throw new Error(`Não foi possível preparar ${a.nome} para o e-mail.`);
+        a.url = assinado.signedUrl;
+      }
       const { error } = await supabase.rpc("nft_encaminhar", {
         p_id: devolvida?.id || null,
         p_id_obra: idObra,
@@ -522,14 +553,15 @@ function ModalEncaminharNf({
         p_valor: valorNum,
         p_vencimento: vencimento,
         p_observacao: obs,
-        p_arquivo_caminho: caminho,
-        p_arquivo_nome: nome,
-        p_arquivo_url: assinado.signedUrl,
+        p_arquivo_caminho: lista[0].caminho,
+        p_arquivo_nome: lista[0].nome,
+        p_arquivo_url: lista[0].url,
+        p_anexos: lista,
       });
       if (error) throw error;
       onFeito();
     } catch (e) {
-      if (enviado) await supabase.storage.from(BUCKET).remove([enviado]);
+      if (enviados.length) await supabase.storage.from(BUCKET).remove(enviados);
       setErro(msgErro(e));
     } finally {
       setEnviando(false);
@@ -542,7 +574,7 @@ function ModalEncaminharNf({
         <div className="p-4 border-b flex justify-between">
           <div>
             <h3 className="font-bold text-lg">{devolvida ? "Reenviar NF devolvida" : "Encaminhar NF de terceiros"}</h3>
-            <p className="text-xs text-slate-400">Vai para o fiscal e o financeiro lançarem e pagarem, com a NF anexada no e-mail.</p>
+            <p className="text-xs text-slate-400">Vai para o fiscal e o financeiro lançarem e pagarem, com os anexos no e-mail.</p>
           </div>
           <button onClick={onFechar} className="text-slate-400">
             <X size={20} />
@@ -589,11 +621,48 @@ function ModalEncaminharNf({
             </p>
           )}
           <div>
-            <label className="block text-xs font-semibold mb-1">NF (PDF ou imagem) {devolvida ? "" : "*"}</label>
-            <label className="border border-dashed rounded-lg px-3 py-3 flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-50">
-              <Paperclip size={15} />
-              {arquivo ? arquivo.name : devolvida ? `Manter ${devolvida.arquivo_nome} (ou escolha outro arquivo)` : "Escolher arquivo…"}
-              <input type="file" accept=".pdf,.xml,image/*" className="hidden" onChange={(e) => setArquivo(e.target.files?.[0] || null)} />
+            <p className="text-xs font-semibold mb-1">Anexos *</p>
+            <p className="text-[11px] text-slate-400 mb-2">
+              A NF e, se houver, boleto, fatura, relatório de medição… (PDF, XML ou imagem · até {MAX_ANEXOS} arquivos, 20&nbsp;MB no
+              total). O primeiro é o arquivo da NF.
+            </p>
+            {listaAnexos.length > 0 && (
+              <ul className="border rounded-lg divide-y mb-2">
+                {listaAnexos.map((a, i) => (
+                  <li key={a.chave} className="flex items-center gap-2 px-3 py-2 text-sm min-w-0">
+                    <FileText size={15} className="shrink-0 text-slate-400" aria-hidden="true" />
+                    <span className="truncate flex-1 min-w-0">{a.nome}</span>
+                    {i === 0 && (
+                      <span className="shrink-0 text-[10px] font-bold uppercase text-[#2A6377] bg-[#2A6377]/10 rounded px-1.5 py-0.5">NF</span>
+                    )}
+                    {a.tamanho ? <span className="shrink-0 text-[11px] text-slate-400 tabular-nums">{tamanhoTxt(a.tamanho)}</span> : null}
+                    <button
+                      type="button"
+                      onClick={a.remover}
+                      title="Remover anexo"
+                      aria-label={`Remover ${a.nome}`}
+                      className="shrink-0 p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <label className="border border-dashed rounded-lg px-3 py-3 flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-50 focus-within:border-[#2A6377]">
+              <Paperclip size={15} aria-hidden="true" />
+              {listaAnexos.length ? "Adicionar mais arquivos…" : "Escolher arquivos…"}
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.xml,image/*"
+                className="sr-only"
+                onChange={(e) => {
+                  const escolhidos = [...(e.target.files || [])];
+                  setNovos((l) => [...l, ...escolhidos.filter((f) => !l.some((x) => x.name === f.name && x.size === f.size))]);
+                  e.target.value = "";
+                }}
+              />
             </label>
           </div>
           <div>
@@ -761,9 +830,19 @@ export function DetalheNfTerceiros({
                 Encaminhada por {nf.nome_encaminhou} em {fmtDataHora(nf.encaminhado_em)} (NT {nf.numero})
               </p>
               {nf.observacao && <p className="whitespace-pre-wrap border rounded-lg p-3">{nf.observacao}</p>}
-              <button onClick={() => abrirArquivo(nf.arquivo_caminho)} className="flex items-center gap-2 text-[#2A6377] font-semibold hover:underline">
-                <FileText size={15} /> {nf.arquivo_nome}
-              </button>
+              <div>
+                <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Anexos ({anexosDa(nf).length})</p>
+                <ul className="space-y-1">
+                  {anexosDa(nf).map((a) => (
+                    <li key={a.caminho}>
+                      <button onClick={() => abrirArquivo(a.caminho)} className="flex items-center gap-2 text-[#2A6377] font-semibold hover:underline text-left">
+                        <FileText size={15} className="shrink-0" aria-hidden="true" /> <span className="break-all">{a.nome}</span>
+                        {a.tamanho ? <span className="text-[11px] font-normal text-slate-400">{tamanhoTxt(a.tamanho)}</span> : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
               <div>
                 <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Histórico</p>
                 <ul className="space-y-1">
