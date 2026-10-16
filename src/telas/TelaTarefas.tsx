@@ -32,7 +32,7 @@ export default function TelaTarefas({
             Filtrar:
           </label>
           <select
-            className="border rounded-lg p-2 outline-none font-medium bg-white shadow-sm w-full sm:w-auto shrinking-0 max-w-full"
+            className="border rounded-lg p-2 outline-none focus:border-[#2A6377] font-medium bg-white shadow-sm w-full sm:w-auto shrinking-0 max-w-full"
             value={filtroObraKanban}
             onChange={(e) => setFiltroObraKanban(e.target.value)}
           >

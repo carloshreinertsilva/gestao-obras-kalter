@@ -255,10 +255,10 @@ export default function TimelineObra({
               </h4>
               <textarea
                 rows={3}
-                placeholder="Houve alguma alteração no projeto hoje? Registre aqui..."
+                placeholder="Houve alguma alteração no projeto hoje? Registre aqui…"
                 value={novoDiarioTexto}
                 onChange={(e) => setNovoDiarioTexto(e.target.value)}
-                className="w-full border rounded-lg p-2 outline-none text-sm mb-2"
+                className="w-full border rounded-lg p-2 outline-none focus:border-[#2A6377] text-sm mb-2"
               ></textarea>
               <div className="flex gap-2">
                 <button
@@ -292,7 +292,7 @@ export default function TimelineObra({
               </h4>
               <div className="flex gap-2 mb-2">
                 <select
-                  className="border rounded-lg p-2 text-sm outline-none"
+                  className="border rounded-lg p-2 text-sm outline-none focus:border-[#2A6377]"
                   value={novaOcorrenciaTipo}
                   onChange={(e) => setNovaOcorrenciaTipo(e.target.value)}
                 >
@@ -304,10 +304,10 @@ export default function TimelineObra({
                 </select>
                 <input
                   type="text"
-                  placeholder="Descrição..."
+                  placeholder="Descrição…"
                   value={novaOcorrenciaDescricao}
                   onChange={(e) => setNovaOcorrenciaDescricao(e.target.value)}
-                  className="flex-1 border rounded-lg p-2 text-sm outline-none"
+                  className="flex-1 border rounded-lg p-2 text-sm outline-none focus:border-[#2A6377]"
                   onKeyDown={(e) => e.key === "Enter" && salvarOcorrencia()}
                 />
               </div>
@@ -331,7 +331,7 @@ export default function TimelineObra({
         </h4>
         {carregando && historico.length === 0 ? (
           <p className="text-sm text-gray-500 flex items-center gap-2">
-            <Loader2 className="animate-spin" size={14} /> Carregando...
+            <Loader2 className="animate-spin" size={14} /> Carregando…
           </p>
         ) : historico.length === 0 ? (
           <p className="text-sm text-gray-500">Sem histórico.</p>

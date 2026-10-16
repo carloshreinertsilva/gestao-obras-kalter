@@ -758,7 +758,7 @@ export default function TelaReunioes({
                     1. Selecione o Gestor
                   </label>
                   <select
-                    className="w-full border rounded-lg p-3 outline-none font-bold bg-gray-50 max-w-full"
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] font-bold bg-gray-50 max-w-full"
                     value={gestorSelecionadoAta}
                     onChange={(e) => {
                       setGestorSelecionadoAta(e.target.value);
@@ -778,7 +778,7 @@ export default function TelaReunioes({
                     2. Selecione a Obra
                   </label>
                   <select
-                    className="w-full border rounded-lg p-3 outline-none font-bold bg-gray-50 max-w-full"
+                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] font-bold bg-gray-50 max-w-full"
                     value={reuniaoForm.id_obra}
                     onChange={(e) =>
                       setReuniaoForm({
@@ -789,7 +789,7 @@ export default function TelaReunioes({
                   >
                     <option value="">
                       {gestorSelecionadoAta
-                        ? "Selecione..."
+                        ? "Selecione…"
                         : "Selecione um gestor primeiro (ou escolha aqui)"}
                     </option>
                     {obrasLista
@@ -920,7 +920,7 @@ export default function TelaReunioes({
                     </label>
                     <input
                       type="date"
-                      className="border rounded-lg p-1.5 text-sm outline-none"
+                      className="border rounded-lg p-1.5 text-sm outline-none focus:border-[#2A6377]"
                       value={reuniaoForm.data_reuniao}
                       onChange={(e) =>
                         setReuniaoForm({
@@ -936,7 +936,7 @@ export default function TelaReunioes({
                     {carregandoContextoAta ? (
                       <p className="text-xs text-slate-400 flex items-center gap-2">
                         <Loader2 className="animate-spin" size={14} />{" "}
-                        Carregando contexto da obra...
+                        Carregando contexto da obra…
                       </p>
                     ) : contextoObraAta &&
                       (contextoObraAta.tarefasAtrasadas.length > 0 ||
@@ -982,7 +982,7 @@ export default function TelaReunioes({
                 <label className="block text-sm mb-1">Resumo Geral</label>
                 <textarea
                   rows={5}
-                  className="w-full border rounded-lg p-3 outline-none"
+                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
                   value={reuniaoForm.resumo_geral}
                   onChange={(e) =>
                     setReuniaoForm({
@@ -1004,7 +1004,7 @@ export default function TelaReunioes({
                         Tipo
                       </label>
                       <select
-                        className="border rounded-lg p-2 flex-1 outline-none text-sm"
+                        className="border rounded-lg p-2 flex-1 outline-none focus:border-[#2A6377] text-sm"
                         value={novaOcorrencia.tipo}
                         onChange={(e) =>
                           setNovaOcorrencia({
@@ -1022,8 +1022,8 @@ export default function TelaReunioes({
                       </select>
                     </div>
                     <textarea
-                      className="border rounded-lg p-3 w-full flex-1 min-h-[110px] outline-none text-sm resize-none"
-                      placeholder="Descreva a ocorrência... (Ctrl+Enter para adicionar)"
+                      className="border rounded-lg p-3 w-full flex-1 min-h-[110px] outline-none focus:border-[#2A6377] text-sm resize-none"
+                      placeholder="Descreva a ocorrência… (Ctrl+Enter para adicionar)"
                       value={novaOcorrencia.descricao}
                       onChange={(e) =>
                         setNovaOcorrencia({
@@ -1076,8 +1076,8 @@ export default function TelaReunioes({
                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-2 mb-2 w-full">
                     <input
                       type="text"
-                      className="border rounded-lg p-2 w-full outline-none text-sm"
-                      placeholder="O que precisa ser feito..."
+                      className="border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm"
+                      placeholder="O que precisa ser feito…"
                       value={novaTarefa.titulo}
                       onChange={(e) =>
                         setNovaTarefa({
@@ -1088,7 +1088,7 @@ export default function TelaReunioes({
                     />
                     <input
                       type="date"
-                      className="border rounded-lg p-2 w-full outline-none text-sm"
+                      className="border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm"
                       value={novaTarefa.data_vencimento}
                       onChange={(e) =>
                         setNovaTarefa({
@@ -1100,8 +1100,8 @@ export default function TelaReunioes({
                   </div>
                   <textarea
                     rows={2}
-                    className="border rounded-lg p-2 w-full outline-none text-sm mb-2"
-                    placeholder="Descrição / contexto da tarefa..."
+                    className="border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm mb-2"
+                    placeholder="Descrição / contexto da tarefa…"
                     value={novaTarefa.descricao}
                     onChange={(e) =>
                       setNovaTarefa({
@@ -1112,7 +1112,7 @@ export default function TelaReunioes({
                   />
                   <div className="flex flex-wrap gap-2 w-full items-start">
                     <select
-                      className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none text-sm"
+                      className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none focus:border-[#2A6377] text-sm"
                       value={novaTarefa.id_responsavel}
                       onChange={(e) =>
                         setNovaTarefa({
@@ -1121,7 +1121,7 @@ export default function TelaReunioes({
                         })
                       }
                     >
-                      <option value="">Atribuir a...</option>
+                      <option value="">Atribuir a…</option>
                       {listaUsuarios.map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.nome}
@@ -1129,7 +1129,7 @@ export default function TelaReunioes({
                       ))}
                     </select>
                     <select
-                      className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none text-sm"
+                      className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none focus:border-[#2A6377] text-sm"
                       value={novaTarefa.prioridade}
                       onChange={(e) =>
                         setNovaTarefa({
@@ -1248,7 +1248,7 @@ export default function TelaReunioes({
                 {enviandoEmailAta ? (
                   <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 mb-4 text-sm flex items-center gap-2">
                     <Loader2 className="animate-spin" size={16} /> Enviando
-                    e-mail automaticamente...
+                    e-mail automaticamente…
                   </div>
                 ) : statusEnvioEmailAta?.ok ? (
                   <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 mb-4 text-sm">

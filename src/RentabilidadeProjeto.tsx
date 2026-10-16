@@ -379,8 +379,8 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
               type="text"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar família..."
-              className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none"
+              placeholder="Buscar família…"
+              className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377]"
             />
           </div>
         </div>

@@ -304,8 +304,8 @@ export default function ReunioesHistorico({
               type="text"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar obra, gestor ou palavra..."
-              className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none"
+              placeholder="Buscar obra, gestor ou palavra…"
+              className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377]"
             />
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -332,7 +332,7 @@ export default function ReunioesHistorico({
         <div className="overflow-y-auto flex-1 min-h-0">
           {carregando ? (
             <p className="p-4 text-sm text-slate-400 flex items-center gap-2">
-              <Loader2 className="animate-spin" size={14} /> Carregando reuniões...
+              <Loader2 className="animate-spin" size={14} /> Carregando reuniões…
             </p>
           ) : filtradas.length === 0 ? (
             <p className="p-4 text-sm text-slate-400">Nenhuma reunião encontrada.</p>

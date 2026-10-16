@@ -175,19 +175,19 @@ export default function AnexosObra({
               onChange={(e) =>
                 setArquivoSelecionado(e.target.files?.[0] || null)
               }
-              className="border rounded-lg p-2 text-sm outline-none md:col-span-1"
+              className="border rounded-lg p-2 text-sm outline-none focus:border-[#2A6377] md:col-span-1"
             />
             <input
               type="text"
-              placeholder="Legenda (opcional)..."
+              placeholder="Legenda (opcional)…"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
-              className="border rounded-lg p-2 text-sm outline-none md:col-span-1"
+              className="border rounded-lg p-2 text-sm outline-none focus:border-[#2A6377] md:col-span-1"
             />
             <select
               value={idOcorrenciaVinculada}
               onChange={(e) => setIdOcorrenciaVinculada(e.target.value)}
-              className="border rounded-lg p-2 text-sm outline-none md:col-span-1"
+              className="border rounded-lg p-2 text-sm outline-none focus:border-[#2A6377] md:col-span-1"
             >
               <option value="">Sem vínculo com ocorrência</option>
               {ocorrencias.map((oc) => (
@@ -214,7 +214,7 @@ export default function AnexosObra({
 
       {carregando ? (
         <p className="text-sm text-gray-500 flex items-center gap-2">
-          <Loader2 className="animate-spin" size={14} /> Carregando...
+          <Loader2 className="animate-spin" size={14} /> Carregando…
         </p>
       ) : anexos.length === 0 ? (
         <p className="text-sm text-gray-500">Nenhum anexo ainda.</p>

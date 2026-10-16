@@ -113,7 +113,7 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
   if (compras === null)
     return (
       <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
-        <Loader2 className="animate-spin" size={16} /> Carregando as compras da obra...
+        <Loader2 className="animate-spin" size={16} /> Carregando as compras da obra…
       </p>
     );
 
@@ -187,7 +187,7 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
               <input
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Material, fornecedor, pedido..."
+                placeholder="Material, fornecedor, pedido…"
                 className="border rounded-lg pl-7 pr-2 py-1.5 w-52"
               />
             </div>

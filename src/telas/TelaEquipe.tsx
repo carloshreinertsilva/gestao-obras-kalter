@@ -218,7 +218,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                   }
                   className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full"
                 >
-                  <option value="">Selecione...</option>
+                  <option value="">Selecione…</option>
                   {listaUsuarios
                     .filter((u) => u.perfil === "engenheiro" && u.id !== novoUsuario.id)
                     .map((u) => (

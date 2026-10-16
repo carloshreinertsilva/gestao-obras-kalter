@@ -3,8 +3,10 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { registrarServiceWorker } from './push'
+import { instalarAtalhosGlobais } from './teclado'
 
 registrarServiceWorker()
+instalarAtalhosGlobais()
 
 // As telas sao baixadas so quando abertas. Se sair versao nova com o app aberto, os arquivos
 // da versao antiga deixam de existir: recarrega a pagina uma vez para pegar a versao nova

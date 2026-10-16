@@ -150,8 +150,8 @@ function FiltroColuna({
               type="text"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar..."
-              className="w-full border rounded px-2 py-1 text-xs mb-2 outline-none"
+              placeholder="Buscar…"
+              className="w-full border rounded px-2 py-1 text-xs mb-2 outline-none focus:border-[#2A6377]"
               autoFocus
             />
             <div className="flex justify-between text-[11px] text-violet-700 font-bold mb-1 px-0.5">
@@ -522,8 +522,8 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                 type="text"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar material, SMA, solicitante..."
-                className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none"
+                placeholder="Buscar material, SMA, solicitante…"
+                className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377]"
               />
             </div>
             <div className="inline-flex rounded-lg border overflow-hidden text-sm">

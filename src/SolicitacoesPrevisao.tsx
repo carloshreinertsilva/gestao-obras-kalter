@@ -281,7 +281,7 @@ export function ModalSolicitarPrevisao({
               onChange={(e) => setDestino(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
             >
-              <option value="">Selecione...</option>
+              <option value="">Selecione…</option>
               {lista.map(opcaoFamilia)}
             </select>
           </div>
@@ -337,7 +337,7 @@ export function ModalSolicitarPrevisao({
                           className={`w-full border rounded-lg px-3 py-2 text-sm bg-white ${semSaldo ? "border-red-400 bg-red-50" : ""}`}
                         >
                           <option value="">
-                            {listaOrigens.length ? "Selecione a família de origem..." : "Nenhuma família com saldo em aberto"}
+                            {listaOrigens.length ? "Selecione a família de origem…" : "Nenhuma família com saldo em aberto"}
                           </option>
                           {listaOrigens.filter((f) => f.codigo_projeto !== destino).map(opcaoFamilia)}
                         </select>
@@ -727,8 +727,8 @@ export function CartaoSolicitacao({
             )}
           </>
         )}
-        {s.desfazer_status === "simulando" && <span className="text-xs text-slate-500">Simulando o desfazer no ERP...</span>}
-        {s.desfazer_status === "confirmado" && <span className="text-xs text-slate-500">Desfazendo no ERP...</span>}
+        {s.desfazer_status === "simulando" && <span className="text-xs text-slate-500">Simulando o desfazer no ERP…</span>}
+        {s.desfazer_status === "confirmado" && <span className="text-xs text-slate-500">Desfazendo no ERP…</span>}
       </div>
     </div>
   );
@@ -823,8 +823,8 @@ export function PainelSolicitacoes({
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar obra, família, solicitante..."
-            className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none bg-white"
+            placeholder="Buscar obra, família, solicitante…"
+            className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377] bg-white"
           />
         </div>
       </div>
@@ -841,7 +841,7 @@ export function PainelSolicitacoes({
       </div>
       {carregando ? (
         <p className="text-sm text-slate-400 flex items-center gap-2">
-          <Loader2 size={14} className="animate-spin" /> Carregando...
+          <Loader2 size={14} className="animate-spin" /> Carregando…
         </p>
       ) : visiveis.length === 0 ? (
         <p className="text-sm text-slate-400 bg-white border rounded-xl p-6 text-center">Nenhuma solicitação aqui.</p>

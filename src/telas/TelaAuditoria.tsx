@@ -1,3 +1,4 @@
+import { linhaClicavel } from "../teclado";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react";
 import { supabase } from "../supabase";
@@ -172,13 +173,13 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
           </select>
           <div className="relative">
             <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar..." className="border rounded-lg pl-7 pr-2 py-1.5 w-40" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…" className="border rounded-lg pl-7 pr-2 py-1.5 w-40" />
           </div>
         </div>
 
         {carregando ? (
           <p className="p-6 text-sm text-slate-400 flex items-center gap-2">
-            <Loader2 className="animate-spin" size={16} /> Carregando...
+            <Loader2 className="animate-spin" size={16} /> Carregando…
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -206,7 +207,7 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
                     const campos = Array.from(new Set([...Object.keys(r.antes || {}), ...Object.keys(r.depois || {})]));
                     return (
                       <Fragment key={r.id}>
-                        <tr className="border-t hover:bg-slate-50 cursor-pointer" onClick={() => setAberto(aberto === r.id ? null : r.id)}>
+                        <tr className="border-t hover:bg-slate-50 cursor-pointer" {...linhaClicavel(() => setAberto(aberto === r.id ? null : r.id))}>
                           <td className="px-3 py-2 text-slate-400">{aberto === r.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{formatarDataHora(r.em)}</td>
                           <td className="px-3 py-2">{r.nome_usuario || r.email}</td>

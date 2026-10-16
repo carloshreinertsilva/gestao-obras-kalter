@@ -1,3 +1,4 @@
+import { linhaClicavel } from "./teclado";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -318,7 +319,7 @@ function ModalSolicitarFaturamento({
         <div className="overflow-y-auto p-4 space-y-4">
           {itens === null ? (
             <p className="text-sm text-slate-400 flex items-center gap-2">
-              <Loader2 className="animate-spin" size={16} /> Carregando itens do pedido...
+              <Loader2 className="animate-spin" size={16} /> Carregando itens do pedido…
             </p>
           ) : itens.length === 0 ? (
             <p className="text-sm text-slate-500 bg-slate-50 border rounded-lg p-4">
@@ -457,14 +458,14 @@ function ModalSolicitarFaturamento({
                 onChange={(e) => setObservacao(e.target.value)}
                 rows={2}
                 className="border rounded-lg px-3 py-2 w-full text-sm"
-                placeholder="Ex.: entrega parcial do skid, faturar junto com..."
+                placeholder="Ex.: entrega parcial do skid, faturar junto com…"
               />
             </div>
           </div>
 
           <div>
             <label className="inline-flex items-center gap-2 px-3 py-2 border rounded-lg text-sm text-slate-600 cursor-pointer hover:bg-slate-50">
-              <Paperclip size={15} /> Anexar romaneio, fotos, aceite...
+              <Paperclip size={15} /> Anexar romaneio, fotos, aceite…
               <input
                 type="file"
                 multiple
@@ -704,11 +705,11 @@ function ModalConferencia({
                 <label className="block text-xs font-semibold mb-1">Volumes (soma dos itens)</label>
                 <p className="border rounded-lg px-2 py-2 w-full text-sm bg-slate-50 font-semibold">{totalVolumes}</p>
               </div>
-              <Campo rotulo="Espécie" valor={especie} onChange={setEspecie} placeholder="caixa, palete..." />
+              <Campo rotulo="Espécie" valor={especie} onChange={setEspecie} placeholder="caixa, palete…" />
               <div className="col-span-2 md:col-span-4">
                 <label className="block text-xs font-semibold mb-1">Transportadora *</label>
                 <select value={codTransp} onChange={(e) => setCodTransp(e.target.value)} className="border rounded-lg px-2 py-2 w-full bg-white text-sm">
-                  <option value="">Selecione...</option>
+                  <option value="">Selecione…</option>
                   {transportadoras.map((t) => (
                     <option key={t.codigo} value={t.codigo}>
                       {t.nome}
@@ -823,7 +824,7 @@ export function DetalheSolicitacaoFaturamento({
   if (!sol)
     return (
       <Moldura onFechar={onFechar}>
-        <p className="p-6 text-sm text-slate-400">{erro || "Carregando..."}</p>
+        <p className="p-6 text-sm text-slate-400">{erro || "Carregando…"}</p>
       </Moldura>
     );
 
@@ -1134,7 +1135,7 @@ function RomaneioResumo({ romaneios, grande = false }: { romaneios?: Pick<Romane
   if (!ativo) return grande ? null : <span className="text-slate-300">-</span>;
   const tam = grande ? "text-xs px-2 py-0.5" : "text-[11px] px-2 py-0.5";
   if (ativo.situacao === "pendente")
-    return <span className={`${tam} font-bold rounded-full border bg-amber-50 text-amber-700 border-amber-200 whitespace-nowrap`}>Romaneio: gerando...</span>;
+    return <span className={`${tam} font-bold rounded-full border bg-amber-50 text-amber-700 border-amber-200 whitespace-nowrap`}>Romaneio: gerando…</span>;
   if (ativo.situacao === "erro")
     return (
       <span title={ativo.erro || ""} className={`${tam} font-bold rounded-full border bg-red-50 text-red-700 border-red-200 whitespace-nowrap`}>
@@ -1180,7 +1181,7 @@ function TabelaSolicitacoes({
           {lista.map((s) => {
             const atrasada = ["aguardando_logistica", "aguardando_fiscal"].includes(s.status) && s.data_desejada && s.data_desejada < hoje;
             return (
-              <tr key={s.id} onClick={() => onAbrir(s.id)} className="border-t hover:bg-slate-50 cursor-pointer">
+              <tr key={s.id} {...linhaClicavel(() => onAbrir(s.id))} className="border-t hover:bg-slate-50 cursor-pointer">
                 <td className="px-3 py-2 font-bold text-[#2A6377]">SF {s.numero}</td>
                 {mostrarObra && <td className="px-3 py-2">{s.codigo_obra}</td>}
                 <td className="px-3 py-2">{tipoTexto(s.tipo)}</td>
@@ -1258,7 +1259,7 @@ export function SolicitacoesFaturamentoObra({
         )}
       </div>
       {lista === null ? (
-        <p className="p-4 text-sm text-slate-400">Carregando...</p>
+        <p className="p-4 text-sm text-slate-400">Carregando…</p>
       ) : mostradas.length === 0 ? (
         <p className="p-4 text-sm text-slate-400">
           {lista.length === 0 ? "Nenhuma solicitação de faturamento nesta obra." : "Nenhuma solicitação em andamento."}
@@ -1389,7 +1390,7 @@ export function TelaFaturamento({
           </select>
         </div>
         {lista === null ? (
-          <p className="p-4 text-sm text-slate-400">Carregando...</p>
+          <p className="p-4 text-sm text-slate-400">Carregando…</p>
         ) : filtradas.length === 0 ? (
           <p className="p-6 text-sm text-slate-400 text-center">Nenhuma solicitação com esse filtro.</p>
         ) : (

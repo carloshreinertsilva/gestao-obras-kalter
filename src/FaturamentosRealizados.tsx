@@ -1,3 +1,4 @@
+import { linhaClicavel } from "./teclado";
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import {
@@ -214,14 +215,14 @@ export default function FaturamentosRealizados({
               type="text"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar NF, grupo ou família..."
-              className="border rounded-lg pl-8 pr-3 py-1.5 outline-none w-64 max-w-full"
+              placeholder="Buscar NF, grupo ou família…"
+              className="border rounded-lg pl-8 pr-3 py-1.5 outline-none focus:border-[#2A6377] w-64 max-w-full"
             />
           </div>
           <select
             value={filtroTipo}
             onChange={(e) => setFiltroTipo(e.target.value as "todos" | Tipo)}
-            className="border rounded-lg px-3 py-1.5 outline-none bg-white"
+            className="border rounded-lg px-3 py-1.5 outline-none focus:border-[#2A6377] bg-white"
           >
             <option value="todos">Todos os tipos</option>
             <option value="material">Material</option>
@@ -436,7 +437,7 @@ function NotaLinha({
 }) {
   return (
     <>
-      <tr onClick={onAlternar} className={`border-t cursor-pointer hover:bg-slate-50 ${aberto ? "bg-slate-50" : ""}`}>
+      <tr {...linhaClicavel(onAlternar)} className={`border-t cursor-pointer hover:bg-slate-50 ${aberto ? "bg-slate-50" : ""}`}>
         <td className="p-3 text-slate-400">
           {aberto ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </td>

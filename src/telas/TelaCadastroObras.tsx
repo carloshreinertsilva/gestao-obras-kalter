@@ -353,7 +353,7 @@ export default function TelaCadastroObras({
                 }
                 className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full bg-white"
               >
-                <option value="">Selecione...</option>
+                <option value="">Selecione…</option>
                 {listaUsuarios
                   .filter((user) => user.perfil === "engenheiro")
                   .map((user) => (

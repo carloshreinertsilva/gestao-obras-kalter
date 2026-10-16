@@ -101,7 +101,7 @@ export function AtivarPush() {
           onClick={() => executar(ativarPush)}
           className="mt-2 px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-xs font-semibold hover:bg-[#1e4857] disabled:opacity-50"
         >
-          {ocupado ? "Ativando..." : "Ativar avisos"}
+          {ocupado ? "Ativando…" : "Ativar avisos"}
         </button>
         {erro && <p className="text-xs text-red-600 mt-2">{erro}</p>}
       </div>

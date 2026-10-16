@@ -1,3 +1,43 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* Foco visivel ao navegar pelo teclado (Tab) - nao aparece no clique do mouse */
+  :focus-visible {
+    outline: 2px solid #2a6377;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  /* No menu lateral (fundo azul) o contorno fica branco */
+  aside :focus-visible {
+    outline-color: #fff;
+  }
+  /* Numeros com a mesma largura nas tabelas: valores e quantidades alinham coluna a coluna */
+  td,
+  th {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Toque no celular: sem atraso de duplo toque para zoom */
+  button,
+  a,
+  [role="button"],
+  [tabindex="0"] {
+    touch-action: manipulation;
+  }
+  /* Modais e gaveta: rolar ate o fim nao arrasta a pagina de fundo */
+  .fixed.inset-0,
+  .fixed.inset-0 * {
+    overscroll-behavior: contain;
+  }
+  /* Quem pediu menos movimento no sistema: sem animacoes decorativas (spinner continua) */
+  @media (prefers-reduced-motion: reduce) {
+    *:not(.animate-spin),
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

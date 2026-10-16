@@ -130,7 +130,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
   if (carregando)
     return (
       <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
-        <Loader2 className="animate-spin" size={16} /> Carregando o painel de compras...
+        <Loader2 className="animate-spin" size={16} /> Carregando o painel de compras…
       </p>
     );
 
@@ -217,7 +217,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
             </label>
             <div className="relative">
               <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Material, SMA..." className="border rounded-lg pl-7 pr-2 py-1.5 w-40" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Material, SMA…" className="border rounded-lg pl-7 pr-2 py-1.5 w-40" />
             </div>
             <button
               onClick={() =>

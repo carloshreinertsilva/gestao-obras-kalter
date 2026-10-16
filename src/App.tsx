@@ -110,7 +110,7 @@ const TelaTarefas = lazy(() => import("./telas/TelaTarefas"));
 
 const CarregandoTela = () => (
   <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400">
-    <Loader2 className="animate-spin" size={18} /> Carregando...
+    <Loader2 className="animate-spin" size={18} /> Carregando…
   </div>
 );
 
@@ -2614,7 +2614,7 @@ export default function App() {
                     onChange={(e) =>
                       atualizarDataTarefa(tarefaSelecionada.id, e.target.value)
                     }
-                    className="font-bold bg-transparent outline-none cursor-pointer w-full text-slate-700 p-0 m-0"
+                    className="font-bold bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]/40 rounded cursor-pointer w-full text-slate-700 p-0 m-0"
                   />
                 </div>
               </div>
@@ -2670,7 +2670,7 @@ export default function App() {
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Adicionar um comentário..."
+                    placeholder="Adicionar um comentário…"
                     value={novoComentarioTexto}
                     onChange={(e) => setNovoComentarioTexto(e.target.value)}
                     onKeyPress={(e) =>
@@ -2878,8 +2878,8 @@ export default function App() {
                   rows={3}
                   placeholder={
                     acaoCronogramaModal === "editar_previsto"
-                      ? "Ex.: prazo ajustado após alinhamento com engenharia/compras..."
-                      : "Ex.: início validado em reunião, etapa finalizada com pendências, aguardando cliente..."
+                      ? "Ex.: prazo ajustado após alinhamento com engenharia/compras…"
+                      : "Ex.: início validado em reunião, etapa finalizada com pendências, aguardando cliente…"
                   }
                   value={formCronogramaModal.observacao || ""}
                   onChange={(e) =>
@@ -3223,7 +3223,7 @@ export default function App() {
                       }))
                     }
                     className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-                    placeholder="Ex.: Cancelado pelo cliente, revisão comercial, perda do projeto..."
+                    placeholder="Ex.: Cancelado pelo cliente, revisão comercial, perda do projeto…"
                   />
                 </div>
               </div>

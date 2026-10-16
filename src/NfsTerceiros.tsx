@@ -1,3 +1,4 @@
+import { linhaClicavel } from "./teclado";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Download, FileText, Loader2, Paperclip, RotateCcw, Search, Send, X, XCircle } from "lucide-react";
 import { supabase } from "./supabase";
@@ -172,7 +173,7 @@ export function ServicosTerceirosObra({
   if (parcelas === null)
     return (
       <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
-        <Loader2 className="animate-spin" size={16} /> Carregando os pedidos de serviço...
+        <Loader2 className="animate-spin" size={16} /> Carregando os pedidos de serviço…
       </p>
     );
 
@@ -229,7 +230,7 @@ export function ServicosTerceirosObra({
             </select>
             <div className="relative">
               <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Pedido, fornecedor, NF..." className="border rounded-lg pl-7 pr-2 py-1.5 w-52" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Pedido, fornecedor, NF…" className="border rounded-lg pl-7 pr-2 py-1.5 w-52" />
             </div>
             <button
               onClick={() =>
@@ -350,7 +351,7 @@ function FragmentoPedido({
   const hoje = hojeISO();
   return (
     <>
-      <tr className="border-t hover:bg-slate-50 align-top cursor-pointer" onClick={onAlternar}>
+      <tr className="border-t hover:bg-slate-50 align-top cursor-pointer" {...linhaClicavel(onAlternar)}>
         <td className="px-3 py-2 whitespace-nowrap">
           <span className="font-semibold flex items-center gap-1">
             {aberto ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {p.nr_pedido}
@@ -591,7 +592,7 @@ function ModalEncaminharNf({
             <label className="block text-xs font-semibold mb-1">NF (PDF ou imagem) {devolvida ? "" : "*"}</label>
             <label className="border border-dashed rounded-lg px-3 py-3 flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-50">
               <Paperclip size={15} />
-              {arquivo ? arquivo.name : devolvida ? `Manter ${devolvida.arquivo_nome} (ou escolha outro arquivo)` : "Escolher arquivo..."}
+              {arquivo ? arquivo.name : devolvida ? `Manter ${devolvida.arquivo_nome} (ou escolha outro arquivo)` : "Escolher arquivo…"}
               <input type="file" accept=".pdf,.xml,image/*" className="hidden" onChange={(e) => setArquivo(e.target.files?.[0] || null)} />
             </label>
           </div>
@@ -714,7 +715,7 @@ export function DetalheNfTerceiros({
           <X size={20} />
         </button>
         {!nf ? (
-          <p className="p-6 text-sm text-slate-400">{erro || "Carregando..."}</p>
+          <p className="p-6 text-sm text-slate-400">{erro || "Carregando…"}</p>
         ) : (
           <>
             <div className="p-4 border-b pr-10">
@@ -838,7 +839,7 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
   if (nfs === null)
     return (
       <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
-        <Loader2 className="animate-spin" size={16} /> Carregando as NFs de terceiros...
+        <Loader2 className="animate-spin" size={16} /> Carregando as NFs de terceiros…
       </p>
     );
   const termo = busca.trim().toLowerCase();
@@ -883,7 +884,7 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
           </select>
           <div className="relative">
             <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="NF, fornecedor, obra, pedido..." className="border rounded-lg pl-7 pr-2 py-1.5 w-56" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="NF, fornecedor, obra, pedido…" className="border rounded-lg pl-7 pr-2 py-1.5 w-56" />
           </div>
           <button
             onClick={() =>
@@ -925,7 +926,7 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
               {filtradas.map((n) => {
                 const vencida = !["paga", "cancelada"].includes(n.status) && n.vencimento < hoje;
                 return (
-                  <tr key={n.id} className="border-t hover:bg-slate-50 cursor-pointer" onClick={() => onAbrir(n.id)}>
+                  <tr key={n.id} className="border-t hover:bg-slate-50 cursor-pointer" {...linhaClicavel(() => onAbrir(n.id))}>
                     <td className="px-3 py-2">
                       <b>{n.fornecedor}</b>
                       <span className="block text-[11px] text-slate-500">
