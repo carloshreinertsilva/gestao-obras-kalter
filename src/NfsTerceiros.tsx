@@ -88,6 +88,20 @@ const fmtDataHora = (v?: string | null) =>
 const msgErro = (e: any) => String(e?.message || e || "Erro desconhecido.").replace(/^.*?ERROR:\s*/, "");
 const hojeISO = () => new Date().toLocaleDateString("sv-SE");
 
+// data AAAA-MM-DD + n dias (meio-dia local: sem pular dia em horario de verao)
+const somarDias = (iso: string, dias: number) => {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + dias);
+  return d.toLocaleDateString("sv-SE");
+};
+
+// botoes de sugestao de vencimento no "Encaminhar NF", pelo tipo da NF (dias a partir de hoje)
+const PRAZOS_VENCIMENTO = [
+  { rotulo: "Material", dias: 28 },
+  { rotulo: "Supervisão", dias: 10 },
+  { rotulo: "Mão de obra", dias: 15 },
+];
+
 export const BadgeStatusNf = ({ status }: { status: StatusNf }) => (
   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${STATUS_NF[status]?.classe}`}>
     {STATUS_NF[status]?.rotulo || status}
@@ -608,7 +622,29 @@ function ModalEncaminharNf({
             <Campo rotulo="Número da NF *" valor={numero} onChange={setNumero} />
             <Campo rotulo="Valor da NF (R$) *" valor={valor} onChange={setValor} placeholder="0,00" decimal />
             <Campo rotulo="Data de emissão *" valor={emissao} onChange={setEmissao} tipo="date" max={hoje} />
-            <Campo rotulo="Vencimento *" valor={vencimento} onChange={setVencimento} tipo="date" min={emissao || undefined} />
+            <div>
+              <Campo rotulo="Vencimento *" valor={vencimento} onChange={setVencimento} tipo="date" min={emissao || undefined} />
+              {/* sugestao de vencimento pelo tipo da NF (dias a partir de hoje) */}
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {PRAZOS_VENCIMENTO.map((p) => {
+                  const data = somarDias(hoje, p.dias);
+                  const ativo = vencimento === data;
+                  return (
+                    <button
+                      key={p.rotulo}
+                      type="button"
+                      onClick={() => setVencimento(data)}
+                      title={`Vencimento em ${formatarDataSegura(data)} (hoje + ${p.dias} dias)`}
+                      className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                        ativo ? "bg-[#2A6377] border-[#2A6377] text-white" : "bg-white text-slate-600 hover:border-[#2A6377] hover:text-[#2A6377]"
+                      }`}
+                    >
+                      {p.rotulo} <b className="tabular-nums">+{p.dias}</b>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
           {acimaDoSaldo && (
             <p className="text-xs text-amber-700 flex items-center gap-1">
