@@ -25,6 +25,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
     aprova_faturamento: false,
     recebe_copia_faturamento: false,
     recebe_nf_terceiros: false,
+    recebe_alerta_sistema: false,
     login_erp: "",
   });
   const [salvando, setSalvando] = useState(false);
@@ -57,6 +58,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
         aprova_faturamento: Boolean(novoUsuario.aprova_faturamento),
         recebe_copia_faturamento: Boolean(novoUsuario.recebe_copia_faturamento),
         recebe_nf_terceiros: Boolean(novoUsuario.recebe_nf_terceiros),
+        recebe_alerta_sistema: Boolean(novoUsuario.recebe_alerta_sistema),
         login_erp: novoUsuario.login_erp || null,
       };
 
@@ -83,6 +85,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
         aprova_faturamento: false,
         recebe_copia_faturamento: false,
         recebe_nf_terceiros: false,
+        recebe_alerta_sistema: false,
         login_erp: "",
       });
       onAtualizar();
@@ -105,6 +108,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       aprova_faturamento: Boolean(usuario.aprova_faturamento),
       recebe_copia_faturamento: Boolean(usuario.recebe_copia_faturamento),
       recebe_nf_terceiros: Boolean(usuario.recebe_nf_terceiros),
+      recebe_alerta_sistema: Boolean(usuario.recebe_alerta_sistema),
       login_erp: usuario.login_erp || "",
     });
     setTimeout(() => {
@@ -126,6 +130,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       aprova_faturamento: false,
       recebe_copia_faturamento: false,
       recebe_nf_terceiros: false,
+      recebe_alerta_sistema: false,
       login_erp: "",
     });
   };
@@ -325,6 +330,23 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               </span>
             </label>
           </div>
+          <div className="mt-4 pt-4 border-t space-y-2">
+            <p className="text-xs font-bold uppercase text-slate-400 tracking-wider">Sistema</p>
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(novoUsuario.recebe_alerta_sistema)}
+                onChange={(e) => setNovoUsuario({ ...novoUsuario, recebe_alerta_sistema: e.target.checked })}
+                className="mt-0.5 accent-[#2A6377]"
+              />
+              <span>
+                <b>Recebe alertas do sistema</b>
+                <span className="block text-[11px] text-slate-400">
+                  Aviso (e-mail e push) quando o robô do servidor para ou falha, a fila de e-mails trava ou o backup diário não é feito; e quando volta ao normal.
+                </span>
+              </span>
+            </label>
+          </div>
           <div className="flex justify-end gap-2 pt-6">
             {novoUsuario.id && (
               <button
@@ -380,7 +402,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                     {user.email}
                     {user.login_erp && <span className="text-slate-400"> · ERP {user.login_erp}</span>}
                   </p>
-                  {(user.aprova_previsao || user.recebe_copia_previsao || user.aprova_faturamento || user.recebe_copia_faturamento || user.recebe_nf_terceiros) && (
+                  {(user.aprova_previsao || user.recebe_copia_previsao || user.aprova_faturamento || user.recebe_copia_faturamento || user.recebe_nf_terceiros || user.recebe_alerta_sistema) && (
                     <p className="flex flex-wrap gap-1 mt-1">
                       {user.aprova_previsao && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -405,6 +427,11 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                       {user.recebe_copia_faturamento && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
                           Cópia do faturamento
+                        </span>
+                      )}
+                      {user.recebe_alerta_sistema && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                          Alertas do sistema
                         </span>
                       )}
                       {user.recebe_nf_terceiros && (

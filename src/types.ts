@@ -35,6 +35,8 @@ export interface Usuario {
   login_erp?: string | null;
   // recebe as NFs de terceiros encaminhadas pelos gestores (fiscal/financeiro)
   recebe_nf_terceiros?: boolean;
+  // recebe os alertas de robo parado / backup / fila de e-mail (verificar_saude_robo no banco)
+  recebe_alerta_sistema?: boolean;
   created_at?: string;
 }
 
@@ -358,7 +360,8 @@ export type TipoNotificacao =
   | "previsao_resultado"
   | "familia_alerta"
   | "faturamento"
-  | "nf_terceiros";
+  | "nf_terceiros"
+  | "alerta_sistema";
 
 export interface Notificacao {
   id: string;
