@@ -204,20 +204,15 @@ export default function TelaReunioes({
         "erro",
       );
 
-    const html = montarHtmlAta(
-      listaObrasParaPDF,
-      dataAta,
-      resumoGravacao,
-    ).replace(
-      "</body>",
-      `<script>
-            window.onload = function() { setTimeout(function(){ window.print(); }, 300); }
-          </script>
-        </body>`,
-    );
+    const html = montarHtmlAta(listaObrasParaPDF, dataAta, resumoGravacao);
 
     janela.document.write(html);
     janela.document.close();
+    // a impressao e chamada daqui (e nao por <script> dentro da janela): a politica de seguranca (CSP,
+    // vercel.json) bloqueia script inline, e a janela em branco herda essa politica
+    const imprimir = () => setTimeout(() => janela.print(), 300);
+    if (janela.document.readyState === "complete") imprimir();
+    else janela.addEventListener("load", imprimir, { once: true });
   };
 
   const buscarContextoObraAta = async (idDaObra: any) => {
