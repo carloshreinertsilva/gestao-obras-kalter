@@ -1792,7 +1792,7 @@ export default function App() {
         setSolicitacaoDestaque(null);
         setMenuMobileAberto(false);
       }}
-      className={`w-full flex items-center gap-3 p-3 rounded-lg transition ${menuRecolhido ? "md:justify-center md:px-0" : ""} ${ativo ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${menuRecolhido ? "md:justify-center md:px-0" : ""} ${ativo ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
     >
       <Icone size={20} className="shrink-0" />
       <span className={menuRecolhido ? "md:hidden" : ""}>{rotulo}</span>
@@ -3413,9 +3413,10 @@ export default function App() {
       <aside
         className={`fixed inset-y-0 left-0 z-[50] w-64 ${menuRecolhido ? "md:w-16 2xl:w-16" : "md:w-56 2xl:w-64"} bg-[#2A6377] text-white flex flex-col shadow-2xl transition-[transform,width] duration-300 md:relative md:translate-x-0 ${menuMobileAberto ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div>
+        {/* min-h-0: a lista de itens rola dentro do menu e o rodape (usuario / Sair) fica sempre visivel */}
+        <div className="flex-1 min-h-0 flex flex-col">
           <div
-            className={`p-6 ${menuRecolhido ? "md:p-3" : ""} border-b border-white/10 flex flex-col items-center justify-center relative`}
+            className={`shrink-0 p-5 ${menuRecolhido ? "md:p-3" : ""} border-b border-white/10 flex flex-col items-center justify-center relative`}
           >
             <button
               onClick={() => setMenuMobileAberto(false)}
@@ -3445,8 +3446,8 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto pb-6">
-            <div className={`px-4 ${menuRecolhido ? "md:px-2" : ""} mt-6`}>
+          <div className="flex-1 min-h-0 overflow-y-auto pb-4">
+            <div className={`px-4 ${menuRecolhido ? "md:px-2" : ""} mt-4`}>
               <p className={`text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider ${menuRecolhido ? "md:hidden" : ""}`}>
                 Principal
               </p>
@@ -3456,7 +3457,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className={`px-4 ${menuRecolhido ? "md:px-2 md:mt-3" : ""} mt-8`}>
+            <div className={`px-4 ${menuRecolhido ? "md:px-2 md:mt-3" : ""} mt-5`}>
               <p className={`text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider ${menuRecolhido ? "md:hidden" : ""}`}>
                 Operação
               </p>
@@ -3478,7 +3479,7 @@ export default function App() {
             </div>
 
             {(podeCadastrarObras || isAdmin) && (
-            <div className={`px-4 ${menuRecolhido ? "md:px-2 md:mt-3" : ""} mt-8`}>
+            <div className={`px-4 ${menuRecolhido ? "md:px-2 md:mt-3" : ""} mt-5`}>
               <p className={`text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider flex items-center gap-1 ${menuRecolhido ? "md:hidden" : ""}`}>
                 <Settings size={12} /> Cadastros
               </p>
@@ -3494,14 +3495,14 @@ export default function App() {
           </div>
         </div>
 
-        <div className={`p-4 ${menuRecolhido ? "md:p-2" : ""} border-t border-white/10 mt-auto`}>
+        <div className={`shrink-0 p-3 ${menuRecolhido ? "md:p-2" : ""} border-t border-white/10`}>
           <StatusSync
             status={statusSync}
             recolhido={menuRecolhido}
             mostrarDetalhes={veTudo}
           />
           <div
-            className={`flex items-center gap-3 mb-4 px-2 ${menuRecolhido ? "md:justify-center md:px-0" : ""}`}
+            className={`flex items-center gap-3 mb-2 px-2 ${menuRecolhido ? "md:justify-center md:px-0" : ""}`}
             title={menuRecolhido ? `${usuarioAtual?.nome} (${usuarioAtual?.perfil})` : undefined}
           >
             <div className="shrink-0 w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">
