@@ -592,6 +592,8 @@ export function CartaoSolicitacao({
   );
 
   const resultado = s.resultado?.nova_parcela;
+  // baixas efetivamente gravadas (a origem e baixada parcela a parcela, do vencimento mais proximo)
+  const baixasGravadas: any[] = s.resultado?.operacoes?.baixas || [];
 
   return (
     <div className="bg-white border rounded-xl p-4 space-y-3">
@@ -653,6 +655,25 @@ export function CartaoSolicitacao({
           Gravado no ERP: previsão <b>{resultado.docto}</b>, parcela <b>{resultado.parcela}</b>
           {resultado.previsao_criada ? " (previsão nova)" : ""}, venc. {dataAAAAMMDD(resultado.vencto)}.
           {s.plano?.operacoes?.baixas?.[0]?.obs && <> Observação: “{s.plano.operacoes.baixas[0].obs}”.</>}
+          {baixasGravadas.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-emerald-200">
+              <p className="font-semibold mb-1">
+                Baixado da origem ({baixasGravadas.length} {baixasGravadas.length === 1 ? "parcela" : "parcelas"}):
+              </p>
+              <ul className="space-y-0.5">
+                {baixasGravadas.map((b: any) => (
+                  <li key={`${b.docto}-${b.parcela}-${b.sequencia}`} className="flex flex-wrap gap-x-2 tabular-nums">
+                    <span>
+                      previsão <b>{b.docto}</b> / parcela <b>{b.parcela}</b>
+                      {b.familia ? ` (${b.familia})` : ""}
+                    </span>
+                    <span className="font-bold">{formatarMoeda(b.valor_baixa)}</span>
+                    {b.desativa && <span className="text-emerald-700/80">· parcela quitada</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
