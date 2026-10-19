@@ -109,9 +109,11 @@ export default function TelaDashboard({
         let documentosData: any[] = [];
         let cronogramaData: any[] = [];
         let tarefasData: any[] = [];
+        let escopoData: any[] = [];
+        let faturadoData: any[] = [];
 
         if (idsObras.length > 0) {
-          const [parcelasResp, documentosResp, cronogramaResp, tarefasResp] =
+          const [parcelasResp, documentosResp, cronogramaResp, tarefasResp, escopoResp, faturadoResp] =
             await Promise.all([
               supabase
                 .from("parcelas_cliente")
@@ -136,9 +138,23 @@ export default function TelaDashboard({
                 )
                 .in("id_obra", idsObras)
                 .not("status", "in", "(concluida,cancelada)"),
+              // escopo de faturamento x NFs emitidas - mesma conta do "Saldo a faturar" do painel da obra
+              supabase
+                .from("obra_faturamento_familias")
+                .select("id_obra, valor_total_escopo")
+                .in("id_obra", idsObras),
+              supabase
+                .from("obra_faturamento_realizados")
+                .select("id_obra, valor_realizado")
+                .in("id_obra", idsObras)
+                .not("id_obra_faturamento_familia", "is", null),
             ]);
 
           if (parcelasResp.error) throw parcelasResp.error;
+          if (escopoResp.error) throw escopoResp.error;
+          if (faturadoResp.error) throw faturadoResp.error;
+          escopoData = escopoResp.data || [];
+          faturadoData = faturadoResp.data || [];
           if (documentosResp.error) throw documentosResp.error;
           if (cronogramaResp.error) throw cronogramaResp.error;
           if (tarefasResp.error) throw tarefasResp.error;
@@ -234,6 +250,14 @@ export default function TelaDashboard({
             0,
           );
           const saldoReceber = Math.max(totalVenda - totalRecebido, 0);
+          // a faturar = escopo de faturamento - NFs emitidas (null: obra sem escopo cadastrado)
+          const escopoObra = escopoData
+            .filter((f: any) => f.id_obra === obra.id)
+            .reduce((acc: number, f: any) => acc + Number(f.valor_total_escopo || 0), 0);
+          const faturadoObra = faturadoData
+            .filter((r: any) => r.id_obra === obra.id)
+            .reduce((acc: number, r: any) => acc + Number(r.valor_realizado || 0), 0);
+          const saldoFaturar = escopoObra > 0 ? Math.max(escopoObra - faturadoObra, 0) : null;
           const valorVencidoObra = parcelasObra.reduce(
             (acc: number, p: any) => {
               const saldo = Math.max(
@@ -345,6 +369,7 @@ export default function TelaDashboard({
             totalVenda,
             totalRecebido,
             saldoReceber,
+            saldoFaturar,
             valorVencido: valorVencidoObra,
             documentosPendentes: docsPendentes,
             fasesAtrasadas: fasesAtrasadasObra,
@@ -536,14 +561,19 @@ export default function TelaDashboard({
                   <th className="px-4 py-3 text-center">Cronograma</th>
                   <th className="px-4 py-3 text-center">Tarefas</th>
                   <th className="px-4 py-3 text-center">Geral</th>
-                  <th className="px-4 py-3 text-center">Saldo</th>
+                  <th className="px-4 py-3 text-right" title="Escopo de faturamento − NFs já emitidas">
+                    A faturar
+                  </th>
+                  <th className="px-4 py-3 text-right" title="Valor de venda − recebido do cliente (NF emitida e não paga continua aqui)">
+                    A receber
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {statusProjetosPMIS.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-4 py-10 text-center text-slate-400"
                     >
                       Nenhuma obra ativa encontrada.
@@ -587,7 +617,16 @@ export default function TelaDashboard({
                           {labelStatusPMIS(projeto.statusGeral)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center font-bold text-slate-700 whitespace-nowrap">
+                      <td className="px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap">
+                        {projeto.saldoFaturar === null ? (
+                          <span className="font-normal text-slate-400" title="Escopo de faturamento não cadastrado">
+                            —
+                          </span>
+                        ) : (
+                          formatarMoeda(projeto.saldoFaturar)
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap">
                         {formatarMoeda(projeto.saldoReceber)}
                       </td>
                     </tr>
