@@ -6,6 +6,7 @@ import TelaReunioes from "./telas/TelaReunioes";
 import { AbaPrevisoes, PainelSolicitacoes, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
 import { SolicitacoesFaturamentoObra, TelaFaturamento } from "./SolicitacoesFaturamento";
 import { TelaNfsTerceiros } from "./NfsTerceiros";
+import { TelaFretes } from "./Fretes";
 import { AtivarPush, ItemNotificacao } from "./Notificacoes";
 import { removerPushAoSair } from "./push";
 import { caminhoParaRota, rotaParaCaminho, type Rota } from "./rotas";
@@ -84,6 +85,7 @@ import {
   Wallet,
   PanelLeftClose,
   PanelLeftOpen,
+  Truck,
 } from "lucide-react";
 
 // Link de "Esqueceu a senha?": o Supabase entra com a pessoa logada e marca
@@ -480,6 +482,9 @@ export default function App() {
   const ehFinanceiro = usuarioAtual?.perfil === "financeiro";
   // tela geral "NFs de terceiros": todos menos logistica e cliente (gestor ve as das suas obras)
   const podeVerNfsTerceiros = !ehLogistica && usuarioAtual?.perfil !== "cliente";
+  // fretes (verba da familia .510): logistica cota; gestor e assistente pedem para as suas obras
+  const podeVerFretes =
+    ehLogistica || veTudo || usuarioAtual?.perfil === "engenheiro" || usuarioAtual?.perfil === "assistente";
   // painel de compras (so consulta): logistica e admin
   const podeVerCompras = ehLogistica || veTudo;
   const veTodasObras = veTudo || ehLogistica || ehFiscal || ehFinanceiro;
@@ -574,6 +579,7 @@ export default function App() {
       if (tela === "cadastros_equipe" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
       if (tela === "compras" && !podeVerCompras) tela = "dashboard";
       if (tela === "nfs_terceiros" && !podeVerNfsTerceiros) tela = "dashboard";
+      if (tela === "fretes" && !podeVerFretes) tela = "dashboard";
       if (tela === "historico" && usuarioAtual?.perfil !== "admin") tela = "dashboard";
       if (tela === "cadastros_obras" && !podeCadastrarObras) tela = "dashboard";
 
@@ -604,7 +610,9 @@ export default function App() {
         setAbaReunioes(rota.novaReuniao ? "nova" : "historico");
         setDataReuniaoSelecionada(rota.dataReuniao || null);
       }
-      setSolicitacaoDestaque(tela === "solicitacoes_previsao" || tela === "faturamento" || tela === "nfs_terceiros" ? rota.idSolicitacao || null : null);
+      setSolicitacaoDestaque(
+        ["solicitacoes_previsao", "faturamento", "nfs_terceiros", "fretes"].includes(tela) ? rota.idSolicitacao || null : null,
+      );
 
       if (rota.idTarefa) {
         if (tarefaSelecionada?.id !== rota.idTarefa) {
@@ -1742,6 +1750,12 @@ export default function App() {
     if (notif.tipo === "nf_terceiros") {
       const id = /^nft:([0-9a-f-]{36})/.exec(notif.chave || "")?.[1] || null;
       setTelaAtiva("nfs_terceiros");
+      setSolicitacaoDestaque(id);
+      return;
+    }
+    if (notif.tipo === "frete") {
+      const id = /^frete:([0-9a-f-]{36})/.exec(notif.chave || "")?.[1] || null;
+      setTelaAtiva("fretes");
       setSolicitacaoDestaque(id);
       return;
     }
@@ -3474,6 +3488,7 @@ export default function App() {
                   itemMenu("solicitacoes_previsao", "Previsões", Wallet, telaAtiva === "solicitacoes_previsao")}
                 {podeVerCompras && itemMenu("compras", "Compras", ShoppingCart, telaAtiva === "compras")}
                 {itemMenu("faturamento", "Faturamento", Receipt, telaAtiva === "faturamento")}
+                {podeVerFretes && itemMenu("fretes", "Fretes", Truck, telaAtiva === "fretes")}
                 {podeVerNfsTerceiros && itemMenu("nfs_terceiros", "NFs de terceiros", FileInput, telaAtiva === "nfs_terceiros")}
               </div>
             </div>
@@ -3881,6 +3896,16 @@ export default function App() {
           <TelaFaturamento usuario={usuarioAtual} idAberto={solicitacaoDestaque} onAbrir={setSolicitacaoDestaque} podeGerenciar={veTudo} />
         )}
 
+        {telaAtiva === "fretes" && podeVerFretes && (
+          <TelaFretes
+            usuario={usuarioAtual}
+            idAberto={solicitacaoDestaque}
+            onAbrir={setSolicitacaoDestaque}
+            verTodasObras={veTudo}
+            idResponsavelEscopo={idResponsavelEscopo}
+            onPedirVerba={(codigoObra) => aplicarRota({ tela: "painel_obra", codigoObra, abaObra: "previsoes" })}
+          />
+        )}
         {telaAtiva === "nfs_terceiros" && podeVerNfsTerceiros && (
           <TelaNfsTerceiros usuario={usuarioAtual} idAberto={solicitacaoDestaque} onAbrir={setSolicitacaoDestaque} />
         )}

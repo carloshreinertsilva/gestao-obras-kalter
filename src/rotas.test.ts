@@ -17,6 +17,8 @@ describe("rotas do app", () => {
     ["/faturamento/abc-123", { tela: "faturamento", idSolicitacao: "abc-123" }],
     ["/nfs-terceiros", { tela: "nfs_terceiros" }],
     ["/nfs-terceiros/abc-123", { tela: "nfs_terceiros", idSolicitacao: "abc-123" }],
+    ["/fretes", { tela: "fretes" }],
+    ["/fretes/abc-123", { tela: "fretes", idSolicitacao: "abc-123" }],
     ["/obras/2098/compras", { tela: "painel_obra", codigoObra: "2098", abaObra: "compras" }],
     ["/historico", { tela: "historico" }],
     ["/cadastros/obras", { tela: "cadastros_obras" }],

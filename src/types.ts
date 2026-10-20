@@ -361,6 +361,7 @@ export type TipoNotificacao =
   | "familia_alerta"
   | "faturamento"
   | "nf_terceiros"
+  | "frete"
   | "alerta_sistema";
 
 export interface Notificacao {
