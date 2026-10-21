@@ -43,6 +43,12 @@ export interface Frete {
   transportadora_codigo: number | null;
   transportadora_nome: string | null;
   observacao: string | null;
+  peso_kg: number | null;
+  volumes: number | null;
+  altura_m: number | null;
+  largura_m: number | null;
+  comprimento_m: number | null;
+  cubagem_m3: number | null;
   status: StatusFrete;
   saldo_verificado: number | null;
   id_solicitante: string | null;
@@ -135,6 +141,8 @@ const EVENTO: Record<string, string> = {
 
 const hojeISO = () => new Date().toLocaleDateString("sv-SE");
 const num = (v: string) => parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
+// medidas: "1,20" e "1.20" valem 1,2 (ponto aqui e decimal, nao milhar)
+const numMedida = (v: string) => (v.includes(",") ? num(v) : parseFloat(v) || 0);
 const txtNum = (v: number | null | undefined, casas = 2) =>
   v === null || v === undefined
     ? ""
@@ -571,6 +579,14 @@ function ModalFrete({
   const [valor, setValor] = useState(txtNum(frete?.valor_cotado));
   const [transp, setTransp] = useState(frete?.transportadora_codigo ? String(frete.transportadora_codigo) : "");
   const [obs, setObs] = useState(frete?.observacao || "");
+  const [peso, setPeso] = useState(frete?.peso_kg != null ? txtNum(frete.peso_kg, 0) : "");
+  const [volumes, setVolumes] = useState(frete?.volumes != null ? String(frete.volumes) : "");
+  const [altura, setAltura] = useState(frete?.altura_m != null ? txtNum(frete.altura_m) : "");
+  const [largura, setLargura] = useState(frete?.largura_m != null ? txtNum(frete.largura_m) : "");
+  const [comprimento, setComprimento] = useState(frete?.comprimento_m != null ? txtNum(frete.comprimento_m) : "");
+  const [cubagemInformada, setCubagemInformada] = useState(
+    frete?.cubagem_m3 != null && frete.altura_m == null ? txtNum(frete.cubagem_m3, 3) : "",
+  );
   const [saldo, setSaldo] = useState<number | null>(null);
   const [sugestoes, setSugestoes] = useState<Sugestao[] | null>(null);
   const [cidadeObra, setCidadeObra] = useState<Municipio | null>(null);
@@ -655,12 +671,18 @@ function ModalFrete({
   const valorNum = num(valor);
   const ficaBloqueado = valorNum > 0 && saldo !== null && valorNum > saldo + 0.005;
   const kmNum = km ? num(km) : null;
+  const dims = [altura, largura, comprimento].map((v) => (v.trim() ? numMedida(v) : null));
+  const temDims = dims.every((d) => d !== null && d > 0);
+  const qtdVolumes = volumes ? Math.round(num(volumes)) : null;
+  const cubagem = temDims ? dims[0]! * dims[1]! * dims[2]! * (qtdVolumes || 1) : cubagemInformada ? numMedida(cubagemInformada) : null;
 
   const salvar = async () => {
     setErro("");
     if (!idObra) return setErro("Escolha a obra.");
     if (!data) return setErro("Informe a data do frete.");
     if (!origem.ibge || !destino.ibge) return setErro("Escolha a origem e o destino do frete.");
+    if (dims.some((d) => d !== null) && !temDims) return setErro("Informe as três dimensões (A × L × C) ou deixe todas em branco.");
+    if (dims.some((d) => d !== null && d > 30)) return setErro("Dimensões em metros: confira os valores (ex.: 1,20).");
     setSalvando(true);
     const { data: id, error } = await supabase.rpc("frete_salvar", {
       p_id: frete?.id || null,
@@ -682,6 +704,12 @@ function ModalFrete({
       p_valor_cotado: valorNum > 0 ? valorNum : null,
       p_transportadora_codigo: transp ? Number(transp) : null,
       p_observacao: obs,
+      p_peso_kg: peso ? num(peso) : null,
+      p_volumes: qtdVolumes,
+      p_altura_m: temDims ? dims[0] : null,
+      p_largura_m: temDims ? dims[1] : null,
+      p_comprimento_m: temDims ? dims[2] : null,
+      p_cubagem_m3: temDims ? null : cubagem,
     });
     setSalvando(false);
     if (error) return setErro(msgErro(error));
@@ -767,6 +795,43 @@ function ModalFrete({
             <EscolhaPonto titulo="Origem" ponto={origem} onChange={setOrigem} fornecedores={fornecedores} obra={obra} cidadeObra={cidadeObra} />
             <ArrowRight className="text-slate-400 hidden md:block" aria-hidden="true" />
             <EscolhaPonto titulo="Destino" ponto={destino} onChange={setDestino} fornecedores={fornecedores} obra={obra} cidadeObra={cidadeObra} />
+          </div>
+
+          <div className="border rounded-lg p-3">
+            <p className="text-xs font-bold uppercase text-slate-500 mb-2">Carga</p>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <div>
+                <Rotulo texto="Peso (kg)" />
+                <input value={peso} onChange={(e) => setPeso(e.target.value)} inputMode="decimal" placeholder="ex.: 850" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
+              </div>
+              <div>
+                <Rotulo texto="Volumes" />
+                <input value={volumes} onChange={(e) => setVolumes(e.target.value)} inputMode="numeric" placeholder="1" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
+              </div>
+              <div>
+                <Rotulo texto="Altura (m)" />
+                <input value={altura} onChange={(e) => setAltura(e.target.value)} inputMode="decimal" placeholder="1,20" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
+              </div>
+              <div>
+                <Rotulo texto="Largura (m)" />
+                <input value={largura} onChange={(e) => setLargura(e.target.value)} inputMode="decimal" placeholder="0,80" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
+              </div>
+              <div>
+                <Rotulo texto="Comprimento (m)" />
+                <input value={comprimento} onChange={(e) => setComprimento(e.target.value)} inputMode="decimal" placeholder="2,00" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
+              </div>
+              <div>
+                <Rotulo texto="Cubagem (m³)" />
+                {temDims ? (
+                  <p className="border rounded-lg px-2 py-2 w-full text-sm bg-slate-50 font-semibold tabular-nums">{txtNum(cubagem, 3)}</p>
+                ) : (
+                  <input value={cubagemInformada} onChange={(e) => setCubagemInformada(e.target.value)} inputMode="decimal" placeholder="ou informe" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
+                )}
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Dimensões de cada volume; a cubagem é A × L × C × volumes. Sem as dimensões, dá para informar a cubagem total direto.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 border rounded-lg p-3">
@@ -977,6 +1042,19 @@ function DetalheFrete({
               <Info rotulo="Rota" valor={`${rota(frete)}${frete.km != null ? ` · ${txtNum(frete.km, 0)} km` : ""}`} />
             </div>
             <Info rotulo="Veículo" valor={frete.tipo_veiculo || "a definir"} />
+            <Info
+              rotulo="Carga"
+              valor={
+                [
+                  frete.peso_kg != null && `${txtNum(frete.peso_kg, 0)} kg`,
+                  frete.volumes != null && `${frete.volumes} vol.`,
+                  frete.altura_m != null && `${txtNum(frete.altura_m)} × ${txtNum(frete.largura_m)} × ${txtNum(frete.comprimento_m)} m`,
+                  frete.cubagem_m3 != null && `${txtNum(frete.cubagem_m3, 3)} m³`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "-"
+              }
+            />
             <Info rotulo="Transportadora" valor={frete.transportadora_nome || "a definir"} />
             <Info rotulo="Valor cotado" valor={frete.valor_cotado != null ? <b>{formatarMoeda(frete.valor_cotado)}</b> : "aguardando cotação"} />
             <Info rotulo="Realizado (CT-e)" valor={frete.nr_ad ? `${formatarMoeda(frete.valor_realizado)} · AD ${frete.nr_ad}` : "-"} />
