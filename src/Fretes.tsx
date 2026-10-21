@@ -43,11 +43,9 @@ export interface Frete {
   transportadora_codigo: number | null;
   transportadora_nome: string | null;
   observacao: string | null;
+  carga: ItemCarga[] | null;
   peso_kg: number | null;
   volumes: number | null;
-  altura_m: number | null;
-  largura_m: number | null;
-  comprimento_m: number | null;
   cubagem_m3: number | null;
   status: StatusFrete;
   saldo_verificado: number | null;
@@ -58,6 +56,16 @@ export interface Frete {
   nr_ad: number | null;
   valor_realizado: number | null;
   created_at: string;
+}
+
+// item da carga: medidas e peso de CADA volume; quantidade = volumes iguais
+export interface ItemCarga {
+  descricao: string | null;
+  quantidade: number;
+  peso_kg: number | null;
+  altura_m: number | null;
+  largura_m: number | null;
+  comprimento_m: number | null;
 }
 
 interface Fornecedor {
@@ -143,6 +151,44 @@ const hojeISO = () => new Date().toLocaleDateString("sv-SE");
 const num = (v: string) => parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
 // medidas: "1,20" e "1.20" valem 1,2 (ponto aqui e decimal, nao milhar)
 const numMedida = (v: string) => (v.includes(",") ? num(v) : parseFloat(v) || 0);
+const txtPeso = (v: number) => txtNum(v, v % 1 ? 2 : 0);
+
+type LinhaCarga = { descricao: string; quantidade: string; peso: string; altura: string; largura: string; comprimento: string };
+const LINHA_VAZIA: LinhaCarga = { descricao: "", quantidade: "1", peso: "", altura: "", largura: "", comprimento: "" };
+const medida = (v: string) => (v.trim() ? numMedida(v) : null);
+const linhaVazia = (l: LinhaCarga) => ![l.descricao, l.peso, l.altura, l.largura, l.comprimento].some((v) => v.trim());
+const paraLinha = (i: ItemCarga): LinhaCarga => ({
+  descricao: i.descricao || "",
+  quantidade: String(i.quantidade || 1),
+  peso: i.peso_kg != null ? txtPeso(i.peso_kg) : "",
+  altura: i.altura_m != null ? txtNum(i.altura_m) : "",
+  largura: i.largura_m != null ? txtNum(i.largura_m) : "",
+  comprimento: i.comprimento_m != null ? txtNum(i.comprimento_m) : "",
+});
+const paraItem = (l: LinhaCarga): ItemCarga => ({
+  descricao: l.descricao.trim() || null,
+  quantidade: Math.max(Math.round(num(l.quantidade)), 0) || 1,
+  peso_kg: l.peso.trim() ? num(l.peso) : null,
+  altura_m: medida(l.altura),
+  largura_m: medida(l.largura),
+  comprimento_m: medida(l.comprimento),
+});
+const pesoItem = (i: ItemCarga) => (i.peso_kg != null ? i.quantidade * i.peso_kg : null);
+const cubagemItem = (i: ItemCarga) =>
+  i.altura_m != null && i.largura_m != null && i.comprimento_m != null ? i.quantidade * i.altura_m * i.largura_m * i.comprimento_m : null;
+function totaisCarga(itens: ItemCarga[]) {
+  let peso: number | null = null;
+  let cubagem: number | null = null;
+  let volumes = 0;
+  for (const i of itens) {
+    volumes += i.quantidade;
+    const p = pesoItem(i);
+    if (p != null) peso = (peso || 0) + p;
+    const c = cubagemItem(i);
+    if (c != null) cubagem = (cubagem || 0) + c;
+  }
+  return { peso, volumes, cubagem };
+}
 const txtNum = (v: number | null | undefined, casas = 2) =>
   v === null || v === undefined
     ? ""
@@ -579,14 +625,7 @@ function ModalFrete({
   const [valor, setValor] = useState(txtNum(frete?.valor_cotado));
   const [transp, setTransp] = useState(frete?.transportadora_codigo ? String(frete.transportadora_codigo) : "");
   const [obs, setObs] = useState(frete?.observacao || "");
-  const [peso, setPeso] = useState(frete?.peso_kg != null ? txtNum(frete.peso_kg, 0) : "");
-  const [volumes, setVolumes] = useState(frete?.volumes != null ? String(frete.volumes) : "");
-  const [altura, setAltura] = useState(frete?.altura_m != null ? txtNum(frete.altura_m) : "");
-  const [largura, setLargura] = useState(frete?.largura_m != null ? txtNum(frete.largura_m) : "");
-  const [comprimento, setComprimento] = useState(frete?.comprimento_m != null ? txtNum(frete.comprimento_m) : "");
-  const [cubagemInformada, setCubagemInformada] = useState(
-    frete?.cubagem_m3 != null && frete.altura_m == null ? txtNum(frete.cubagem_m3, 3) : "",
-  );
+  const [linhas, setLinhas] = useState<LinhaCarga[]>(frete?.carga?.length ? frete.carga.map(paraLinha) : [{ ...LINHA_VAZIA }]);
   const [saldo, setSaldo] = useState<number | null>(null);
   const [sugestoes, setSugestoes] = useState<Sugestao[] | null>(null);
   const [cidadeObra, setCidadeObra] = useState<Municipio | null>(null);
@@ -671,18 +710,19 @@ function ModalFrete({
   const valorNum = num(valor);
   const ficaBloqueado = valorNum > 0 && saldo !== null && valorNum > saldo + 0.005;
   const kmNum = km ? num(km) : null;
-  const dims = [altura, largura, comprimento].map((v) => (v.trim() ? numMedida(v) : null));
-  const temDims = dims.every((d) => d !== null && d > 0);
-  const qtdVolumes = volumes ? Math.round(num(volumes)) : null;
-  const cubagem = temDims ? dims[0]! * dims[1]! * dims[2]! * (qtdVolumes || 1) : cubagemInformada ? numMedida(cubagemInformada) : null;
+  const itensCarga = linhas.filter((l) => !linhaVazia(l)).map(paraItem);
 
   const salvar = async () => {
     setErro("");
     if (!idObra) return setErro("Escolha a obra.");
     if (!data) return setErro("Informe a data do frete.");
     if (!origem.ibge || !destino.ibge) return setErro("Escolha a origem e o destino do frete.");
-    if (dims.some((d) => d !== null) && !temDims) return setErro("Informe as três dimensões (A × L × C) ou deixe todas em branco.");
-    if (dims.some((d) => d !== null && d > 30)) return setErro("Dimensões em metros: confira os valores (ex.: 1,20).");
+    for (const [n, i] of itensCarga.entries()) {
+      const d = [i.altura_m, i.largura_m, i.comprimento_m];
+      if (d.some((x) => x !== null) && d.some((x) => x === null))
+        return setErro(`Item ${n + 1} da carga: informe as três dimensões (A × L × C) ou nenhuma.`);
+      if (d.some((x) => x !== null && x > 30)) return setErro(`Item ${n + 1} da carga: dimensões em metros, confira (ex.: 1,20).`);
+    }
     setSalvando(true);
     const { data: id, error } = await supabase.rpc("frete_salvar", {
       p_id: frete?.id || null,
@@ -704,12 +744,7 @@ function ModalFrete({
       p_valor_cotado: valorNum > 0 ? valorNum : null,
       p_transportadora_codigo: transp ? Number(transp) : null,
       p_observacao: obs,
-      p_peso_kg: peso ? num(peso) : null,
-      p_volumes: qtdVolumes,
-      p_altura_m: temDims ? dims[0] : null,
-      p_largura_m: temDims ? dims[1] : null,
-      p_comprimento_m: temDims ? dims[2] : null,
-      p_cubagem_m3: temDims ? null : cubagem,
+      p_carga: itensCarga,
     });
     setSalvando(false);
     if (error) return setErro(msgErro(error));
@@ -797,42 +832,7 @@ function ModalFrete({
             <EscolhaPonto titulo="Destino" ponto={destino} onChange={setDestino} fornecedores={fornecedores} obra={obra} cidadeObra={cidadeObra} />
           </div>
 
-          <div className="border rounded-lg p-3">
-            <p className="text-xs font-bold uppercase text-slate-500 mb-2">Carga</p>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-              <div>
-                <Rotulo texto="Peso (kg)" />
-                <input value={peso} onChange={(e) => setPeso(e.target.value)} inputMode="decimal" placeholder="ex.: 850" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
-              </div>
-              <div>
-                <Rotulo texto="Volumes" />
-                <input value={volumes} onChange={(e) => setVolumes(e.target.value)} inputMode="numeric" placeholder="1" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
-              </div>
-              <div>
-                <Rotulo texto="Altura (m)" />
-                <input value={altura} onChange={(e) => setAltura(e.target.value)} inputMode="decimal" placeholder="1,20" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
-              </div>
-              <div>
-                <Rotulo texto="Largura (m)" />
-                <input value={largura} onChange={(e) => setLargura(e.target.value)} inputMode="decimal" placeholder="0,80" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
-              </div>
-              <div>
-                <Rotulo texto="Comprimento (m)" />
-                <input value={comprimento} onChange={(e) => setComprimento(e.target.value)} inputMode="decimal" placeholder="2,00" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
-              </div>
-              <div>
-                <Rotulo texto="Cubagem (m³)" />
-                {temDims ? (
-                  <p className="border rounded-lg px-2 py-2 w-full text-sm bg-slate-50 font-semibold tabular-nums">{txtNum(cubagem, 3)}</p>
-                ) : (
-                  <input value={cubagemInformada} onChange={(e) => setCubagemInformada(e.target.value)} inputMode="decimal" placeholder="ou informe" className="border rounded-lg px-2 py-2 w-full text-sm" autoComplete="off" />
-                )}
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Dimensões de cada volume; a cubagem é A × L × C × volumes. Sem as dimensões, dá para informar a cubagem total direto.
-            </p>
-          </div>
+          <CargaLista linhas={linhas} onChange={setLinhas} />
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 border rounded-lg p-3">
             <div>
@@ -957,6 +957,151 @@ function ModalFrete({
 }
 
 // ------------------------------------------------------------------------------------------------
+// Carga em lista: cada linha = volumes iguais (quantidade x peso e medidas de cada um); totais no rodape
+
+const resumoCarga = (f: Frete) =>
+  [f.volumes != null && `${f.volumes} vol.`, f.peso_kg != null && `${txtPeso(f.peso_kg)} kg`, f.cubagem_m3 != null && `${txtNum(f.cubagem_m3, 3)} m³`]
+    .filter(Boolean)
+    .join(" · ");
+
+function CargaLista({ linhas, onChange }: { linhas: LinhaCarga[]; onChange: (l: LinhaCarga[]) => void }) {
+  const mudar = (i: number, campo: keyof LinhaCarga, v: string) => onChange(linhas.map((l, j) => (j === i ? { ...l, [campo]: v } : l)));
+  const remover = (i: number) => onChange(linhas.length > 1 ? linhas.filter((_, j) => j !== i) : [{ ...LINHA_VAZIA }]);
+  const itens = linhas.filter((l) => !linhaVazia(l)).map(paraItem);
+  const totais = totaisCarga(itens);
+  const campo = "border rounded px-1.5 py-1.5 w-full text-sm tabular-nums";
+  const entrada = (i: number, c: keyof LinhaCarga, rotulo: string, placeholder: string, modo: "decimal" | "numeric" | "text" = "decimal") => (
+    <input
+      value={linhas[i][c]}
+      onChange={(e) => mudar(i, c, e.target.value)}
+      inputMode={modo}
+      placeholder={placeholder}
+      aria-label={`${rotulo} do item ${i + 1}`}
+      className={campo}
+      autoComplete="off"
+    />
+  );
+  return (
+    <div className="border rounded-lg">
+      <p className="px-3 py-2 text-xs font-bold uppercase text-slate-500 border-b">Carga</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[720px]">
+          <thead className="text-[11px] text-slate-500 uppercase">
+            <tr className="text-left">
+              <th className="px-2 py-1.5 font-semibold">Descrição</th>
+              <th className="px-2 py-1.5 font-semibold w-16">Qtd.</th>
+              <th className="px-2 py-1.5 font-semibold w-24">Peso un. (kg)</th>
+              <th className="px-2 py-1.5 font-semibold w-20">Alt. (m)</th>
+              <th className="px-2 py-1.5 font-semibold w-20">Larg. (m)</th>
+              <th className="px-2 py-1.5 font-semibold w-20">Comp. (m)</th>
+              <th className="px-2 py-1.5 font-semibold w-24 text-right">Peso (kg)</th>
+              <th className="px-2 py-1.5 font-semibold w-24 text-right">m³</th>
+              <th className="w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map((l, i) => {
+              const it = paraItem(l);
+              const p = linhaVazia(l) ? null : pesoItem(it);
+              const c = linhaVazia(l) ? null : cubagemItem(it);
+              return (
+                <tr key={i} className="border-t">
+                  <td className="px-2 py-1">{entrada(i, "descricao", "Descrição", "ex.: evaporador, caixa de peças…", "text")}</td>
+                  <td className="px-2 py-1">{entrada(i, "quantidade", "Quantidade", "1", "numeric")}</td>
+                  <td className="px-2 py-1">{entrada(i, "peso", "Peso de cada volume", "0")}</td>
+                  <td className="px-2 py-1">{entrada(i, "altura", "Altura", "1,20")}</td>
+                  <td className="px-2 py-1">{entrada(i, "largura", "Largura", "0,80")}</td>
+                  <td className="px-2 py-1">{entrada(i, "comprimento", "Comprimento", "2,00")}</td>
+                  <td className="px-2 py-1 text-right tabular-nums text-slate-600">{p != null ? txtPeso(p) : "-"}</td>
+                  <td className="px-2 py-1 text-right tabular-nums text-slate-600">{c != null ? txtNum(c, 3) : "-"}</td>
+                  <td className="px-1 py-1">
+                    <button type="button" onClick={() => remover(i)} className="p-1 text-slate-400 hover:text-red-600" aria-label={`Remover item ${i + 1}`}>
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="border-t bg-slate-50 font-semibold">
+              <td className="px-2 py-2">
+                <button
+                  type="button"
+                  onClick={() => onChange([...linhas, { ...LINHA_VAZIA }])}
+                  className="text-xs px-2 py-1 rounded border text-[#2A6377] font-semibold hover:bg-white inline-flex items-center gap-1"
+                >
+                  <Plus size={13} /> Adicionar item
+                </button>
+              </td>
+              <td className="px-2 py-2 tabular-nums" title="Total de volumes">
+                {itens.length ? totais.volumes : "-"}
+              </td>
+              <td className="px-2 py-2 text-[11px] uppercase text-slate-500" colSpan={4}>
+                Total do pedido
+              </td>
+              <td className="px-2 py-2 text-right tabular-nums">{totais.peso != null ? txtPeso(totais.peso) : "-"}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{totais.cubagem != null ? txtNum(totais.cubagem, 3) : "-"}</td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="px-3 py-2 text-[11px] text-slate-400 border-t">
+        Cada linha são volumes iguais: informe a quantidade, o peso e as medidas de <b>um</b> volume. Peso e m³ da linha = quantidade × cada um.
+      </p>
+    </div>
+  );
+}
+
+function TabelaCarga({ itens }: { itens: ItemCarga[] }) {
+  const t = totaisCarga(itens);
+  return (
+    <div className="border rounded-lg overflow-x-auto">
+      <table className="w-full text-[12px] min-w-[480px]">
+        <thead className="text-[10px] uppercase text-slate-500">
+          <tr className="text-left">
+            <th className="px-2 py-1">Carga</th>
+            <th className="px-2 py-1 text-right">Qtd.</th>
+            <th className="px-2 py-1 text-right">Peso un.</th>
+            <th className="px-2 py-1 text-right">A × L × C (m)</th>
+            <th className="px-2 py-1 text-right">Peso (kg)</th>
+            <th className="px-2 py-1 text-right">m³</th>
+          </tr>
+        </thead>
+        <tbody className="tabular-nums">
+          {itens.map((i, n) => {
+            const p = pesoItem(i);
+            const c = cubagemItem(i);
+            return (
+              <tr key={n} className="border-t">
+                <td className="px-2 py-1">{i.descricao || `Item ${n + 1}`}</td>
+                <td className="px-2 py-1 text-right">{i.quantidade}</td>
+                <td className="px-2 py-1 text-right">{i.peso_kg != null ? txtPeso(i.peso_kg) : "-"}</td>
+                <td className="px-2 py-1 text-right">
+                  {i.altura_m != null ? `${txtNum(i.altura_m)} × ${txtNum(i.largura_m)} × ${txtNum(i.comprimento_m)}` : "-"}
+                </td>
+                <td className="px-2 py-1 text-right">{p != null ? txtPeso(p) : "-"}</td>
+                <td className="px-2 py-1 text-right">{c != null ? txtNum(c, 3) : "-"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot className="tabular-nums">
+          <tr className="border-t bg-slate-50 font-semibold">
+            <td className="px-2 py-1">Total</td>
+            <td className="px-2 py-1 text-right">{t.volumes}</td>
+            <td colSpan={2} />
+            <td className="px-2 py-1 text-right">{t.peso != null ? txtPeso(t.peso) : "-"}</td>
+            <td className="px-2 py-1 text-right">{t.cubagem != null ? txtNum(t.cubagem, 3) : "-"}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------------------------------------
 // Detalhe
 
 function DetalheFrete({
@@ -1042,23 +1187,12 @@ function DetalheFrete({
               <Info rotulo="Rota" valor={`${rota(frete)}${frete.km != null ? ` · ${txtNum(frete.km, 0)} km` : ""}`} />
             </div>
             <Info rotulo="Veículo" valor={frete.tipo_veiculo || "a definir"} />
-            <Info
-              rotulo="Carga"
-              valor={
-                [
-                  frete.peso_kg != null && `${txtNum(frete.peso_kg, 0)} kg`,
-                  frete.volumes != null && `${frete.volumes} vol.`,
-                  frete.altura_m != null && `${txtNum(frete.altura_m)} × ${txtNum(frete.largura_m)} × ${txtNum(frete.comprimento_m)} m`,
-                  frete.cubagem_m3 != null && `${txtNum(frete.cubagem_m3, 3)} m³`,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || "-"
-              }
-            />
+            <Info rotulo="Carga" valor={resumoCarga(frete) || "-"} />
             <Info rotulo="Transportadora" valor={frete.transportadora_nome || "a definir"} />
             <Info rotulo="Valor cotado" valor={frete.valor_cotado != null ? <b>{formatarMoeda(frete.valor_cotado)}</b> : "aguardando cotação"} />
             <Info rotulo="Realizado (CT-e)" valor={frete.nr_ad ? `${formatarMoeda(frete.valor_realizado)} · AD ${frete.nr_ad}` : "-"} />
           </div>
+          {!!frete.carga?.length && <TabelaCarga itens={frete.carga} />}
           {frete.observacao && <p className="whitespace-pre-wrap border rounded-lg p-3">{frete.observacao}</p>}
           {frete.motivo_cancelamento && (
             <p className="text-slate-500">
