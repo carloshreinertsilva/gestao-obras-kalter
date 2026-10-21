@@ -483,8 +483,8 @@ export default function App() {
   // tela geral "NFs de terceiros": todos menos logistica e cliente (gestor ve as das suas obras)
   const podeVerNfsTerceiros = !ehLogistica && usuarioAtual?.perfil !== "cliente";
   // fretes (verba da familia .510): logistica cota; gestor e assistente pedem para as suas obras
-  const podeVerFretes =
-    ehLogistica || veTudo || usuarioAtual?.perfil === "engenheiro" || usuarioAtual?.perfil === "assistente";
+  // por enquanto (21/10) so logistica e admin; gestor/assistente entram depois (o banco ja permite)
+  const podeVerFretes = ehLogistica || isAdmin;
   // painel de compras (so consulta): logistica e admin
   const podeVerCompras = ehLogistica || veTudo;
   const veTodasObras = veTudo || ehLogistica || ehFiscal || ehFinanceiro;
