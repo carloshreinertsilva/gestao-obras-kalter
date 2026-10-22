@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { fasesProjeto } from "../constants";
 import type { Obra, Usuario } from "../types";
-import { formatarDataSegura, labelFase, labelStatusObra, classeStatusObra } from "../utils";
+import { formatarDataSegura, formatarMoeda, labelFase, labelStatusObra, classeStatusObra } from "../utils";
 import { Save, AlertTriangle, Edit2, X, FolderOpen } from "lucide-react";
 
 // Cadastros -> Obras: lista (filtro por situacao), cadastro de obra nova (com
@@ -22,6 +22,9 @@ interface Props {
   falhaAoCarregar: (oque: string, error: unknown) => void;
   onAviso: (mensagem: string, tipo?: string) => void;
 }
+
+type ValoresErp = { contribuicao: string; rentabilidade: string; venda: string };
+const VALORES_ERP_VAZIOS: ValoresErp = { contribuicao: "", rentabilidade: "", venda: "" };
 
 export default function TelaCadastroObras({
   usuarioAtual,
@@ -56,6 +59,49 @@ export default function TelaCadastroObras({
     "em_andamento" | "finalizada" | "cancelada" | "todas"
   >("em_andamento");
   const [carregando, setCarregando] = useState(false);
+  // margem de contribuicao / rentabilidade / faturamento sem impostos: so admin; o robo grava no ERP
+  // (CADPROJ.cpj_valor_proprio / cpj_valor_terceiro, PEDVEN.pv_meta_venda)
+  const [valoresErp, setValoresErp] = useState(VALORES_ERP_VAZIOS);
+  const [valoresErpOriginais, setValoresErpOriginais] = useState(VALORES_ERP_VAZIOS);
+  const [ultimoPedidoErp, setUltimoPedidoErp] = useState<any>(null);
+
+  const carregarValoresErp = async (idObra: string | null) => {
+    setUltimoPedidoErp(null);
+    if (!isAdmin || !idObra) {
+      setValoresErp(VALORES_ERP_VAZIOS);
+      setValoresErpOriginais(VALORES_ERP_VAZIOS);
+      return;
+    }
+    const [{ data: o }, { data: pedidos }] = await Promise.all([
+      supabase
+        .from("obras")
+        .select("margem_contribuicao_erp, rentabilidade_erp, venda_sem_impostos_erp")
+        .eq("id", idObra)
+        .single(),
+      supabase
+        .from("obras_valores_erp")
+        .select("situacao, erro, created_at, gravado_em, nome_solicitante, margem_contribuicao, rentabilidade, venda_sem_impostos")
+        .eq("id_obra", idObra)
+        .neq("situacao", "substituido")
+        .order("created_at", { ascending: false })
+        .limit(1),
+    ]);
+    const txt = (v: any) => (v === null || v === undefined ? "" : String(v));
+    const ultimo = pedidos?.[0] || null;
+    const vindoDoErp = {
+      contribuicao: txt(o?.margem_contribuicao_erp),
+      rentabilidade: txt(o?.rentabilidade_erp),
+      venda: txt(o?.venda_sem_impostos_erp),
+    };
+    setValoresErpOriginais(vindoDoErp);
+    // pedido ainda nao gravado: mostra o que foi pedido
+    setValoresErp(
+      ultimo && ultimo.situacao !== "gravado"
+        ? { contribuicao: txt(ultimo.margem_contribuicao), rentabilidade: txt(ultimo.rentabilidade), venda: txt(ultimo.venda_sem_impostos) }
+        : vindoDoErp,
+    );
+    setUltimoPedidoErp(ultimo);
+  };
 
   const nomeUsuarioPorId = (id: any) => listaUsuarios.find((u) => u.id === id)?.nome || "";
 
@@ -108,6 +154,15 @@ export default function TelaCadastroObras({
       setErroObra("Todos os campos obrigatórios.");
       return;
     }
+    const valoresErpMudaram =
+      isAdmin &&
+      (["contribuicao", "rentabilidade", "venda"] as const).some(
+        (k) => Number(valoresErp[k] || 0) !== Number(valoresErpOriginais[k] || 0) || (valoresErp[k] === "") !== (valoresErpOriginais[k] === ""),
+      );
+    if (valoresErpMudaram && (["contribuicao", "rentabilidade", "venda"] as const).some((k) => valoresErp[k] === "")) {
+      setErroObra("Para gravar no ERP, informe a margem de contribuição, a rentabilidade e o faturamento sem impostos.");
+      return;
+    }
     setCarregando(true);
     try {
       const dadosObra = {
@@ -124,6 +179,7 @@ export default function TelaCadastroObras({
         status: "em_andamento",
       };
 
+      let idObraSalva: string | null = novaObra.id;
       if (novaObra.id) {
         const { error } = await supabase
           .from("obras")
@@ -138,6 +194,7 @@ export default function TelaCadastroObras({
           .select()
           .single();
         if (error) throw error;
+        idObraSalva = obraCriada?.id || null;
 
         if (obraCriada?.id) {
           const { error: erroCronograma } = await supabase.rpc(
@@ -158,6 +215,31 @@ export default function TelaCadastroObras({
         onAviso("Obra salva com cronograma e documentos padrão!");
       }
 
+      if (valoresErpMudaram && idObraSalva) {
+        const { data: idPedido, error: erroErp } = await supabase.rpc("obra_valores_erp_solicitar", {
+          p_id_obra: idObraSalva,
+          p_margem_contribuicao: Number(valoresErp.contribuicao),
+          p_rentabilidade: Number(valoresErp.rentabilidade),
+          p_venda_sem_impostos: Number(valoresErp.venda),
+        });
+        if (erroErp) {
+          // a obra ja foi salva; so os valores do ERP ficaram de fora
+          setErroObra("Obra salva, mas os valores do ERP não: " + erroErp.message);
+          await carregarValoresErp(idObraSalva);
+          onObrasAlteradas();
+          buscarObrasCadastro();
+          return;
+        }
+        onAviso(
+          idPedido
+            ? "Margem, rentabilidade e faturamento enviados ao ERP: o robô grava em até 5 minutos."
+            : "Margem, rentabilidade e faturamento já estão iguais no ERP.",
+        );
+      }
+
+      setValoresErp(VALORES_ERP_VAZIOS);
+      setValoresErpOriginais(VALORES_ERP_VAZIOS);
+      setUltimoPedidoErp(null);
       setNovaObra({
         id: null,
         codigo_externo: "",
@@ -194,6 +276,7 @@ export default function TelaCadastroObras({
       valor_servico: obra.valor_servico ?? "",
       observacoes: obra.observacoes || "",
     });
+    carregarValoresErp(obra.id);
     setTimeout(() => {
       document
         .getElementById("form-cadastro-obra")
@@ -215,6 +298,9 @@ export default function TelaCadastroObras({
       valor_servico: "",
       observacoes: "",
     });
+    setValoresErp(VALORES_ERP_VAZIOS);
+    setValoresErpOriginais(VALORES_ERP_VAZIOS);
+    setUltimoPedidoErp(null);
     setErroObra("");
   };
 
@@ -430,6 +516,13 @@ export default function TelaCadastroObras({
               className="w-full border p-3 pl-8 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
             />
           </div>
+          {isAdmin && (
+            <ValoresErpObra
+              valores={valoresErp}
+              onChange={setValoresErp}
+              ultimoPedido={ultimoPedidoErp}
+            />
+          )}
           <div className="md:col-span-2">
             <label className="block text-sm mb-1 max-w-full">
               Observações
@@ -568,5 +661,88 @@ export default function TelaCadastroObras({
         )}
       </div>
     </div>
+  );
+}
+
+// Margem de contribuicao + rentabilidade = margem prevista; % = margem / faturamento sem impostos (igual a aba
+// Rentabilidade e ao BI). Mostra a situacao do ultimo pedido de gravacao no ERP.
+function ValoresErpObra({
+  valores,
+  onChange,
+  ultimoPedido,
+}: {
+  valores: ValoresErp;
+  onChange: (v: ValoresErp) => void;
+  ultimoPedido: any;
+}) {
+  const margem = Number(valores.contribuicao || 0) + Number(valores.rentabilidade || 0);
+  const venda = Number(valores.venda || 0);
+  const pct = venda > 0 ? (margem / venda) * 100 : null;
+  const campo = (chave: keyof ValoresErp, rotulo: string, ajuda: string) => (
+    <div className="relative">
+      <label htmlFor={`erp-${chave}`} className="block text-sm mb-1 max-w-full">
+        {rotulo}
+      </label>
+      <span className="absolute left-3 top-[30px] text-slate-400 text-sm">R$</span>
+      <input
+        id={`erp-${chave}`}
+        type="number"
+        step="0.01"
+        placeholder="0.00"
+        value={valores[chave]}
+        onChange={(e) => onChange({ ...valores, [chave]: e.target.value })}
+        className="w-full border p-3 pl-8 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
+      />
+      <p className="text-[11px] text-slate-400 mt-1">{ajuda}</p>
+    </div>
+  );
+  const situacao = ultimoPedido?.situacao;
+  return (
+    <>
+      <div className="border-t pt-4 md:col-span-2 mt-2">
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Orçamento no ERP (somente administradores)</p>
+        <p className="text-[11px] text-slate-400 mt-1">
+          Ao salvar, o robô grava no ERP em até 5 minutos (cadastro de projetos e pedido de venda da obra).
+        </p>
+      </div>
+      {campo("contribuicao", "Margem de contribuição", "CADPROJ · valor próprio")}
+      {campo("rentabilidade", "Rentabilidade", "CADPROJ · valor terceiro")}
+      {campo("venda", "Faturamento sem impostos", "Pedido de venda · meta de venda")}
+      <div className="rounded-lg border bg-slate-50 p-3 text-sm self-start">
+        <p className="text-slate-500 text-xs">Margem prevista (contribuição + rentabilidade)</p>
+        <p className="font-bold tabular-nums text-slate-800">
+          {formatarMoeda(margem)}
+          {pct !== null && <span className="ml-2 text-[#2A6377]">{pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>}
+        </p>
+      </div>
+      {ultimoPedido && (
+        <div
+          className={`md:col-span-2 rounded-lg border px-3 py-2 text-sm ${
+            situacao === "erro"
+              ? "bg-red-50 border-red-200 text-red-700"
+              : situacao === "pendente"
+                ? "bg-amber-50 border-amber-200 text-amber-800"
+                : "bg-emerald-50 border-emerald-200 text-emerald-800"
+          }`}
+          aria-live="polite"
+        >
+          {situacao === "pendente" && (
+            <>
+              Aguardando o robô gravar no ERP (pedido de {ultimoPedido.nome_solicitante} em{" "}
+              {new Date(ultimoPedido.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })})
+              {ultimoPedido.erro ? ` — ${ultimoPedido.erro}` : ""}.
+            </>
+          )}
+          {situacao === "gravado" && (
+            <>
+              Gravado no ERP em{" "}
+              {new Date(ultimoPedido.gravado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} (
+              {ultimoPedido.nome_solicitante}).
+            </>
+          )}
+          {situacao === "erro" && <>Não gravado no ERP: {ultimoPedido.erro}. Corrija e salve de novo.</>}
+        </div>
+      )}
+    </>
   );
 }
