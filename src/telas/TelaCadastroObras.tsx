@@ -3,7 +3,7 @@ import { supabase } from "../supabase";
 import { fasesProjeto } from "../constants";
 import type { Obra, Usuario } from "../types";
 import { formatarDataSegura, formatarMoeda, labelFase, labelStatusObra, classeStatusObra } from "../utils";
-import { Save, AlertTriangle, Edit2, X, FolderOpen } from "lucide-react";
+import { Save, AlertTriangle, Edit2, X, FolderOpen, Loader2, CheckCircle2, Clock } from "lucide-react";
 
 // Cadastros -> Obras: lista (filtro por situacao), cadastro de obra nova (com
 // cronograma e documentos padrao) e edicao. "Editar cadastro" de dentro da obra
@@ -25,6 +25,75 @@ interface Props {
 
 type ValoresErp = { contribuicao: string; rentabilidade: string; venda: string };
 const VALORES_ERP_VAZIOS: ValoresErp = { contribuicao: "", rentabilidade: "", venda: "" };
+
+// ---- campos do formulario (mesmo visual em toda a tela)
+const classeCampo =
+  "w-full h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-[#2A6377] focus:ring-2 focus:ring-[#2A6377]/15 disabled:bg-slate-50";
+
+function Rotulo({ htmlFor, texto, obrigatorio, dica }: { htmlFor?: string; texto: string; obrigatorio?: boolean; dica?: string }) {
+  return (
+    <label htmlFor={htmlFor} className="flex items-baseline justify-between gap-2 mb-1">
+      <span className="text-xs font-semibold text-slate-600">
+        {texto}
+        {obrigatorio && <span className="text-red-500 ml-0.5">*</span>}
+      </span>
+      {dica && <span className="text-[10px] text-slate-400 truncate">{dica}</span>}
+    </label>
+  );
+}
+
+function Secao({ titulo, descricao, children, destaque }: { titulo: string; descricao?: string; children: any; destaque?: boolean }) {
+  return (
+    <section className={`rounded-xl border p-4 md:p-5 ${destaque ? "border-[#2A6377]/25 bg-[#2A6377]/[0.03]" : "border-slate-200 bg-white"}`}>
+      <div className="mb-4">
+        <h4 className="text-sm font-bold text-slate-800">{titulo}</h4>
+        {descricao && <p className="text-xs text-slate-500 mt-0.5">{descricao}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+// valor em reais: guarda "1234.5" (ponto decimal, como o banco); mostra "1.234,50" fora do foco.
+// Aceita digitar 1234,5 | 1.234,50 | 1234.50
+const formatarReais = (v: string) =>
+  v === "" || isNaN(Number(v)) ? "" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function lerReais(texto: string): string {
+  let t = texto.replace(/[^\d.,-]/g, "");
+  if (!t) return "";
+  if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
+  else if ((t.match(/\./g) || []).length > 1 || /\.\d{3}$/.test(t)) t = t.replace(/\./g, "");
+  const n = Number(t);
+  return isNaN(n) ? "" : String(Math.round(n * 100) / 100);
+}
+
+function CampoMoeda({ id, valor, onChange, placeholder = "0,00" }: { id: string; valor: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [focado, setFocado] = useState(false);
+  const [texto, setTexto] = useState("");
+  return (
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 pointer-events-none">R$</span>
+      <input
+        id={id}
+        inputMode="decimal"
+        autoComplete="off"
+        placeholder={placeholder}
+        value={focado ? texto : formatarReais(valor)}
+        onFocus={() => {
+          setTexto(valor === "" ? "" : formatarReais(valor));
+          setFocado(true);
+        }}
+        onChange={(e) => {
+          setTexto(e.target.value);
+          onChange(lerReais(e.target.value));
+        }}
+        onBlur={() => setFocado(false)}
+        className={`${classeCampo} pl-9 text-right tabular-nums`}
+      />
+    </div>
+  );
+}
 
 export default function TelaCadastroObras({
   usuarioAtual,
@@ -317,259 +386,213 @@ export default function TelaCadastroObras({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [obraParaEditar]);
 
+  const totalVenda = Number(novaObra.valor_produto || 0) + Number(novaObra.valor_servico || 0);
+
   return (
     <div className="animate-in fade-in dash-main-wrapper max-w-5xl">
-      <h2 className="text-2xl md:text-3xl font-bold mb-6 md:mb-8 text-slate-800">
-        Cadastros &rarr; Obras
-      </h2>
+      <h2 className="text-2xl md:text-3xl font-bold mb-6 text-slate-800">Cadastros &rarr; Obras</h2>
+
       <form
         id="form-cadastro-obra"
         onSubmit={salvarObra}
-        className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 mb-6 md:mb-8 max-w-full"
+        className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6 md:mb-8 max-w-full overflow-hidden"
       >
-        <div className="flex justify-between items-center mb-6 border-b pb-2">
-          <h3 className="text-xl font-bold">
-            {novaObra.id ? "Editar Obra" : "Nova Obra"}
-          </h3>
+        <div className="flex items-start justify-between gap-3 px-4 md:px-6 py-4 border-b bg-slate-50/70">
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-slate-800 truncate">
+              {novaObra.id ? `Editar obra ${novaObra.codigo_externo}` : "Nova obra"}
+            </h3>
+            <p className="text-xs text-slate-500 truncate">
+              {novaObra.id ? novaObra.nome : "Cadastre a obra; o cronograma e os documentos padrão são criados juntos."}
+            </p>
+          </div>
           {novaObra.id && (
             <button
               type="button"
               onClick={cancelarEdicaoObra}
-              className="text-gray-500 flex items-center gap-1 text-sm"
+              className="shrink-0 text-slate-500 hover:text-slate-800 flex items-center gap-1 text-sm px-2 py-1 rounded-lg hover:bg-white border border-transparent hover:border-slate-200"
             >
-              <X size={16} /> Cancelar
+              <X size={16} /> Cancelar edição
             </button>
           )}
         </div>
-        {erroObra && (
-          <div className="mb-6 bg-red-50 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3">
-            <AlertTriangle size={20} />{" "}
-            <span className="text-sm">{erroObra}</span>
-          </div>
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 max-w-full">
-          <div>
-            <label className="block text-sm mb-1 max-w-full">
-              Código *
-            </label>
-            <input
-              type="text"
-              value={novaObra.codigo_externo}
-              onChange={(e) =>
-                setNovaObra({
-                  ...novaObra,
-                  codigo_externo: e.target.value,
-                })
-              }
-              className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1 max-w-full">
-              Nome *
-            </label>
-            <input
-              type="text"
-              value={novaObra.nome}
-              onChange={(e) =>
-                setNovaObra({ ...novaObra, nome: e.target.value })
-              }
-              className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1 max-w-full">
-              Início *
-            </label>
-            <input
-              type="date"
-              value={novaObra.data_inicio}
-              onChange={(e) =>
-                setNovaObra({ ...novaObra, data_inicio: e.target.value })
-              }
-              className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1 max-w-full">
-              Prazo Fim *
-            </label>
-            <input
-              type="date"
-              value={novaObra.data_previsao_fim}
-              onChange={(e) =>
-                setNovaObra({
-                  ...novaObra,
-                  data_previsao_fim: e.target.value,
-                })
-              }
-              className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1 max-w-full">
-              Fase Atual
-            </label>
-            <select
-              value={novaObra.fase_atual}
-              onChange={(e) =>
-                setNovaObra({ ...novaObra, fase_atual: e.target.value })
-              }
-              className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] bg-white max-w-full"
-            >
-              {fasesProjeto.map((fase) => (
-                <option key={fase.valor} value={fase.valor}>
-                  {fase.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm mb-1 max-w-full">
-              Responsável *
-            </label>
-            {isAdmin ? (
-              <select
-                value={novaObra.id_responsavel}
-                onChange={(e) =>
-                  setNovaObra({
-                    ...novaObra,
-                    id_responsavel: e.target.value,
-                  })
-                }
-                className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full bg-white"
-              >
-                <option value="">Selecione…</option>
-                {listaUsuarios
-                  .filter((user) => user.perfil === "engenheiro")
-                  .map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.nome}
+
+        <div className="p-4 md:p-6 space-y-4">
+          {erroObra && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3" role="alert">
+              <AlertTriangle size={18} className="shrink-0" />
+              <span className="text-sm">{erroObra}</span>
+            </div>
+          )}
+
+          <Secao titulo="Dados da obra">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div>
+                <Rotulo htmlFor="obra-codigo" texto="Código" obrigatorio />
+                <input
+                  id="obra-codigo"
+                  value={novaObra.codigo_externo}
+                  onChange={(e) => setNovaObra({ ...novaObra, codigo_externo: e.target.value })}
+                  placeholder="ex.: 2182"
+                  autoComplete="off"
+                  className={`${classeCampo} tabular-nums`}
+                />
+              </div>
+              <div className="sm:col-span-3">
+                <Rotulo htmlFor="obra-nome" texto="Nome" obrigatorio />
+                <input
+                  id="obra-nome"
+                  value={novaObra.nome}
+                  onChange={(e) => setNovaObra({ ...novaObra, nome: e.target.value })}
+                  placeholder="Cliente / unidade"
+                  autoComplete="off"
+                  className={classeCampo}
+                />
+              </div>
+              <div>
+                <Rotulo htmlFor="obra-inicio" texto="Início" obrigatorio />
+                <input
+                  id="obra-inicio"
+                  type="date"
+                  value={novaObra.data_inicio}
+                  onChange={(e) => setNovaObra({ ...novaObra, data_inicio: e.target.value })}
+                  className={classeCampo}
+                />
+              </div>
+              <div>
+                <Rotulo htmlFor="obra-fim" texto="Prazo de entrega" obrigatorio />
+                <input
+                  id="obra-fim"
+                  type="date"
+                  value={novaObra.data_previsao_fim}
+                  onChange={(e) => setNovaObra({ ...novaObra, data_previsao_fim: e.target.value })}
+                  className={classeCampo}
+                />
+              </div>
+              <div>
+                <Rotulo htmlFor="obra-fase" texto="Fase atual" />
+                <select
+                  id="obra-fase"
+                  value={novaObra.fase_atual}
+                  onChange={(e) => setNovaObra({ ...novaObra, fase_atual: e.target.value })}
+                  className={classeCampo}
+                >
+                  {fasesProjeto.map((fase) => (
+                    <option key={fase.valor} value={fase.valor}>
+                      {fase.label}
                     </option>
                   ))}
-              </select>
-            ) : (
-              <div className="w-full border p-3 rounded-lg bg-slate-50 text-slate-700 max-w-full">
-                {nomeUsuarioPorId(idResponsavelEscopo) ||
-                  usuarioAtual?.nome ||
-                  "Usuário atual"}
+                </select>
               </div>
-            )}
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm mb-1 max-w-full">
-              Descrição da Obra
-            </label>
-            <textarea
-              rows={3}
-              value={novaObra.descricao}
-              onChange={(e) =>
-                setNovaObra({ ...novaObra, descricao: e.target.value })
-              }
-              className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
-              placeholder="Descreva o escopo, ambientes, objetivo do projeto etc."
-            ></textarea>
-          </div>
+              <div>
+                <Rotulo htmlFor="obra-responsavel" texto="Responsável" obrigatorio />
+                {isAdmin ? (
+                  <select
+                    id="obra-responsavel"
+                    value={novaObra.id_responsavel}
+                    onChange={(e) => setNovaObra({ ...novaObra, id_responsavel: e.target.value })}
+                    className={classeCampo}
+                  >
+                    <option value="">Selecione…</option>
+                    {listaUsuarios
+                      .filter((user) => user.perfil === "engenheiro")
+                      .map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.nome}
+                        </option>
+                      ))}
+                  </select>
+                ) : (
+                  <div className={`${classeCampo} flex items-center bg-slate-50 text-slate-600`}>
+                    {nomeUsuarioPorId(idResponsavelEscopo) || usuarioAtual?.nome || "Usuário atual"}
+                  </div>
+                )}
+              </div>
+              <div className="sm:col-span-4">
+                <Rotulo htmlFor="obra-descricao" texto="Descrição da obra" />
+                <textarea
+                  id="obra-descricao"
+                  rows={3}
+                  value={novaObra.descricao}
+                  onChange={(e) => setNovaObra({ ...novaObra, descricao: e.target.value })}
+                  className={`${classeCampo} h-auto py-2 resize-y`}
+                  placeholder="Escopo, ambientes, objetivo do projeto etc."
+                />
+              </div>
+            </div>
+          </Secao>
 
-          <div className="border-t pt-4 md:col-span-2 mt-2">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-              Financeiro (Valores de Venda)
-            </p>
-          </div>
-          <div className="relative">
-            <label className="block text-sm mb-1 max-w-full">
-              Valor Total (Materiais)
-            </label>
-            <span className="absolute left-3 top-[30px] text-slate-400 text-sm">
-              R$
-            </span>
-            <input
-              type="number"
-              placeholder="0.00"
-              value={novaObra.valor_produto}
-              onChange={(e) =>
-                setNovaObra({
-                  ...novaObra,
-                  valor_produto: e.target.value,
-                })
-              }
-              className="w-full border p-3 pl-8 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
-            />
-          </div>
-          <div className="relative">
-            <label className="block text-sm mb-1 max-w-full">
-              Valor Total (Serviço)
-            </label>
-            <span className="absolute left-3 top-[30px] text-slate-400 text-sm">
-              R$
-            </span>
-            <input
-              type="number"
-              placeholder="0.00"
-              value={novaObra.valor_servico}
-              onChange={(e) =>
-                setNovaObra({
-                  ...novaObra,
-                  valor_servico: e.target.value,
-                })
-              }
-              className="w-full border p-3 pl-8 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
-            />
-          </div>
-          {isAdmin && (
-            <ValoresErpObra
-              valores={valoresErp}
-              onChange={setValoresErp}
-              ultimoPedido={ultimoPedidoErp}
-            />
-          )}
-          <div className="md:col-span-2">
-            <label className="block text-sm mb-1 max-w-full">
-              Observações
-            </label>
+          <Secao titulo="Valores de venda" descricao="Valor vendido ao cliente, com impostos.">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <Rotulo htmlFor="obra-valor-produto" texto="Materiais" />
+                <CampoMoeda id="obra-valor-produto" valor={String(novaObra.valor_produto ?? "")} onChange={(v) => setNovaObra({ ...novaObra, valor_produto: v })} />
+              </div>
+              <div>
+                <Rotulo htmlFor="obra-valor-servico" texto="Serviço" />
+                <CampoMoeda id="obra-valor-servico" valor={String(novaObra.valor_servico ?? "")} onChange={(v) => setNovaObra({ ...novaObra, valor_servico: v })} />
+              </div>
+              <div>
+                <Rotulo texto="Total da venda" />
+                <div className="h-10 px-3 rounded-lg bg-slate-100 flex items-center justify-end text-sm font-bold text-slate-800 tabular-nums">
+                  {formatarMoeda(totalVenda)}
+                </div>
+              </div>
+            </div>
+          </Secao>
+
+          {isAdmin && <ValoresErpObra valores={valoresErp} onChange={setValoresErp} ultimoPedido={ultimoPedidoErp} />}
+
+          <Secao titulo="Observações">
             <textarea
+              id="obra-observacoes"
+              aria-label="Observações"
               rows={2}
               value={novaObra.observacoes}
-              onChange={(e) =>
-                setNovaObra({ ...novaObra, observacoes: e.target.value })
-              }
-              className="w-full border p-3 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
+              onChange={(e) => setNovaObra({ ...novaObra, observacoes: e.target.value })}
+              className={`${classeCampo} h-auto py-2 resize-y`}
               placeholder="Informações internas, premissas ou alertas."
-            ></textarea>
-          </div>
+            />
+          </Secao>
         </div>
-        <div className="flex justify-end pt-4 border-t max-w-full">
+
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 px-4 md:px-6 py-4 border-t bg-slate-50/70">
+          {novaObra.id && (
+            <button
+              type="button"
+              onClick={cancelarEdicaoObra}
+              className="h-10 px-4 rounded-lg border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+          )}
           <button
             type="submit"
             disabled={carregando}
-            className="bg-[#2A6377] text-white px-6 py-3 rounded-lg font-medium w-full sm:w-auto"
+            className="h-10 px-6 rounded-lg bg-[#2A6377] hover:bg-[#21505f] text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            <Save size={20} className="inline mr-2" /> Salvar
+            {carregando ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            {novaObra.id ? "Salvar alterações" : "Cadastrar obra"}
           </button>
         </div>
       </form>
 
-      <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-200 max-w-full">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b pb-2 max-w-full">
-          <h3 className="text-lg font-bold max-w-full">
-            Todas as Obras (Banco de Dados)
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 max-w-full overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 md:px-6 py-4 border-b">
+          <h3 className="text-lg font-bold text-slate-800">
+            Obras cadastradas <span className="text-sm font-semibold text-slate-400">({obrasCadastroLista.length})</span>
           </h3>
           <div className="flex items-center gap-2">
-            <label
-              htmlFor="filtro-status-cadastro-obras"
-              className="text-sm font-medium text-slate-500 whitespace-nowrap"
-            >
-              Status:
+            <label htmlFor="filtro-status-cadastro-obras" className="text-xs font-semibold text-slate-500 whitespace-nowrap">
+              Situação
             </label>
             <select
               id="filtro-status-cadastro-obras"
               value={filtroStatusCadastroObras}
-              onChange={(e) =>
-                setFiltroStatusCadastroObras(e.target.value as any)
-              }
-              className="border rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-[#2A6377] bg-white"
+              onChange={(e) => setFiltroStatusCadastroObras(e.target.value as any)}
+              className={`${classeCampo} w-auto font-semibold`}
             >
-              <option value="em_andamento">Em Andamento</option>
+              <option value="em_andamento">Em andamento</option>
               <option value="finalizada">Finalizadas</option>
               <option value="cancelada">Canceladas</option>
               <option value="todas">Todas</option>
@@ -577,81 +600,72 @@ export default function TelaCadastroObras({
           </div>
         </div>
         {obrasCadastroLista.length === 0 ? (
-          <p className="text-gray-500 text-sm max-w-full truncate">
+          <p className="text-slate-500 text-sm px-4 md:px-6 py-8 text-center">
             {filtroStatusCadastroObras === "todas"
               ? "Nenhuma obra."
               : `Nenhuma obra ${labelStatusObra(filtroStatusCadastroObras).toLowerCase()}.`}
           </p>
         ) : (
-          <div className="overflow-x-auto pb-2 max-w-full">
-            <table className="w-full text-left border-collapse min-w-[700px] max-w-full">
+          <div className="overflow-x-auto max-w-full">
+            <table className="w-full text-left border-collapse min-w-[760px]">
               <thead>
-                <tr className="bg-slate-50 text-slate-600 text-sm border-y max-w-full">
-                  <th className="p-3 max-w-full truncate">Código</th>
-                  <th className="p-3 max-w-full truncate">Nome</th>
-                  <th className="p-3 max-w-full truncate">Fase</th>
-                  <th className="p-3 max-w-full truncate">Responsável</th>
-                  <th className="p-3 max-w-full truncate">Status</th>
-                  <th className="p-3 max-w-full truncate">
-                    Prazo Entrega
-                  </th>
-                  <th className="p-3 text-right">Ação</th>
+                <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide border-b">
+                  <th className="px-4 py-2.5 font-semibold">Código</th>
+                  <th className="px-4 py-2.5 font-semibold">Nome</th>
+                  <th className="px-4 py-2.5 font-semibold">Fase</th>
+                  <th className="px-4 py-2.5 font-semibold">Responsável</th>
+                  <th className="px-4 py-2.5 font-semibold">Situação</th>
+                  <th className="px-4 py-2.5 font-semibold">Entrega</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Venda</th>
+                  <th className="px-4 py-2.5" />
                 </tr>
               </thead>
-              <tbody className="text-sm max-w-full">
+              <tbody className="text-sm">
                 {obrasCadastroLista.map((obra) => (
                   <tr
                     key={obra.id}
-                    className="border-b hover:bg-slate-50 max-w-full"
+                    className={`border-b last:border-0 hover:bg-slate-50 ${novaObra.id === obra.id ? "bg-[#2A6377]/[0.05]" : ""}`}
                   >
-                    <td className="p-3 text-slate-700 max-w-full truncate">
-                      {obra.codigo_externo}
-                    </td>
-                    <td className="p-3 font-bold text-[#2A6377] max-w-full truncate">
+                    <td className="px-4 py-3 font-semibold text-slate-700 tabular-nums">{obra.codigo_externo}</td>
+                    <td className="px-4 py-3 font-semibold text-[#2A6377] max-w-[260px] truncate" title={obra.nome}>
                       {obra.nome}
                     </td>
-                    <td className="p-3 text-slate-600 max-w-full truncate">
-                      {labelFase(obra.fase_atual || "processo_inicial")}
-                    </td>
-                    <td className="p-3 text-slate-600 max-w-full truncate">
-                      {obra.usuarios?.nome}
-                    </td>
-                    <td className="p-3 max-w-full truncate">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-1 rounded border uppercase ${classeStatusObra(obra.status ?? "")}`}
-                      >
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{labelFase(obra.fase_atual || "processo_inicial")}</td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{(obra as any).usuarios?.nome || "-"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded border uppercase ${classeStatusObra(obra.status ?? "")}`}>
                         {labelStatusObra(obra.status ?? "")}
                       </span>
                       {obra.status === "finalizada" && obra.data_finalizacao && (
-                        <p className="text-[10px] text-slate-400 mt-1">
-                          em {formatarDataSegura(obra.data_finalizacao)}
-                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1">em {formatarDataSegura(obra.data_finalizacao)}</p>
                       )}
                       {obra.status === "cancelada" && obra.data_cancelamento && (
-                        <p className="text-[10px] text-slate-400 mt-1">
-                          em {formatarDataSegura(obra.data_cancelamento)}
-                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1">em {formatarDataSegura(obra.data_cancelamento)}</p>
                       )}
                     </td>
-                    <td className="p-3 text-slate-600 max-w-full truncate">
-                      {formatarDataSegura(obra.data_previsao_fim)}
+                    <td className="px-4 py-3 text-slate-600 tabular-nums whitespace-nowrap">{formatarDataSegura(obra.data_previsao_fim)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700 tabular-nums whitespace-nowrap">
+                      {formatarMoeda(Number(obra.valor_produto || 0) + Number(obra.valor_servico || 0))}
                     </td>
-                    <td className="p-3 text-right flex justify-end gap-2">
-                      <button
-                        onClick={() => abrirPainelObra(obra)}
-                        className="text-[#2A6377] bg-[#2A6377]/10 hover:bg-[#2A6377] hover:text-white px-3 py-1.5 rounded text-xs font-bold transition flex items-center gap-1"
-                      >
-                        <FolderOpen size={14} /> Painel
-                      </button>
-                      {podeEditarObra(obra) && (
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => editarObra(obra)}
-                          className="text-slate-400 hover:text-[#2A6377] p-1.5 bg-slate-100 rounded transition"
-                          title="Editar cadastro da obra"
+                          onClick={() => abrirPainelObra(obra)}
+                          className="text-[#2A6377] bg-[#2A6377]/10 hover:bg-[#2A6377] hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1"
                         >
-                          <Edit2 size={14} />
+                          <FolderOpen size={14} /> Painel
                         </button>
-                      )}
+                        {podeEditarObra(obra) && (
+                          <button
+                            onClick={() => editarObra(obra)}
+                            className="text-slate-500 hover:text-[#2A6377] p-1.5 bg-slate-100 hover:bg-[#2A6377]/10 rounded-lg transition"
+                            title="Editar cadastro da obra"
+                            aria-label={`Editar cadastro da obra ${obra.codigo_externo}`}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -677,47 +691,48 @@ function ValoresErpObra({
 }) {
   const margem = Number(valores.contribuicao || 0) + Number(valores.rentabilidade || 0);
   const venda = Number(valores.venda || 0);
-  const pct = venda > 0 ? (margem / venda) * 100 : null;
-  const campo = (chave: keyof ValoresErp, rotulo: string, ajuda: string) => (
-    <div className="relative">
-      <label htmlFor={`erp-${chave}`} className="block text-sm mb-1 max-w-full">
-        {rotulo}
-      </label>
-      <span className="absolute left-3 top-[30px] text-slate-400 text-sm">R$</span>
-      <input
-        id={`erp-${chave}`}
-        type="number"
-        step="0.01"
-        placeholder="0.00"
-        value={valores[chave]}
-        onChange={(e) => onChange({ ...valores, [chave]: e.target.value })}
-        className="w-full border p-3 pl-8 rounded-lg outline-none focus:border-[#2A6377] max-w-full"
-      />
-      <p className="text-[11px] text-slate-400 mt-1">{ajuda}</p>
-    </div>
-  );
+  const pct = (v: number) => (venda > 0 ? `${((v / venda) * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%` : "—");
   const situacao = ultimoPedido?.situacao;
+  const quando = (d: string) => new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
   return (
-    <>
-      <div className="border-t pt-4 md:col-span-2 mt-2">
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Orçamento no ERP (somente administradores)</p>
-        <p className="text-[11px] text-slate-400 mt-1">
-          Ao salvar, o robô grava no ERP em até 5 minutos (cadastro de projetos e pedido de venda da obra).
-        </p>
+    <Secao
+      destaque
+      titulo="Orçamento no ERP"
+      descricao="Somente administradores. Ao salvar, o robô grava no ERP em até 5 minutos (cadastro de projetos e pedido de venda)."
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {(
+          [
+            ["venda", "Faturamento sem impostos", "PEDVEN · meta de venda", "base do %"],
+            ["contribuicao", "Margem de contribuição", "CADPROJ · valor próprio", null],
+            ["rentabilidade", "Rentabilidade", "CADPROJ · valor terceiro", null],
+          ] as const
+        ).map(([chave, texto, origem, nota]) => (
+          <div key={chave}>
+            <Rotulo htmlFor={`erp-${chave}`} texto={texto} />
+            <CampoMoeda id={`erp-${chave}`} valor={valores[chave]} onChange={(v) => onChange({ ...valores, [chave]: v })} />
+            <p className="flex justify-between gap-2 text-[11px] mt-1">
+              <span className="text-slate-400 truncate">{origem}</span>
+              <span className="text-slate-500 tabular-nums whitespace-nowrap">{nota ?? `${pct(Number(valores[chave] || 0))} do faturamento`}</span>
+            </p>
+          </div>
+        ))}
       </div>
-      {campo("contribuicao", "Margem de contribuição", "CADPROJ · valor próprio")}
-      {campo("rentabilidade", "Rentabilidade", "CADPROJ · valor terceiro")}
-      {campo("venda", "Faturamento sem impostos", "Pedido de venda · meta de venda")}
-      <div className="rounded-lg border bg-slate-50 p-3 text-sm self-start">
-        <p className="text-slate-500 text-xs">Margem prevista (contribuição + rentabilidade)</p>
-        <p className="font-bold tabular-nums text-slate-800">
-          {formatarMoeda(margem)}
-          {pct !== null && <span className="ml-2 text-[#2A6377]">{pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>}
-        </p>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white border border-slate-200 px-4 py-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Margem prevista</p>
+          <p className="text-xs text-slate-400">contribuição + rentabilidade</p>
+        </div>
+        <div className="text-right">
+          <p className="text-lg font-bold text-slate-800 tabular-nums">{formatarMoeda(margem)}</p>
+          <p className="text-sm font-bold text-[#2A6377] tabular-nums">{pct(margem)}</p>
+        </div>
       </div>
+
       {ultimoPedido && (
         <div
-          className={`md:col-span-2 rounded-lg border px-3 py-2 text-sm ${
+          className={`mt-3 rounded-lg border px-3 py-2 text-sm flex items-start gap-2 ${
             situacao === "erro"
               ? "bg-red-50 border-red-200 text-red-700"
               : situacao === "pendente"
@@ -726,23 +741,29 @@ function ValoresErpObra({
           }`}
           aria-live="polite"
         >
-          {situacao === "pendente" && (
-            <>
-              Aguardando o robô gravar no ERP (pedido de {ultimoPedido.nome_solicitante} em{" "}
-              {new Date(ultimoPedido.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })})
-              {ultimoPedido.erro ? ` — ${ultimoPedido.erro}` : ""}.
-            </>
+          {situacao === "erro" ? (
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+          ) : situacao === "pendente" ? (
+            <Clock size={16} className="shrink-0 mt-0.5" />
+          ) : (
+            <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
           )}
-          {situacao === "gravado" && (
-            <>
-              Gravado no ERP em{" "}
-              {new Date(ultimoPedido.gravado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} (
-              {ultimoPedido.nome_solicitante}).
-            </>
-          )}
-          {situacao === "erro" && <>Não gravado no ERP: {ultimoPedido.erro}. Corrija e salve de novo.</>}
+          <span>
+            {situacao === "pendente" && (
+              <>
+                Aguardando o robô gravar no ERP — pedido de {ultimoPedido.nome_solicitante} em {quando(ultimoPedido.created_at)}
+                {ultimoPedido.erro ? ` (${ultimoPedido.erro})` : ""}.
+              </>
+            )}
+            {situacao === "gravado" && (
+              <>
+                Gravado no ERP em {quando(ultimoPedido.gravado_em)} ({ultimoPedido.nome_solicitante}).
+              </>
+            )}
+            {situacao === "erro" && <>Não gravado no ERP: {ultimoPedido.erro}. Corrija e salve de novo.</>}
+          </span>
         </div>
       )}
-    </>
+    </Secao>
   );
 }
