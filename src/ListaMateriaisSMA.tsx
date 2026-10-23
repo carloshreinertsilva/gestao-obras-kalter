@@ -287,15 +287,26 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
       return null;
     });
 
+  // Quadros contam SMAs (somam o total); itens por situacao vao embaixo. A SMA pode ter itens em situacoes
+  // diferentes: ativa = algum item ativo; cancelada = todos os itens cancelados; encerrada = o resto.
   const resumo = useMemo(() => {
-    const porSituacao = { A: 0, E: 0, C: 0 } as Record<SituacaoSma, number>;
-    const smas = new Set<number>();
+    const itens = { A: 0, E: 0, C: 0 } as Record<SituacaoSma, number>;
+    const situacoesPorSma = new Map<number, Set<SituacaoSma>>();
     for (const m of materiais) {
       const s = (m.situacao as SituacaoSma) || "A";
-      if (porSituacao[s] !== undefined) porSituacao[s] += 1;
-      if (m.nr_sma) smas.add(m.nr_sma);
+      if (itens[s] !== undefined) itens[s] += 1;
+      if (m.nr_sma) {
+        if (!situacoesPorSma.has(m.nr_sma)) situacoesPorSma.set(m.nr_sma, new Set());
+        situacoesPorSma.get(m.nr_sma)!.add(s);
+      }
     }
-    return { totalSmas: smas.size, totalItens: materiais.length, ...porSituacao };
+    const smas = { A: 0, E: 0, C: 0 } as Record<SituacaoSma, number>;
+    for (const sits of situacoesPorSma.values()) {
+      if (sits.has("A")) smas.A += 1;
+      else if (sits.size === 1 && sits.has("C")) smas.C += 1;
+      else smas.E += 1;
+    }
+    return { totalSmas: situacoesPorSma.size, totalItens: materiais.length, smas, itens };
   }, [materiais]);
 
   const opcoesSma = useMemo(
@@ -475,24 +486,30 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
         </div>
         <button
           onClick={() => setFiltroSituacao(filtroSituacao === "A" ? "todas" : "A")}
+          title="SMAs com pelo menos um item ativo. Clique para ver os itens ativos."
           className={`text-left p-4 rounded-xl shadow-sm border transition ${filtroSituacao === "A" ? "bg-amber-100 border-amber-300" : "bg-amber-50 border-amber-100 hover:bg-amber-100"}`}
         >
           <p className="text-xs text-amber-700 font-bold uppercase">Ativas</p>
-          <p className="text-2xl font-bold text-amber-700">{resumo.A}</p>
+          <p className="text-2xl font-bold text-amber-700">{resumo.smas.A}</p>
+          <p className="text-[11px] text-amber-700/70">{resumo.itens.A} item(ns) ativo(s)</p>
         </button>
         <button
           onClick={() => setFiltroSituacao(filtroSituacao === "E" ? "todas" : "E")}
+          title="SMAs sem item ativo e com pelo menos um item encerrado. Clique para ver os itens encerrados."
           className={`text-left p-4 rounded-xl shadow-sm border transition ${filtroSituacao === "E" ? "bg-emerald-100 border-emerald-300" : "bg-emerald-50 border-emerald-100 hover:bg-emerald-100"}`}
         >
           <p className="text-xs text-emerald-700 font-bold uppercase">Encerradas</p>
-          <p className="text-2xl font-bold text-emerald-700">{resumo.E}</p>
+          <p className="text-2xl font-bold text-emerald-700">{resumo.smas.E}</p>
+          <p className="text-[11px] text-emerald-700/70">{resumo.itens.E} item(ns) encerrado(s)</p>
         </button>
         <button
           onClick={() => setFiltroSituacao(filtroSituacao === "C" ? "todas" : "C")}
+          title="SMAs com todos os itens cancelados. Clique para ver todos os itens cancelados."
           className={`text-left p-4 rounded-xl shadow-sm border transition ${filtroSituacao === "C" ? "bg-slate-200 border-slate-300" : "bg-slate-100 border-slate-200 hover:bg-slate-200"}`}
         >
           <p className="text-xs text-slate-500 font-bold uppercase">Canceladas</p>
-          <p className="text-2xl font-bold text-slate-600">{resumo.C}</p>
+          <p className="text-2xl font-bold text-slate-600">{resumo.smas.C}</p>
+          <p className="text-[11px] text-slate-500">{resumo.itens.C} item(ns) cancelado(s)</p>
         </button>
       </div>
 
