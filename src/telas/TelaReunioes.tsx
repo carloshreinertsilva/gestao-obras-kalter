@@ -529,12 +529,11 @@ export default function TelaReunioes({
       .map(([nomeGestor, obras]) => ({ nomeGestor, obras }));
   };
 
+  // logistica nao recebe a ata (pedido do Carlos em 26/10/2026)
   const destinatariosAta = () => {
     const emails = listaUsuarios
       .filter((u) =>
-        ["admin", "coordenador", "engenheiro", "gestor", "logistica"].includes(
-          u.perfil || "",
-        ),
+        ["admin", "coordenador", "engenheiro", "gestor"].includes(u.perfil || ""),
       )
       .map((u) => u.email)
       .filter(Boolean);
