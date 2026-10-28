@@ -414,7 +414,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
           {passo === "comercial" && <PassoComercial {...base} />}
           {passo === "embarque" && <PassoEmbarque {...base} />}
           {passo === "itens" && <PassoItens {...base} modificar={modificar} />}
-          {passo === "volumes" && <PassoPacking {...base} modificar={modificar} tabela={tabela} podeReler={Boolean(linhaErp)} onReler={reler} />}
+          {passo === "volumes" && <PassoPacking {...base} modificar={modificar} tabela={tabela} podeReler={Boolean(linhaErp)} onReler={reler} onIrPara={ir} />}
           {passo === "certificado" && <PassoCertificado {...base} />}
           {passo === "revisao" && <PassoRevisao proc={proc} revisao={revisao} aoIrPara={ir} />}
           {passo === "previa" && (

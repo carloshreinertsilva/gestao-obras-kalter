@@ -3,6 +3,7 @@
 // (DocumentosExportacao/exportacao/static/index.html).
 import { aplicarEstimativas, bruto } from "./estimativas";
 import { num } from "./numeros";
+import { m3Material, qtdAduaneira } from "./regras";
 import type { ErpPedido, Material, Parte, Processo, TabelaEstimativas } from "./tipos";
 
 /** Uma linha de public.exportacao_erp (instantaneo do ERP por obra, gravado pelo robo). */
@@ -106,6 +107,31 @@ export function brutoPorPercentual(materiais: Material[], pct: number): Material
     if (!(num(m.peso_liq) > 0 && (!num(m.peso_bruto) || (m.estimado ?? []).includes("peso_bruto")))) return m;
     return { ...m, peso_bruto: arred3(num(m.peso_liq) * (1 + pct / 100)), estimado: (m.estimado ?? []).filter((c) => c !== "peso_bruto") };
   });
+}
+
+/** O que falta num material que vai embarcar (as mesmas condicoes de erro da revisao da Packing List, em regras.ts), para a
+ *  tela mostrar primeiro o que precisa de alguem. */
+export function pendenciasMaterial(m: Material): string[] {
+  if (num(m.quantidade) <= 0) return [];
+  const f: string[] = [];
+  if (String(m.ncm ?? "").replace(/\D/g, "").length !== 8) f.push("NCM no cadastro do ERP");
+  if (!String(m.un_estat ?? "").trim()) f.push("unidade aduaneira");
+  else if (qtdAduaneira(m)[0] === null) f.push("quantidade na unidade aduaneira");
+  if (num(m.peso_liq) <= 0) f.push("peso líquido");
+  if (num(m.peso_bruto) <= 0) f.push("peso bruto");
+  else if (num(m.peso_liq) > num(m.peso_bruto)) f.push("peso líquido maior que o bruto");
+  if (m3Material(m) <= 0) f.push("medidas ou m³");
+  return f;
+}
+
+export type SituacaoMaterial = "fora" | "falta" | "conferir" | "pronto";
+
+/** fora = nao embarca (quantidade 0); falta = tem pendencia; conferir = tem valor estimado (azul); pronto = o resto. */
+export function situacaoMaterial(m: Material): SituacaoMaterial {
+  if (num(m.quantidade) <= 0) return "fora";
+  if (pendenciasMaterial(m).length) return "falta";
+  if ((m.estimado ?? []).length) return "conferir";
+  return "pronto";
 }
 
 /** Valor de um caminho "a.b.0.c" dentro de um objeto. */

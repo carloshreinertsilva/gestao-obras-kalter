@@ -9,7 +9,9 @@ import {
   hojeISO,
   ler,
   mesclarSma,
+  pendenciasMaterial,
   processoInicial,
+  situacaoMaterial,
   type LinhaErp,
 } from "./processo";
 import type { Material, Processo, TabelaEstimativas } from "./tipos";
@@ -86,6 +88,38 @@ describe("reler a lista da SMA", () => {
     expect(r.materiais[0].aceito?.length).toBeGreaterThan(0);
     expect(r.entraram).toBe(0);
     expect(r.sairam).toBe(0);
+  });
+});
+
+describe("situacao de cada material na Packing List", () => {
+  const completo = { codigo: "1", ncm: "8481.80.95", quantidade: 2, unidade: "UN", un_estat: "un", peso_liq: 3, peso_bruto: 3.1, comp: 100, larg: 100, alt: 100 } as Material;
+
+  it("pronto, conferir (azul), falta e fora (nao embarca)", () => {
+    expect(situacaoMaterial(completo)).toBe("pronto");
+    expect(situacaoMaterial({ ...completo, estimado: ["peso_liq"] })).toBe("conferir");
+    expect(situacaoMaterial({ ...completo, peso_liq: 0 })).toBe("falta");
+    expect(situacaoMaterial({ ...completo, quantidade: 0, peso_liq: 0 })).toBe("fora");
+  });
+
+  it("lista o que falta com as mesmas condicoes da revisao", () => {
+    expect(pendenciasMaterial(completo)).toEqual([]);
+    expect(pendenciasMaterial({ ...completo, un_estat: "", peso_liq: 0, peso_bruto: 0, comp: 0 })).toEqual([
+      "unidade aduaneira",
+      "peso líquido",
+      "peso bruto",
+      "medidas ou m³",
+    ]);
+    expect(pendenciasMaterial({ ...completo, peso_liq: 5 })).toEqual(["peso líquido maior que o bruto"]);
+    expect(pendenciasMaterial({ ...completo, comp: 0, m3: 0.4 })).toEqual([]); // sem medidas, o m3 digitado basta
+    expect(pendenciasMaterial({ ...completo, ncm: "" })).toEqual(["NCM no cadastro do ERP"]);
+  });
+
+  it("na 2126 (118 materiais do gabarito), sem estimativas quase tudo falta; com elas, tudo fica para conferir em azul", () => {
+    const antes = cru.map(situacaoMaterial);
+    expect(antes.filter((s) => s === "falta").length).toBeGreaterThan(cru.length / 2);
+    const depois = aplicarEstimativas(structuredClone(cru), tabela).map(situacaoMaterial);
+    expect(depois.filter((s) => s === "falta")).toEqual([]);
+    expect(depois.filter((s) => s === "conferir").length).toBeGreaterThan(cru.length / 2);
   });
 });
 

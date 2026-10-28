@@ -1,182 +1,303 @@
 // Passo 7: Packing List (romaneio no modelo da Kalter). Os materiais vem das SMAs de transferencia do centro de custo da obra;
 // pesos, medidas e unidade aduaneira vem do ERP ou de estimativa (em azul ate alguem digitar ou aceitar).
+// Tela (29/10/2026, maquete aprovada pelo Carlos): abre no que falta; familias recolhiveis; lista curta so de leitura; ao clicar
+// num material abre o painel com os campos em tres grupos (quantidade, peso, medidas). O cabecalho do romaneio foi para Embarque.
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
-import { RefreshCw } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, RefreshCw, X } from "lucide-react";
 import { arredondar, num, somar } from "./numeros";
 import {
   aceitarSugestoes,
   aplicarFamilia,
   brutoPorPercentual,
+  chaveMaterial,
   editarMaterial,
   mesclarSma,
+  pendenciasMaterial,
+  situacaoMaterial,
   type CampoMaterial,
+  type SituacaoMaterial,
 } from "./processo";
 import { UN_NOME, m3Material, qtdAduaneira } from "./regras";
 import type { PropsPasso } from "./passos";
+import type { PassoId } from "./navegacao";
 import type { Material, Processo, TabelaEstimativas } from "./tipos";
-import { Aviso, Botao, CampoNumero, CampoProcesso, Cartao, Secao, Titulo, classeCelula, classeEstimado, dataBR, fmtBR, lerNumero } from "./ui";
+import { Aviso, Botao, CampoNumero, Cartao, Rotulo, Titulo, classeCampo, classeEstimado, dataBR, fmtBR, lerNumero } from "./ui";
 
-const TH = "text-left text-[11px] uppercase tracking-wide text-slate-500 font-semibold px-1.5 py-1.5 bg-slate-50 border-b whitespace-nowrap sticky top-0 z-10";
+type Filtro = "falta" | "conferir" | "todos";
+
+const ETIQUETA: Record<SituacaoMaterial, [string, string]> = {
+  falta: ["falta dado", "bg-red-50 text-red-700 border-red-200"],
+  conferir: ["conferir", "bg-[#ddebf7] text-[#1f4e9a] border-[#b9d2ee]"],
+  pronto: ["pronto", "bg-emerald-50 text-emerald-700 border-emerald-200"],
+  fora: ["não embarca", "bg-slate-50 text-slate-500 border-slate-200"],
+};
+
+function Etiqueta({ s, texto }: { s: SituacaoMaterial; texto?: string }) {
+  const [rot, cor] = ETIQUETA[s];
+  return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border whitespace-nowrap ${cor}`}>{texto ?? rot}</span>;
+}
+
+const kgBR = (v: number) => `${fmtBR(v, v >= 100 ? 0 : 1)} kg`;
 
 interface PropsLinha {
   m: Material;
-  i: number;
-  onEditar: (i: number, campo: CampoMaterial, valor: string | number) => void;
-  onAceitar: (i: number) => void;
+  aberta: boolean;
+  onAbrir: (chave: string) => void;
 }
 
-const LinhaMaterial = memo(function LinhaMaterial({ m, i, onEditar, onAceitar }: PropsLinha) {
+const LinhaMaterial = memo(function LinhaMaterial({ m, aberta, onAbrir }: PropsLinha) {
+  const s = situacaoMaterial(m);
   const est = (c: string) => (m.estimado ?? []).includes(c);
-  const [qe, auto] = qtdAduaneira({ ...m, qtd_estat: "" });
-  const dims = num(m.comp) > 0 && num(m.larg) > 0 && num(m.alt) > 0;
-  const falta = num(m.qtd_atend) < num(m.quantidade);
-  const ue = (m.un_estat ?? "").toLowerCase();
-  const fonte = m.fonte_est ?? "";
-  const dicaBruto = `Estimado: líquido + 1,5%${m.bruto_un_est ? " ou o peso bruto do fabricante" : ""}`;
-  const num3 = (campo: CampoMaterial, valor: unknown, estimado: boolean, titulo: string, largura = "w-[78px]") => (
-    <td className={`px-1 py-1 ${largura}`}>
-      <CampoNumero
-        rotuloAcessivel={`${campo} do material ${m.codigo}`}
-        valor={valor}
-        casas={3}
-        classe={classeCelula}
-        estimado={estimado}
-        titulo={estimado ? titulo : undefined}
-        onChange={(v) => onEditar(i, campo, v)}
-      />
-    </td>
-  );
+  const m3 = m3Material(m);
   return (
-    <tr className="border-b border-slate-100 align-top hover:bg-slate-50/60">
-      <td className="px-1.5 py-1.5 text-xs tabular-nums text-slate-500">{m.sma}</td>
-      <td className="px-1.5 py-1.5 text-xs tabular-nums whitespace-nowrap">{m.codigo}</td>
-      <td className="px-1.5 py-1.5 text-xs min-w-[200px]">{m.descricao}</td>
-      <td className="px-1.5 py-1.5 text-xs tabular-nums whitespace-nowrap">{m.ncm || <span className="text-red-600">sem NCM</span>}</td>
-      <td className="px-1.5 py-1.5 text-xs text-right tabular-nums whitespace-nowrap">
-        {fmtBR(m.qtd_solic, 2)} {m.unidade}
-        <div className={`text-[10px] ${falta ? "text-amber-700 font-semibold" : "text-slate-400"}`}>atend. {fmtBR(m.qtd_atend, 2)}</div>
-      </td>
-      <td className="px-1 py-1 w-[70px]">
-        <CampoNumero
-          rotuloAcessivel={`Quantidade a embarcar de ${m.codigo}`}
-          valor={m.quantidade}
-          zeroVisivel
-          casas={3}
-          classe={classeCelula}
-          onChange={(v) => onEditar(i, "quantidade", v)}
-        />
-      </td>
-      <td className="px-1 py-1 w-[140px]">
-        <select
-          aria-label={`Unidade aduaneira de ${m.codigo}`}
-          value={ue}
-          title={est("un_estat") ? "Sugerida: o NCM não tem unidade no ERP; nesse capítulo da NCM a unidade estatística é kg" : undefined}
-          onChange={(e) => onEditar(i, "un_estat", e.target.value)}
-          className={`${classeCelula} ${est("un_estat") ? classeEstimado : ""} ${ue ? "" : "!border-red-400 !text-red-600"}`}
-        >
-          <option value="">— escolha —</option>
-          {Object.entries(UN_NOME).map(([k, t]) => (
-            <option key={k} value={k}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </td>
-      <td className="px-1 py-1 w-[80px]">
-        <CampoNumero
-          rotuloAcessivel={`Quantidade aduaneira de ${m.codigo}`}
-          valor={m.qtd_estat}
-          casas={3}
-          classe={classeCelula}
-          titulo="Vazio = calculado automaticamente"
-          placeholder={auto && qe != null ? fmtBR(qe, 3) : "digite"}
-          onChange={(v) => onEditar(i, "qtd_estat", v === 0 ? "" : v)}
-        />
-      </td>
-      {num3("peso_liq", m.peso_liq, est("peso_liq"), `Estimado: ${fonte}`)}
-      {num3("peso_bruto", m.peso_bruto, est("peso_bruto"), dicaBruto)}
-      {num3("comp", m.comp, est("comp"), `Estimado: ${fonte}`, "w-[66px]")}
-      {num3("larg", m.larg, est("larg"), `Estimado: ${fonte}`, "w-[66px]")}
-      {num3("alt", m.alt, est("alt"), `Estimado: ${fonte}`, "w-[66px]")}
-      <td className="px-1 py-1 w-[130px]">
-        <input
-          list="dl-embalagens"
-          aria-label={`Tipo de volume de ${m.codigo}`}
-          value={m.tipo_volume ?? ""}
-          autoComplete="off"
-          onChange={(e) => onEditar(i, "tipo_volume", e.target.value)}
-          className={classeCelula}
-        />
-      </td>
-      <td className="px-1 py-1 w-[84px]">
-        <CampoNumero
-          rotuloAcessivel={`Volume em m³ de ${m.codigo}`}
-          valor={dims ? 0 : m.m3}
-          casas={3}
-          classe={classeCelula}
-          estimado={dims && ["comp", "larg", "alt"].some(est)}
-          desabilitado={dims}
-          titulo="Calculado pelas dimensões × quantidade; sem dimensões, digite o m³"
-          placeholder={dims ? fmtBR(m3Material(m), 3) : ""}
-          onChange={(v) => onEditar(i, "m3", v)}
-        />
-      </td>
-      <td className="px-1.5 py-1 whitespace-nowrap">
-        {(m.estimado ?? []).length ? (
-          <Botao tamanho="pequeno" onClick={() => onAceitar(i)} titulo="Aceitar os valores em azul desta linha como corretos">
-            Aceitar
-          </Botao>
-        ) : (m.aceito ?? []).length ? (
-          <span className="text-[11px] text-slate-400" title="Sugestão aceita">
-            ✓ aceito
-          </span>
-        ) : null}
-      </td>
-    </tr>
+    <button
+      type="button"
+      onClick={() => onAbrir(chaveMaterial(m))}
+      aria-expanded={aberta}
+      className={`w-full text-left grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[104px_minmax(0,1fr)_92px_88px_72px_96px] gap-x-3 gap-y-0.5 items-center px-4 py-2 border-t border-slate-100 text-[13px] transition ${aberta ? "bg-slate-100" : "hover:bg-slate-50"}`}
+    >
+      <span className="tabular-nums text-slate-500 text-xs sm:text-[13px] order-1">{m.codigo}</span>
+      <span className="order-3 sm:order-2 col-span-2 sm:col-span-1 truncate text-slate-800">{m.descricao}</span>
+      <span className="hidden sm:block order-3 text-right tabular-nums text-slate-600">
+        {fmtBR(m.quantidade, num(m.quantidade) % 1 ? 2 : 0)} {m.unidade}
+      </span>
+      <span className={`hidden sm:block order-4 text-right tabular-nums ${est("peso_liq") ? "text-[#1f4e9a] italic" : "text-slate-600"}`}>
+        {num(m.peso_liq) > 0 ? kgBR(num(m.peso_liq)) : <span className="text-red-600">—</span>}
+      </span>
+      <span className={`hidden sm:block order-5 text-right tabular-nums ${["comp", "larg", "alt"].some(est) ? "text-[#1f4e9a] italic" : "text-slate-600"}`}>
+        {m3 > 0 ? `${fmtBR(m3, 3)} m³` : <span className="text-red-600">—</span>}
+      </span>
+      <span className="order-2 sm:order-6 justify-self-end">
+        <Etiqueta s={s} />
+      </span>
+    </button>
   );
 });
 
+function Grupo({ titulo, dica, children }: { titulo: string; dica?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{titulo}</p>
+      {dica && <p className="text-xs text-[#1f4e9a] mt-0.5">{dica}</p>}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-2">{children}</div>
+    </div>
+  );
+}
+
+function PainelMaterial({
+  m,
+  onEditar,
+  onAceitar,
+  onProximo,
+  onFechar,
+  temProximo,
+}: {
+  m: Material;
+  onEditar: (campo: CampoMaterial, valor: string | number) => void;
+  onAceitar: () => void;
+  onProximo: () => void;
+  onFechar: () => void;
+  temProximo: boolean;
+}) {
+  const est = (c: string) => (m.estimado ?? []).includes(c);
+  const falta = pendenciasMaterial(m);
+  const dims = num(m.comp) > 0 && num(m.larg) > 0 && num(m.alt) > 0;
+  const semVolume = m3Material(m) <= 0;
+  const [qe, auto] = qtdAduaneira({ ...m, qtd_estat: "" });
+  const ue = (m.un_estat ?? "").toLowerCase();
+  const fonte = m.fonte_est ?? "";
+  const vermelho = (cond: boolean) => (cond ? "!border-red-400" : "");
+  const id = (c: string) => `pk-${chaveMaterial(m)}-${c}`;
+  const numero = (
+    campo: CampoMaterial,
+    rotulo: string,
+    opcoes: { placeholder?: string; zero?: boolean; erro?: boolean; desabilitado?: boolean; valor?: unknown } = {},
+  ) => (
+    <div>
+      <Rotulo htmlFor={id(campo)} texto={rotulo} />
+      <CampoNumero
+        id={id(campo)}
+        valor={opcoes.valor ?? m[campo]}
+        casas={3}
+        zeroVisivel={opcoes.zero}
+        estimado={est(campo)}
+        desabilitado={opcoes.desabilitado}
+        placeholder={opcoes.placeholder}
+        classe={`${classeCampo} ${vermelho(Boolean(opcoes.erro))}`}
+        onChange={(v) => onEditar(campo, v)}
+      />
+    </div>
+  );
+  return (
+    <div className="border-t border-slate-200 bg-slate-50 px-4 py-4">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-slate-800">
+            <span className="tabular-nums">{m.codigo}</span> <span className="font-normal text-slate-600">{m.descricao}</span>
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            SMA {m.sma} · NCM {m.ncm || "—"} · solicitada {fmtBR(m.qtd_solic, 2)} {m.unidade}, atendida {fmtBR(m.qtd_atend, 2)}
+          </p>
+        </div>
+        <button type="button" onClick={onFechar} className="p-1 text-slate-400 hover:text-slate-700" aria-label="Fechar o material">
+          <X size={18} />
+        </button>
+      </div>
+      {falta.length > 0 && <p className="text-xs text-red-700 font-semibold mt-2">Falta: {falta.join(", ")}.</p>}
+      {(m.estimado ?? []).length > 0 && (
+        <p className="text-xs text-[#1f4e9a] mt-2">
+          Valores em azul são sugestão{fonte ? `: ${fonte}` : ""}. Digite por cima ou aceite.
+        </p>
+      )}
+
+      <Grupo titulo="Quantidade">
+        {numero("quantidade", `A embarcar (${m.unidade || "un"})`, { zero: true })}
+        <div>
+          <Rotulo htmlFor={id("un_estat")} texto="Unidade aduaneira" />
+          <select
+            id={id("un_estat")}
+            value={ue}
+            onChange={(e) => onEditar("un_estat", e.target.value)}
+            className={`${classeCampo} ${est("un_estat") ? classeEstimado : ""} ${vermelho(!ue)}`}
+          >
+            <option value="">Escolha</option>
+            {Object.entries(UN_NOME).map(([k, t]) => (
+              <option key={k} value={k}>
+                {t}
+              </option>
+            ))}
+          </select>
+          {!ue && <p className="text-[11px] text-slate-500 mt-1">O NCM deste material não tem unidade no ERP.</p>}
+        </div>
+        <div>
+          <Rotulo htmlFor={id("qtd_estat")} texto="Qtde na unidade aduaneira" />
+          <CampoNumero
+            id={id("qtd_estat")}
+            valor={m.qtd_estat}
+            casas={3}
+            classe={`${classeCampo} ${vermelho(Boolean(ue) && qtdAduaneira(m)[0] === null)}`}
+            placeholder={auto && qe != null ? fmtBR(qe, 3) : "digite"}
+            onChange={(v) => onEditar("qtd_estat", v === 0 ? "" : v)}
+          />
+          <p className="text-[11px] text-slate-500 mt-1">Vazio = calculada (kg = peso líquido; un = peças).</p>
+        </div>
+      </Grupo>
+
+      <Grupo titulo="Peso (kg, total da linha)">
+        {numero("peso_liq", "Líquido", { erro: num(m.peso_liq) <= 0 })}
+        <div>
+          {numero("peso_bruto", "Bruto", { erro: num(m.peso_bruto) <= 0 || num(m.peso_liq) > num(m.peso_bruto) })}
+          <p className="text-[11px] text-slate-500 mt-1">Sugestão: líquido + 1,5%{m.bruto_un_est ? " ou o bruto do fabricante" : ""}.</p>
+        </div>
+      </Grupo>
+
+      <Grupo titulo="Medidas por unidade e volume" dica={dims ? `m³ = C × L × A × quantidade = ${fmtBR(m3Material(m), 3)} m³` : undefined}>
+        {numero("comp", "Comprimento (mm)", { erro: semVolume })}
+        {numero("larg", "Largura (mm)", { erro: semVolume })}
+        {numero("alt", "Altura (mm)", { erro: semVolume })}
+        {numero("m3", "m³ (se não tiver medidas)", { valor: dims ? 0 : m.m3, desabilitado: dims, placeholder: dims ? fmtBR(m3Material(m), 3) : "", erro: semVolume })}
+        <div className="col-span-2">
+          <Rotulo htmlFor={id("tipo_volume")} texto="Tipo de volume" />
+          <input
+            id={id("tipo_volume")}
+            list="dl-embalagens"
+            value={m.tipo_volume ?? ""}
+            autoComplete="off"
+            onChange={(e) => onEditar("tipo_volume", e.target.value)}
+            className={classeCampo}
+          />
+        </div>
+      </Grupo>
+
+      <div className="flex flex-wrap justify-end gap-2 mt-4">
+        {(m.estimado ?? []).length > 0 && <Botao onClick={onAceitar}>Aceitar sugestão</Botao>}
+        {temProximo && (
+          <Botao tipo="primario" onClick={onProximo}>
+            Próximo <ChevronRight size={15} />
+          </Botao>
+        )}
+      </div>
+    </div>
+  );
+}
+
 type Dialogo = { modo: "familia"; familia: string; descricao: string } | { modo: "todos" } | null;
+
+function filtroInicial(materiais: Material[]): Filtro {
+  const s = materiais.map(situacaoMaterial);
+  return s.includes("falta") ? "falta" : s.includes("conferir") ? "conferir" : "todos";
+}
 
 export function PassoPacking({
   proc,
-  atualizar,
   modificar,
   tabela,
   podeReler,
   onReler,
+  onIrPara,
 }: PropsPasso & {
   modificar: (fn: (p: Processo) => Processo) => void;
   tabela: TabelaEstimativas;
   podeReler: boolean;
   onReler: () => Promise<Material[] | null>;
+  onIrPara: (p: PassoId) => void;
 }) {
   const materiais = useMemo(() => proc.packing?.materiais ?? [], [proc.packing?.materiais]);
+  const [filtro, setFiltro] = useState<Filtro>(() => filtroInicial(materiais));
+  const [abertas, setAbertas] = useState<Record<string, boolean>>({});
+  const [sel, setSel] = useState<string | null>(null);
   const [dialogo, setDialogo] = useState<Dialogo>(null);
   const [textoTipo, setTextoTipo] = useState("Caixa de madeira");
   const [textoPct, setTextoPct] = useState("");
   const [mensagem, setMensagem] = useState<{ tom: "ok" | "aviso"; texto: string } | null>(null);
   const [relendo, setRelendo] = useState(false);
 
-  const editar = useCallback(
-    (i: number, campo: CampoMaterial, valor: string | number) =>
-      modificar((p) => ({ ...p, packing: { ...p.packing!, materiais: p.packing!.materiais.map((m, k) => (k === i ? editarMaterial(m, campo, valor) : m)) } })),
+  const trocarMateriais = useCallback(
+    (fn: (ms: Material[]) => Material[]) => modificar((p) => ({ ...p, packing: { ...p.packing!, materiais: fn(p.packing!.materiais) } })),
     [modificar],
   );
-  const aceitar = useCallback(
-    (i: number) =>
-      modificar((p) => ({ ...p, packing: { ...p.packing!, materiais: p.packing!.materiais.map((m, k) => (k === i ? aceitarSugestoes(m) : m)) } })),
-    [modificar],
-  );
-  const trocarMateriais = (fn: (ms: Material[]) => Material[]) =>
-    modificar((p) => ({ ...p, packing: { ...p.packing!, materiais: fn(p.packing!.materiais) } }));
+  const editar = (chave: string, campo: CampoMaterial, valor: string | number) =>
+    trocarMateriais((ms) => ms.map((m) => (chaveMaterial(m) === chave ? editarMaterial(m, campo, valor) : m)));
+  const abrir = useCallback((chave: string) => setSel((s) => (s === chave ? null : chave)), []);
 
+  const situacoes = useMemo(() => new Map(materiais.map((m) => [chaveMaterial(m), situacaoMaterial(m)])), [materiais]);
+  const situacao = (m: Material) => situacoes.get(chaveMaterial(m));
+  const nFalta = materiais.filter((m) => situacao(m) === "falta").length;
+  const nConferir = materiais.filter((m) => situacao(m) === "conferir").length;
   const ativos = materiais.filter((m) => num(m.quantidade) > 0);
-  const estimados = ativos.filter((m) => (m.estimado ?? []).length).length;
-  const faltando = ativos.filter((m) => !num(m.peso_liq) || !num(m.peso_bruto) || !m3Material(m)).length;
   const pesoLiq = somar(ativos.map((m) => num(m.peso_liq)));
   const pesoBruto = somar(ativos.map((m) => num(m.peso_bruto)));
   const m3 = somar(ativos.map((m) => m3Material(m)));
+  const embarque = (proc.embarque ?? {}) as Record<string, unknown>;
+  const cabecalhoVazio = ["nf", "transportadora", "data_saida"].some((c) => !String(embarque[c] ?? "").trim());
+
+  // o material aberto continua na lista mesmo quando deixa de casar com o filtro (ex.: acabou de preencher o que faltava)
+  const visivel = (m: Material) => filtro === "todos" || situacao(m) === filtro || chaveMaterial(m) === sel;
+  const familias = useMemo(() => {
+    const ordem: { familia: string; descricao: string; ms: Material[] }[] = [];
+    for (const m of materiais) {
+      const f = m.familia ?? "";
+      const atual = ordem[ordem.length - 1];
+      if (atual && atual.familia === f) atual.ms.push(m);
+      else ordem.push({ familia: f, descricao: m.familia_desc || f, ms: [m] });
+    }
+    return ordem;
+  }, [materiais]);
+
+  // "Proximo": o seguinte com a mesma situacao do filtro (no filtro "todos", o seguinte com falta)
+  const naFila = materiais.filter((m) => situacao(m) === (filtro === "conferir" ? "conferir" : "falta"));
+  const proximo = () => {
+    const i = materiais.findIndex((m) => chaveMaterial(m) === sel);
+    const seguinte = naFila.find((m) => materiais.indexOf(m) > i) ?? naFila.find((m) => chaveMaterial(m) !== sel);
+    if (!seguinte) {
+      setSel(null);
+      return;
+    }
+    const chave = chaveMaterial(seguinte);
+    setSel(chave);
+    if (filtro === "todos") setAbertas((a) => ({ ...a, [seguinte.familia ?? ""]: true }));
+    setTimeout(() => document.getElementById(`pk-linha-${chave}`)?.scrollIntoView({ block: "start", behavior: "smooth" }), 0);
+  };
 
   const reler = async () => {
     setRelendo(true);
@@ -208,126 +329,181 @@ export function PassoPacking({
     setTextoPct(d.modo === "todos" ? "1,5" : "");
     setDialogo(d);
   };
-  const aceitarFamilia = (familia: string) => {
-    const q = materiais.filter((m) => m.familia === familia && (m.estimado ?? []).length).length;
-    if (window.confirm(`Aceitar as sugestões (valores em azul) de ${q} material(is) da família ${familia}?`))
+  const aceitarFamilia = (familia: string, q: number) => {
+    if (window.confirm(`Aceitar as sugestões (valores em azul) de ${q} material(is) desta família?`))
       trocarMateriais((ms) => ms.map((m) => (m.familia === familia ? aceitarSugestoes(m) : m)));
   };
   const aceitarTodas = () => {
-    if (window.confirm(`Aceitar as sugestões (valores em azul) de todos os ${estimados} materiais? Confira antes os que forem importantes.`))
+    if (window.confirm(`Aceitar as sugestões (valores em azul) de todos os ${nConferir} materiais? Confira antes os que forem importantes.`))
       trocarMateriais((ms) => ms.map(aceitarSugestoes));
   };
 
-  const linhas: ReactNode[] = [];
-  let familiaAtual: string | undefined;
-  materiais.forEach((m, i) => {
-    if (m.familia !== familiaAtual) {
-      familiaAtual = m.familia;
-      const fam = m.familia ?? "";
-      const temEstimado = materiais.some((x) => x.familia === fam && (x.estimado ?? []).length);
-      linhas.push(
-        <tr key={`fam-${fam}-${i}`} className="bg-slate-100">
-          <td colSpan={16} className="px-2 py-1.5 text-xs font-semibold text-slate-700">
-            CONJUNTO {m.familia_desc || fam} <span className="font-normal text-slate-500">({fam})</span>
-            <span className="ml-3 inline-flex gap-1.5 align-middle">
-              <Botao tamanho="pequeno" onClick={() => abrirDialogo({ modo: "familia", familia: fam, descricao: m.familia_desc || fam })}>
-                Aplicar à família…
-              </Botao>
-              {temEstimado && (
-                <Botao tamanho="pequeno" onClick={() => aceitarFamilia(fam)}>
-                  Aceitar sugestões da família
-                </Botao>
-              )}
+  const chip = (f: Filtro, texto: string, n: number) => (
+    <button
+      type="button"
+      onClick={() => {
+        setFiltro(f);
+        setSel(null);
+      }}
+      aria-pressed={filtro === f}
+      className={`h-9 px-3 rounded-lg border text-sm font-semibold transition ${filtro === f ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}`}
+    >
+      {texto}
+      <span className={`ml-1.5 tabular-nums ${filtro === f ? "text-white/80" : "text-slate-400"}`}>{n}</span>
+    </button>
+  );
+
+  const blocos: ReactNode[] = [];
+  familias.forEach(({ familia, descricao, ms }, k) => {
+    const vis = ms.filter(visivel);
+    if (filtro !== "todos" && !vis.length) return;
+    const nf = ms.filter((m) => situacao(m) === "falta").length;
+    const nc = ms.filter((m) => situacao(m) === "conferir").length;
+    const peso = somar(ms.filter((m) => num(m.quantidade) > 0).map((m) => num(m.peso_liq)));
+    const aberta = filtro !== "todos" || Boolean(abertas[familia]);
+    blocos.push(
+      <section key={`fam-${familia}-${k}`} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setAbertas((a) => ({ ...a, [familia]: !a[familia] }))}
+            disabled={filtro !== "todos"}
+            aria-expanded={aberta}
+            className="flex items-center gap-2 min-w-0 flex-1 text-left disabled:cursor-default"
+          >
+            {filtro === "todos" && (aberta ? <ChevronDown size={16} className="text-slate-400 shrink-0" /> : <ChevronRight size={16} className="text-slate-400 shrink-0" />)}
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-slate-800 truncate">{descricao}</span>
+              <span className="block text-xs text-slate-500">
+                família {familia} · {ms.length} materiais · {kgBR(peso)}
+              </span>
             </span>
-          </td>
-        </tr>,
-      );
-    }
-    linhas.push(<LinhaMaterial key={`${m.sma}-${m.seq}`} m={m} i={i} onEditar={editar} onAceitar={aceitar} />);
+          </button>
+          {nf ? <Etiqueta s="falta" texto={`${nf} com falta`} /> : nc ? <Etiqueta s="conferir" texto={`${nc} a conferir`} /> : <Etiqueta s="pronto" texto="completo" />}
+          <span className="flex gap-1.5">
+            {nc > 0 && (
+              <Botao tamanho="pequeno" onClick={() => aceitarFamilia(familia, nc)}>
+                Aceitar sugestões
+              </Botao>
+            )}
+            <Botao tamanho="pequeno" onClick={() => abrirDialogo({ modo: "familia", familia, descricao })} titulo="Tipo de volume e peso bruto para todos os materiais da família">
+              Aplicar à família…
+            </Botao>
+          </span>
+        </div>
+        {aberta &&
+          (filtro === "todos" ? ms : vis).map((m) => {
+            const chave = chaveMaterial(m);
+            return (
+              <div key={chave} id={`pk-linha-${chave}`} className="scroll-mt-4">
+                <LinhaMaterial m={m} aberta={sel === chave} onAbrir={abrir} />
+                {sel === chave && (
+                  <PainelMaterial
+                    m={m}
+                    onEditar={(campo, valor) => editar(chave, campo, valor)}
+                    onAceitar={() => trocarMateriais((xs) => xs.map((x) => (chaveMaterial(x) === chave ? aceitarSugestoes(x) : x)))}
+                    onProximo={proximo}
+                    onFechar={() => setSel(null)}
+                    temProximo={naFila.some((x) => chaveMaterial(x) !== chave)}
+                  />
+                )}
+              </div>
+            );
+          })}
+      </section>,
+    );
   });
 
   return (
     <div className="space-y-4">
       <Titulo
         titulo="Packing List"
-        descricao={`Romaneio no modelo da Kalter. Os materiais vêm do gerenciador de SMA do centro de custo ${proc.packing?.cc ?? ""} (lido em ${dataBR(proc.packing?.lido_em)}; SMAs canceladas ficam fora).`}
+        descricao={`Materiais das SMAs de transferência do centro de custo ${proc.packing?.cc ?? ""} (lido em ${dataBR(proc.packing?.lido_em)}; SMAs canceladas ficam fora).`}
       />
-      <Secao titulo="Cabeçalho do romaneio">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <CampoProcesso proc={proc} atualizar={atualizar} caminho="documento.descricao_geral" rotulo="Equipamento (descrição geral)" tipo="area" className="sm:col-span-2 lg:col-span-4" />
-          <CampoProcesso proc={proc} atualizar={atualizar} caminho="embarque.nf" rotulo="NF nº" />
-          <CampoProcesso proc={proc} atualizar={atualizar} caminho="embarque.qtd_volumes" rotulo="Nº de volumes" tipo="numero" casas={0} />
-          <CampoProcesso proc={proc} atualizar={atualizar} caminho="embarque.transportadora" rotulo="Transportadora" />
-          <CampoProcesso proc={proc} atualizar={atualizar} caminho="embarque.data_saida" rotulo="Data de saída da mercadoria" tipo="data" />
-          <CampoProcesso proc={proc} atualizar={atualizar} caminho="embarque.placa" rotulo="Placa do veículo" />
-          <CampoProcesso proc={proc} atualizar={atualizar} caminho="embarque.motorista" rotulo="Motorista" />
-          <CampoProcesso proc={proc} atualizar={atualizar} caminho="embarque.data_romaneio" rotulo="Data de emissão do romaneio" tipo="data" />
-          <CampoProcesso proc={proc} atualizar={atualizar} caminho="embarque.carregamento" rotulo="Nº do carregamento" />
-        </div>
-      </Secao>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Cartao rotulo="Materiais" valor={ativos.length} sub={`de ${materiais.length} na SMA`} />
-        <Cartao rotulo="Peso líquido / bruto" valor={`${fmtBR(pesoLiq, 1)} / ${fmtBR(pesoBruto, 1)}`} sub="kg" />
-        <Cartao rotulo="Volume cúbico" valor={fmtBR(arredondar(m3, 3), 2)} sub="m³" />
-        <Cartao rotulo="Faltando" valor={faltando} sub="sem peso ou m³" tom={faltando ? "erro" : "ok"} />
-        <Cartao rotulo="Estimados" valor={estimados} sub="materiais com valor em azul" tom="azul" />
+        <Cartao rotulo="Peso líquido" valor={kgBR(pesoLiq)} />
+        <Cartao rotulo="Peso bruto" valor={kgBR(pesoBruto)} />
+        <Cartao rotulo="Volume" valor={`${fmtBR(arredondar(m3, 3), 2)} m³`} />
       </div>
 
-      <div className="text-xs text-slate-500 space-y-1">
-        <p>
-          <span className={`px-1.5 py-0.5 rounded ${classeEstimado}`}>Em azul</span> = valor estimado (passe o mouse para ver a fonte): peso e medidas pelos catálogos dos
-          fabricantes e tabelas técnicas; peso bruto = líquido + 1,5% (ou o bruto do fabricante, quando ele informa). Ao digitar, o valor deixa de ser estimado; se a sugestão
-          estiver certa, clique em <b>Aceitar</b> na linha (ou nos botões de família/todas).
-        </p>
-        <p>
-          Unidade aduaneira = unidade estatística do NCM no cadastro fiscal do ERP; a quantidade nela é calculada quando possível (kg = peso líquido; un = peças). Onde aparece “— escolha —”
-          (vermelho), o NCM não tem unidade no ERP: escolha na lista. Dimensões em mm, por unidade: m³ = C × L × A × quantidade.
-        </p>
+      {nFalta > 0 ? (
+        <Aviso tom="erro">
+          <span className="flex items-center gap-2">
+            <AlertCircle size={16} className="shrink-0" />
+            <span>
+              <b>
+                {nFalta} {nFalta === 1 ? "material precisa" : "materiais precisam"} de você
+              </b>{" "}
+              antes de gerar o final. O resto já tem valor.
+            </span>
+          </span>
+        </Aviso>
+      ) : materiais.length ? (
+        <Aviso tom="ok">
+          <span className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="shrink-0" />
+            <span>Packing List completa.{nConferir ? ` ${nConferir} sugestões (em azul) ainda podem ser conferidas.` : ""}</span>
+          </span>
+        </Aviso>
+      ) : null}
+
+      {cabecalhoVazio && (
+        <Aviso
+          tom="info"
+          acao={
+            <Botao tamanho="pequeno" onClick={() => onIrPara("embarque")}>
+              Ir para Embarque
+            </Botao>
+          }
+        >
+          NF, transportadora, placa e datas do romaneio ficam em <b>Embarque › Dados do carregamento</b> (preencher na saída).
+        </Aviso>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {chip("falta", "Precisam de você", nFalta)}
+        {chip("conferir", "Sugestões a conferir", nConferir)}
+        {chip("todos", "Todos", materiais.length)}
+        <span className="flex-1" />
+        <span className="text-xs text-slate-500">
+          <span className={`px-1.5 py-0.5 rounded ${classeEstimado}`}>azul</span> = sugestão (catálogo ou cálculo)
+        </span>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Botao onClick={() => void reler()} desabilitado={!podeReler || relendo} titulo={podeReler ? "Busca a lista da SMA que o robô leu no ERP e mantém o que já foi digitado" : "O robô ainda não leu o ERP desta obra"}>
-          <RefreshCw size={14} className={relendo ? "animate-spin" : ""} /> Reler lista da SMA no ERP
+        <Botao
+          tamanho="pequeno"
+          onClick={() => void reler()}
+          desabilitado={!podeReler || relendo}
+          titulo={podeReler ? "Busca a lista da SMA que o robô leu no ERP e mantém o que já foi digitado" : "O robô ainda não leu o ERP desta obra"}
+        >
+          <RefreshCw size={13} className={relendo ? "animate-spin" : ""} /> Reler lista da SMA
         </Botao>
-        <Botao onClick={() => abrirDialogo({ modo: "todos" })}>Peso bruto = líquido + % (todos)</Botao>
-        {estimados > 0 && <Botao onClick={aceitarTodas}>Aceitar todas as sugestões</Botao>}
+        <Botao tamanho="pequeno" onClick={() => abrirDialogo({ modo: "todos" })}>
+          Peso bruto = líquido + % (todos)
+        </Botao>
+        {nConferir > 0 && (
+          <Botao tamanho="pequeno" onClick={aceitarTodas}>
+            Aceitar todas as sugestões
+          </Botao>
+        )}
       </div>
       {mensagem && <Aviso tom={mensagem.tom}>{mensagem.texto}</Aviso>}
 
-      <div className="rounded-xl border border-slate-200 bg-white overflow-auto max-h-[560px]">
-        <table className="w-full min-w-[1280px] border-collapse">
-          <thead>
-            <tr>
-              <th className={TH}>SMA</th>
-              <th className={TH}>Código</th>
-              <th className={TH}>Descrição</th>
-              <th className={TH}>NCM</th>
-              <th className={`${TH} text-right`}>Solicitada</th>
-              <th className={`${TH} text-right`}>Embarcar</th>
-              <th className={TH}>Unid. aduaneira</th>
-              <th className={`${TH} text-right`}>Qtde aduaneira</th>
-              <th className={`${TH} text-right`}>Peso líq. (kg)</th>
-              <th className={`${TH} text-right`}>Peso bruto (kg)</th>
-              <th className={`${TH} text-right`}>Comp. (mm)</th>
-              <th className={`${TH} text-right`}>Larg. (mm)</th>
-              <th className={`${TH} text-right`}>Alt. (mm)</th>
-              <th className={TH}>Volume tipo</th>
-              <th className={`${TH} text-right`}>m³</th>
-              <th className={TH}>Sugestão</th>
-            </tr>
-          </thead>
-          <tbody>
-            {linhas}
-            {!materiais.length && (
-              <tr>
-                <td colSpan={16} className="px-3 py-6 text-center text-sm text-slate-400">
-                  Nenhum material em SMA de transferência para este centro de custo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="space-y-3">
+        {blocos.length ? (
+          blocos
+        ) : (
+          <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+            {!materiais.length
+              ? "Nenhum material em SMA de transferência para este centro de custo."
+              : filtro === "falta"
+                ? "Nenhum material com falta de dado."
+                : "Nenhuma sugestão para conferir."}
+          </p>
+        )}
       </div>
 
       {dialogo && (
@@ -347,14 +523,14 @@ export function PassoPacking({
                   <label htmlFor="dlg-tipo" className="block text-xs font-semibold text-slate-600 mb-1">
                     Tipo de volume (vazio = não mudar)
                   </label>
-                  <input id="dlg-tipo" list="dl-embalagens" value={textoTipo} onChange={(e) => setTextoTipo(e.target.value)} className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm" />
+                  <input id="dlg-tipo" list="dl-embalagens" value={textoTipo} onChange={(e) => setTextoTipo(e.target.value)} className={classeCampo} />
                 </div>
               )}
               <div>
                 <label htmlFor="dlg-pct" className="block text-xs font-semibold text-slate-600 mb-1">
                   Peso bruto = peso líquido + quantos % {dialogo.modo === "familia" ? "(vazio = não mudar)" : ""}
                 </label>
-                <input id="dlg-pct" inputMode="decimal" value={textoPct} onChange={(e) => setTextoPct(e.target.value)} placeholder="1,5" className="w-full h-10 px-3 rounded-lg border border-slate-300 text-sm" />
+                <input id="dlg-pct" inputMode="decimal" value={textoPct} onChange={(e) => setTextoPct(e.target.value)} placeholder="1,5" className={classeCampo} />
               </div>
             </div>
             <div className="p-4 border-t bg-slate-50 rounded-b-xl flex justify-end gap-2">

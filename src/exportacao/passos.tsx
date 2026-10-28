@@ -288,7 +288,7 @@ export function PassoEmbarque({ proc, atualizar }: PropsPasso) {
   );
   return (
     <div className="space-y-4">
-      <Titulo titulo="Embarque" descricao="Transporte e rota." />
+      <Titulo titulo="Embarque" descricao="Transporte, rota e dados do carregamento." />
       <Secao titulo="Transporte">
         <div className="grid sm:grid-cols-2 gap-4">
           {c("modal", "Modal", {
@@ -304,6 +304,18 @@ export function PassoEmbarque({ proc, atualizar }: PropsPasso) {
           {c("pais_destino", "País de destino", { lista: "dl-paises", obrigatorio: true })}
           {c("pais_origem", "País de origem")}
           {c("data_prevista", "Data prevista de embarque", { tipo: "data" })}
+        </div>
+      </Secao>
+      <Secao titulo="Dados do carregamento" descricao="Cabeçalho do romaneio (Packing List). Pode ficar em branco até a saída do caminhão.">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <CampoProcesso proc={proc} atualizar={atualizar} caminho="documento.descricao_geral" rotulo="Equipamento (descrição geral)" tipo="area" className="sm:col-span-2 lg:col-span-4" />
+          {c("nf", "NF nº")}
+          {c("qtd_volumes", "Nº de volumes", { tipo: "numero", casas: 0 })}
+          {c("data_saida", "Data de saída da mercadoria", { tipo: "data" })}
+          {c("data_romaneio", "Data de emissão do romaneio", { tipo: "data" })}
+          {c("placa", "Placa do veículo")}
+          {c("motorista", "Motorista")}
+          {c("carregamento", "Nº do carregamento")}
         </div>
       </Secao>
     </div>
