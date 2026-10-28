@@ -56,8 +56,8 @@ export function Cartao({ rotulo, valor, sub, tom = "normal" }: { rotulo: string;
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 min-w-0">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{rotulo}</p>
-      <p className={`text-lg font-bold tabular-nums truncate ${TONS[tom]}`}>{valor}</p>
-      {sub && <p className="text-[11px] text-slate-500 truncate">{sub}</p>}
+      <p className={`text-lg font-bold tabular-nums break-words ${TONS[tom]}`}>{valor}</p>
+      {sub && <p className="text-[11px] text-slate-500 break-words">{sub}</p>}
     </div>
   );
 }
