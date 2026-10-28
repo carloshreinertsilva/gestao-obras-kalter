@@ -3,11 +3,11 @@
 // exportacao_erp); o rascunho fica em exportacao_processos (autosave com pausa de 2 s, so quando o conteudo muda); a aprovacao
 // vale por hash calculado no banco; o Excel e gerado pelo robo (fila exportacao_documentos).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Ship } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Loader2, Ship } from "lucide-react";
 import { supabase } from "./supabase";
 import type { Usuario } from "./types";
 import { aplicarEstimativas, tabelaDeLinhas } from "./exportacao/estimativas";
-import { PASSOS, PASSO_DO_CAMPO, type PassoId } from "./exportacao/navegacao";
+import { ETAPAS, PASSOS, PASSOS_DE_PREENCHER, proximaPendencia, situacoesDosPassos, type PassoId, type SituacaoPasso } from "./exportacao/navegacao";
 import { PassoCertificado, PassoComercial, PassoEmbarque, PassoErp, PassoExportador, PassoImportador } from "./exportacao/passos";
 import { PassoDocumentos } from "./exportacao/PassoDocumentos";
 import { PassoItens } from "./exportacao/PassoItens";
@@ -29,6 +29,22 @@ interface Mensagem {
   texto: string;
 }
 
+/** Situacao do passo na navegacao: nº de erros (vermelho), nº de avisos (ambar), ✓, "opcional" ou nada. */
+function MarcaPasso({ s, ativo }: { s: SituacaoPasso; ativo: boolean }) {
+  if (s.tipo === "erro")
+    return <span className={`min-w-5 h-5 px-1 rounded-full text-[11px] font-bold flex items-center justify-center ${ativo ? "bg-white text-red-600" : "bg-red-50 text-red-600"}`} title={`${s.n} erro(s) a corrigir`}>{s.n}</span>;
+  if (s.tipo === "aviso")
+    return <span className={`text-[11px] font-semibold ${ativo ? "text-amber-200" : "text-amber-600"}`} title={`${s.n} aviso(s); não impedem o final`}>{s.n} aviso{s.n === 1 ? "" : "s"}</span>;
+  if (s.tipo === "opcional") return <span className={`text-[11px] ${ativo ? "text-white/70" : "text-slate-400"}`}>opcional</span>;
+  if (s.tipo === "ok")
+    return s.texto ? (
+      <span className={`text-[11px] font-semibold ${ativo ? "text-emerald-200" : "text-emerald-600"}`}>{s.texto}</span>
+    ) : (
+      <Check size={15} className={ativo ? "text-emerald-200" : "text-emerald-600"} aria-label="sem pendência" />
+    );
+  return null;
+}
+
 export default function Exportacao({ obra, usuario }: { obra: { id: string; codigo_externo?: string; nome?: string }; usuario: Usuario | null }) {
   const [carregando, setCarregando] = useState(true);
   const [erroCarga, setErroCarga] = useState("");
@@ -40,6 +56,14 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   const [aprovacao, setAprovacao] = useState<Aprovacao | null>(null);
   const [docs, setDocs] = useState<DocumentoLista[]>([]);
   const [passo, setPasso] = useState<PassoId>("erp");
+  // no celular os passos ficam numa linha que rola de lado: traz o passo atual para a vista
+  const listaPassos = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const lista = listaPassos.current;
+    const botao = lista?.querySelector<HTMLElement>('[aria-current="step"]');
+    // rolagem direta: a suave e cancelada pela troca de tela que vem junto
+    if (lista && botao && lista.scrollWidth > lista.clientWidth) lista.scrollLeft = botao.offsetLeft - lista.clientWidth / 2 + botao.clientWidth / 2;
+  }, [passo]);
   const [salvoEm, setSalvoEm] = useState<string | null>(null);
   const [sujo, setSujo] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -207,12 +231,12 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
 
   const erp = linhaErp?.pedido.erp ?? {};
   const revisao = useMemo(() => (proc ? revisar(proc, erp, ncmCadastro) : null), [proc, erp, ncmCadastro]);
-  const errosPorPasso = useMemo(() => {
-    const m: Partial<Record<PassoId, number>> = {};
-    for (const a of revisao?.ajustes ?? []) if (a.nivel === "erro") m[PASSO_DO_CAMPO[a.campo]] = (m[PASSO_DO_CAMPO[a.campo]] ?? 0) + 1;
-    return m;
-  }, [revisao]);
   const aprovado = Boolean(aprovacao) && aprovacao?.hash === hash && !sujo;
+  const finalGerado = docs.some((d) => d.tipo === "final" && d.situacao === "gerado");
+  const situacoes = useMemo(
+    () => situacoesDosPassos(revisao?.ajustes ?? [], { certificado: Boolean(proc?.certificado?.emitir), aprovado, finalGerado }),
+    [revisao, proc?.certificado?.emitir, aprovado, finalGerado],
+  );
 
   // ------------------------------------------------------------------ documentos
   const temPendente = docs.some((d) => d.situacao === "pendente");
@@ -361,6 +385,8 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   }
 
   const indice = PASSOS.findIndex((p) => p.id === passo);
+  const prontos = PASSOS_DE_PREENCHER.filter((p) => situacoes[p].tipo !== "erro").length;
+  const pendente = proximaPendencia(situacoes, passo);
   const rascunho = docs.find((d) => d.tipo === "rascunho") ?? null;
   const status = erroSalvar ? (
     <span className="text-red-600 font-semibold" role="alert">NÃO SALVOU: {erroSalvar}</span>
@@ -387,24 +413,44 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
       </div>
 
       <div className="flex flex-col lg:flex-row gap-4 items-start">
-        <nav aria-label="Passos da exportação" className="lg:w-60 shrink-0 w-full bg-white border border-slate-200 rounded-xl p-2 flex lg:flex-col gap-1 overflow-x-auto">
-          {PASSOS.map((p, i) => {
-            const erros = errosPorPasso[p.id];
-            const ativo = p.id === passo;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => ir(p.id)}
-                aria-current={ativo ? "step" : undefined}
-                className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm whitespace-nowrap text-left transition ${ativo ? "bg-[#2A6377] text-white font-semibold" : "text-slate-600 hover:bg-slate-100"}`}
-              >
-                <span className={`h-5 w-5 shrink-0 rounded-full text-[11px] font-bold flex items-center justify-center ${ativo ? "bg-white text-[#2A6377]" : "bg-slate-100 text-slate-600"}`}>{i + 1}</span>
-                <span className="flex-1">{p.nome}</span>
-                {erros ? <span className={`text-[11px] font-bold ${ativo ? "text-red-200" : "text-red-600"}`}>{erros}</span> : null}
+        <nav aria-label="Passos da exportação" className="lg:w-64 shrink-0 w-full bg-white border border-slate-200 rounded-xl p-2 lg:p-3">
+          <div className="px-1 pb-2 lg:pb-3 mb-1 lg:mb-2 border-b border-slate-100">
+            <p className="text-xs text-slate-500">
+              <b className="text-slate-700">{prontos}</b> de {PASSOS_DE_PREENCHER.length} passos sem erro
+            </p>
+            <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={PASSOS_DE_PREENCHER.length} aria-valuenow={prontos}>
+              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${(prontos / PASSOS_DE_PREENCHER.length) * 100}%` }} />
+            </div>
+            {pendente && (
+              <button type="button" onClick={() => ir(pendente)} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#2A6377] hover:underline">
+                Ir para a próxima pendência <ArrowRight size={13} />
               </button>
-            );
-          })}
+            )}
+          </div>
+          <div ref={listaPassos} className="relative flex lg:flex-col gap-1 overflow-x-auto">
+            {ETAPAS.map((etapa, e) => (
+              <div key={etapa.nome} className="contents lg:block">
+                <p className={`hidden lg:block px-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 ${e ? "mt-3" : ""} mb-1`}>{etapa.nome}</p>
+                {etapa.passos.map((id) => {
+                  const ativo = id === passo;
+                  const n = PASSOS.findIndex((p) => p.id === id) + 1;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => ir(id)}
+                      aria-current={ativo ? "step" : undefined}
+                      className={`lg:w-full shrink-0 flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm whitespace-nowrap text-left transition ${ativo ? "bg-[#2A6377] text-white font-semibold" : "text-slate-600 hover:bg-slate-100"}`}
+                    >
+                      <span className={`h-5 w-5 shrink-0 rounded-full text-[11px] font-bold flex items-center justify-center ${ativo ? "bg-white text-[#2A6377]" : "bg-slate-100 text-slate-600"}`}>{n}</span>
+                      <span className="flex-1">{PASSOS[n - 1].nome}</span>
+                      <MarcaPasso s={situacoes[id]} ativo={ativo} />
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </nav>
 
         <div className="flex-1 min-w-0 w-full">

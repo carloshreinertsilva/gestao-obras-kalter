@@ -1,6 +1,7 @@
 // Passos "de formulario" do assistente de exportacao: dados do ERP, exportador, importador, condicoes comerciais, embarque e
 // certificado de origem. Cada campo grava no processo pelo caminho (ex.: "importador.razao").
-import { RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { Pencil, RefreshCw } from "lucide-react";
 import { milhar } from "./numeros";
 import type { LinhaErp } from "./processo";
 import type { ErpPedido, Processo } from "./tipos";
@@ -158,10 +159,36 @@ export function PassoErp({
 
 // ------------------------------------------------------------------------------------------------ 2. Exportador
 
+const OBRIGATORIOS_EXPORTADOR = ["razao", "cnpj", "endereco", "cidade", "pais"];
+
 export function PassoExportador({ proc, atualizar }: PropsPasso) {
+  const e = (proc.exportador ?? {}) as Record<string, unknown>;
+  const vazio = (k: string) => !String(e[k] ?? "").trim();
+  // completo: so o resumo (e o mesmo em todo processo); abre sozinho quando falta algo obrigatorio
+  const [editando, setEditando] = useState(() => OBRIGATORIOS_EXPORTADOR.some(vazio));
   const c = (caminho: string, rotulo: string, extra: Partial<Parameters<typeof CampoProcesso>[0]> = {}) => (
     <CampoProcesso proc={proc} atualizar={atualizar} caminho={`exportador.${caminho}`} rotulo={rotulo} {...extra} />
   );
+  const linha = (...ks: string[]) => ks.map((k) => String(e[k] ?? "").trim()).filter(Boolean).join(" · ");
+  if (!editando)
+    return (
+      <div className="space-y-4">
+        <Titulo titulo="Exportador" descricao="Os dados da Kalter já vêm preenchidos e são os mesmos em todo processo." />
+        <Secao titulo="Dados da Kalter">
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="flex-1 min-w-0 text-sm text-slate-700 space-y-0.5">
+              <p className="font-bold text-slate-800">{linha("razao")}</p>
+              <p>CNPJ {linha("cnpj")}</p>
+              <p>{linha("endereco", "cidade", "uf", "cep", "pais")}</p>
+              {linha("contato", "fone", "email") && <p className="text-slate-500">{linha("contato", "fone", "email")}</p>}
+            </div>
+            <Botao onClick={() => setEditando(true)}>
+              <Pencil size={14} /> Editar
+            </Botao>
+          </div>
+        </Secao>
+      </div>
+    );
   return (
     <div className="space-y-4">
       <Titulo titulo="Exportador" descricao="Os dados fixos da Kalter já vêm preenchidos (valem por cima do cadastro da filial no ERP). Complete o que faltar." />
