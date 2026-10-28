@@ -20,6 +20,7 @@ describe("rotas do app", () => {
     ["/fretes", { tela: "fretes" }],
     ["/fretes/abc-123", { tela: "fretes", idSolicitacao: "abc-123" }],
     ["/obras/2098/compras", { tela: "painel_obra", codigoObra: "2098", abaObra: "compras" }],
+    ["/obras/2126/exportacao", { tela: "painel_obra", codigoObra: "2126", abaObra: "exportacao" }],
     ["/historico", { tela: "historico" }],
     ["/cadastros/obras", { tela: "cadastros_obras" }],
     ["/cadastros/equipe", { tela: "cadastros_equipe" }],

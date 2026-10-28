@@ -86,6 +86,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Truck,
+  Ship,
 } from "lucide-react";
 
 // Link de "Esqueceu a senha?": o Supabase entra com a pessoa logada e marca
@@ -102,6 +103,7 @@ const AbaDocumentos = lazy(() => import("./telas/painel/AbaDocumentos"));
 const AbaFaturamento = lazy(() => import("./telas/painel/AbaFaturamento"));
 const AbaFinanceiro = lazy(() => import("./telas/painel/AbaFinanceiro"));
 const AbaResumo = lazy(() => import("./telas/painel/AbaResumo"));
+const Exportacao = lazy(() => import("./Exportacao"));
 const ListaMateriaisSMA = lazy(() => import("./ListaMateriaisSMA"));
 const RentabilidadeProjeto = lazy(() => import("./RentabilidadeProjeto"));
 const TelaAuditoria = lazy(() => import("./telas/TelaAuditoria"));
@@ -489,7 +491,10 @@ export default function App() {
   const podeVerCompras = ehLogistica || veTudo;
   const veTodasObras = veTudo || ehLogistica || ehFiscal || ehFinanceiro;
   const abaInicialObra = ehFinanceiro ? "compras" : ehLogistica || ehFiscal ? "faturamento" : "resumo";
+  // exportacao (Proforma, Invoice, Packing List): so admin, coordenador e fiscal (decisao do Carlos em 27/10)
+  const podeVerExportacao = veTudo || ehFiscal;
   const abaObraPermitida = (aba: string) => {
+    if (aba === "exportacao") return podeVerExportacao;
     if (ehFiscal) return aba === "faturamento" || aba === "compras";
     if (ehFinanceiro) return aba === "compras";
     if (ehLogistica) return ["faturamento", "lista_materiais", "compras", "diario_tarefas", "previsoes"].includes(aba);
@@ -584,19 +589,22 @@ export default function App() {
       if (tela === "cadastros_obras" && !podeCadastrarObras) tela = "dashboard";
 
       if (tela === "painel_obra" && rota.codigoObra) {
-        const aba = abaObraPermitida(rota.abaObra || "") ? rota.abaObra! : abaInicialObra;
+        const abaPedida = abaObraPermitida(rota.abaObra || "") ? rota.abaObra! : abaInicialObra;
+        // a aba Exportacao so existe nas obras marcadas como obra de exportacao
+        const abaDaObra = (o: { exportacao?: boolean | null } | null | undefined) =>
+          abaPedida === "exportacao" && !o?.exportacao ? abaInicialObra : abaPedida;
         if (obraEcoSelecionada?.codigo_externo === rota.codigoObra) {
           setTelaAtiva("painel_obra");
-          setAbaPainelObra(aba);
+          setAbaPainelObra(abaDaObra(obraEcoSelecionada));
         } else {
           const { data } = await supabase
             .from("obras")
-            .select("id, codigo_externo, nome, fase_atual, id_responsavel, status")
+            .select("id, codigo_externo, nome, fase_atual, id_responsavel, status, exportacao")
             .eq("codigo_externo", rota.codigoObra)
             .maybeSingle();
           if (data) {
             abrirPainelObra(data);
-            setAbaPainelObra(aba);
+            setAbaPainelObra(abaDaObra(data));
           } else {
             mostrarAviso(`Obra ${rota.codigoObra} não encontrada ou sem acesso.`, "erro");
             setTelaAtiva("minhas_obras");
@@ -1526,7 +1534,7 @@ export default function App() {
       const { data } = await supabase
         .from("obras")
         .select(
-          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, usuarios(nome)",
+          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, exportacao, usuarios(nome)",
         )
         .eq("id", obra.id)
         .single();
@@ -3711,7 +3719,8 @@ export default function App() {
                     },
                     { id: "previsoes", label: "Previsões", icon: Wallet },
                     { id: "rentabilidade", label: "Rentabilidade", icon: TrendingUp },
-                  ].filter((aba) => abaObraPermitida(aba.id)).map((aba) => {
+                    { id: "exportacao", label: "Exportação", icon: Ship },
+                  ].filter((aba) => abaObraPermitida(aba.id) && (aba.id !== "exportacao" || obraEcoSelecionada?.exportacao)).map((aba) => {
                     const IconeAba = aba.icon;
                     return (
                       <button
@@ -3794,6 +3803,9 @@ export default function App() {
               />
             )}
 
+            {abaPainelObra === "exportacao" && podeVerExportacao && obraEcoSelecionada?.exportacao && (
+              <Exportacao key={obraEcoSelecionada.id} obra={obraEcoSelecionada} usuario={usuarioAtual} />
+            )}
             {abaPainelObra === "lista_materiais" && (
               <ListaMateriaisSMA materiais={materiaisSma} />
             )}

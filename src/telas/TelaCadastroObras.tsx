@@ -180,7 +180,7 @@ export default function TelaCadastroObras({
       let query = supabase
         .from("obras")
         .select(
-          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, usuarios(nome)",
+          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, exportacao, usuarios(nome)",
         )
         .order("created_at", { ascending: false });
       if (filtroStatusCadastroObras !== "todas")
@@ -344,6 +344,7 @@ export default function TelaCadastroObras({
       valor_produto: obra.valor_produto ?? "",
       valor_servico: obra.valor_servico ?? "",
       observacoes: obra.observacoes || "",
+      exportacao: Boolean(obra.exportacao),
     });
     carregarValoresErp(obra.id);
     setTimeout(() => {
@@ -351,6 +352,20 @@ export default function TelaCadastroObras({
         .getElementById("form-cadastro-obra")
         ?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
+  };
+
+  // Obra de exportacao: liga a aba Exportacao (Proforma, Invoice, Packing List) e o robo passa a ler o pedido no ERP
+  const marcarExportacao = async (valor: boolean) => {
+    if (!novaObra.id) return;
+    const { error } = await supabase.rpc("exportacao_marcar_obra", { p_id_obra: novaObra.id, p_exportacao: valor });
+    if (error) {
+      setErroObra("Não foi possível alterar a marca de exportação: " + error.message);
+      return;
+    }
+    setNovaObra((o: any) => ({ ...o, exportacao: valor }));
+    onAviso(valor ? "Obra marcada como obra de exportação." : "Obra desmarcada como obra de exportação.");
+    onObrasAlteradas();
+    buscarObrasCadastro();
   };
 
   const cancelarEdicaoObra = () => {
@@ -542,6 +557,25 @@ export default function TelaCadastroObras({
           </Secao>
 
           {isAdmin && <ValoresErpObra valores={valoresErp} onChange={setValoresErp} ultimoPedido={ultimoPedidoErp} />}
+
+          {isAdmin && (
+            <Secao
+              titulo="Exportação"
+              descricao="Habilita a aba Exportação no painel da obra (Proforma, Commercial Invoice, Packing List). O robô passa a ler o pedido da obra no ERP."
+            >
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(novaObra.exportacao)}
+                  disabled={!novaObra.id}
+                  onChange={(e) => void marcarExportacao(e.target.checked)}
+                  className="h-4 w-4 accent-[#2A6377] disabled:opacity-50"
+                />
+                Obra de exportação
+              </label>
+              {!novaObra.id && <p className="text-xs text-slate-500 mt-2">Salve a obra primeiro; depois edite-a para marcar como obra de exportação.</p>}
+            </Secao>
+          )}
 
           <Secao titulo="Observações">
             <textarea

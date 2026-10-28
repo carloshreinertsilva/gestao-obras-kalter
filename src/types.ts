@@ -121,6 +121,7 @@ export interface Obra {
   data_cancelamento?: string | null;
   motivo_cancelamento?: string | null;
   observacao_cancelamento?: string | null;
+  exportacao?: boolean | null;
   created_at?: string;
   updated_at?: string;
   usuarios?: any;
