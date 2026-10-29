@@ -4,6 +4,16 @@ import { AlertTriangle, ChevronDown, ChevronRight, Download, FileText, Loader2, 
 import { supabase } from "./supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda, normalizarNomeArquivo } from "./utils";
 import type { Usuario } from "./types";
+import {
+  FORMAS_PAGAMENTO,
+  TIPOS_CHAVE_PIX,
+  TIPOS_CONTA,
+  erroPagamento,
+  limparPagamento,
+  resumoPagamento,
+  type DadosPagamento,
+  type FormaPagamento,
+} from "./nfPagamento";
 
 // NFs de terceiros (2026-10-15): pedidos de compra de SERVICO da obra espelhados do ERP pelo robo
 // (obra_servicos_parcelas, uma linha por parcela, inclusive pedidos encerrados) e as NFs que o gestor
@@ -54,6 +64,9 @@ export interface NfTerceiros {
   arquivo_nome: string;
   // NF, boleto, fatura... (o 1o e o arquivo da NF; NFs antigas tem so arquivo_caminho/arquivo_nome)
   anexos?: AnexoNf[] | null;
+  // como pagar (29/10; NFs antigas nao tem)
+  forma_pagamento?: FormaPagamento | null;
+  dados_pagamento?: DadosPagamento | null;
   status: StatusNf;
   id_encaminhou: string | null;
   nome_encaminhou: string | null;
@@ -512,6 +525,9 @@ function ModalEncaminharNf({
   const [valor, setValor] = useState(devolvida ? String(devolvida.valor).replace(".", ",") : "");
   const [vencimento, setVencimento] = useState(devolvida?.vencimento || "");
   const [obs, setObs] = useState(devolvida?.observacao || "");
+  const [forma, setForma] = useState<FormaPagamento | "">(devolvida?.forma_pagamento || "");
+  const [pagto, setPagto] = useState<DadosPagamento>(devolvida?.dados_pagamento || {});
+  const mudarPagto = (k: keyof DadosPagamento) => (v: string) => setPagto((d) => ({ ...d, [k]: v }));
   // anexos ja enviados (reenvio de NF devolvida) que o gestor mantem + arquivos novos escolhidos agora
   const [mantidos, setMantidos] = useState<AnexoNf[]>(devolvida ? anexosDa(devolvida) : []);
   const [novos, setNovos] = useState<File[]>([]);
@@ -533,6 +549,8 @@ function ModalEncaminharNf({
     if (!emissao) return setErro("Informe a data de emissão.");
     if (valorNum <= 0) return setErro("Informe o valor da NF.");
     if (!vencimento) return setErro("Informe o vencimento.");
+    const errPagto = erroPagamento(forma, pagto);
+    if (errPagto) return setErro(errPagto);
     if (!mantidos.length && !novos.length) return setErro("Anexe a NF (PDF ou imagem).");
     if (mantidos.length + novos.length > MAX_ANEXOS) return setErro(`No máximo ${MAX_ANEXOS} anexos.`);
     const grande = novos.find((f) => f.size > MAX_ARQUIVO);
@@ -540,6 +558,12 @@ function ModalEncaminharNf({
     if (novos.reduce((t, f) => t + f.size, 0) + mantidos.reduce((t, a) => t + (a.tamanho || 0), 0) > MAX_TOTAL)
       return setErro("Os anexos passam de 20 MB no total (limite do e-mail). Reduza ou compacte os arquivos.");
     if (acimaDoSaldo && !window.confirm(`O valor (${formatarMoeda(valorNum)}) passa do saldo do pedido (${formatarMoeda(pedido.saldo)}). Encaminhar assim mesmo?`))
+      return;
+    if (
+      forma === "boleto" &&
+      mantidos.length + novos.length < 2 &&
+      !window.confirm("Pagamento por boleto, mas só há 1 anexo. O boleto está no mesmo arquivo da NF? (Cancelar para anexar o boleto)")
+    )
       return;
     setEnviando(true);
     const enviados: string[] = [];
@@ -571,6 +595,8 @@ function ModalEncaminharNf({
         p_arquivo_nome: lista[0].nome,
         p_arquivo_url: lista[0].url,
         p_anexos: lista,
+        p_forma_pagamento: forma,
+        p_dados_pagamento: limparPagamento(forma as FormaPagamento, pagto),
       });
       if (error) throw error;
       onFeito();
@@ -656,6 +682,60 @@ function ModalEncaminharNf({
               <AlertTriangle size={13} /> Vencimento em até 3 dias: o fiscal e o financeiro recebem lembrete diário até a NF ser lançada.
             </p>
           )}
+          <fieldset>
+            <legend className="text-xs font-semibold mb-1">Forma de pagamento *</legend>
+            <div className="flex flex-wrap gap-1.5">
+              {FORMAS_PAGAMENTO.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  aria-pressed={forma === f.id}
+                  onClick={() => setForma(f.id)}
+                  className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                    forma === f.id ? "bg-[#2A6377] border-[#2A6377] text-white font-semibold" : "bg-white text-slate-600 hover:border-[#2A6377] hover:text-[#2A6377]"
+                  }`}
+                >
+                  {f.rotulo}
+                </button>
+              ))}
+            </div>
+            {forma === "boleto" && (
+              <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                <Paperclip size={13} className="shrink-0" aria-hidden="true" /> Anexe o boleto junto com a NF (logo abaixo, em Anexos).
+              </p>
+            )}
+            {forma === "pix" && (
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-3">
+                <Selecao rotulo="Tipo da chave *" valor={pagto.tipo_chave || ""} opcoes={TIPOS_CHAVE_PIX} onChange={mudarPagto("tipo_chave")} />
+                <Campo rotulo="Chave PIX *" valor={pagto.chave || ""} onChange={mudarPagto("chave")} />
+                <div className="sm:col-span-2">
+                  <Campo rotulo="Favorecido (se não for o fornecedor)" valor={pagto.favorecido || ""} onChange={mudarPagto("favorecido")} />
+                </div>
+              </div>
+            )}
+            {forma === "deposito" && (
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="col-span-2">
+                  <Campo rotulo="Banco *" valor={pagto.banco || ""} onChange={mudarPagto("banco")} placeholder="ex.: 341 Itaú" />
+                </div>
+                <Campo rotulo="Agência *" valor={pagto.agencia || ""} onChange={mudarPagto("agencia")} />
+                <Selecao rotulo="Tipo de conta" valor={pagto.tipo_conta || ""} opcoes={TIPOS_CONTA} onChange={mudarPagto("tipo_conta")} />
+                <Campo rotulo="Conta *" valor={pagto.conta || ""} onChange={mudarPagto("conta")} />
+                <Campo rotulo="Dígito *" valor={pagto.digito || ""} onChange={mudarPagto("digito")} />
+                <div className="col-span-2">
+                  <Campo rotulo="CPF/CNPJ do favorecido" valor={pagto.documento || ""} onChange={mudarPagto("documento")} />
+                </div>
+                <div className="col-span-2 sm:col-span-4">
+                  <Campo rotulo="Favorecido (se não for o fornecedor)" valor={pagto.favorecido || ""} onChange={mudarPagto("favorecido")} />
+                </div>
+              </div>
+            )}
+            {forma === "cartao" && (
+              <div className="mt-2">
+                <Campo rotulo="Qual cartão foi usado? *" valor={pagto.cartao || ""} onChange={mudarPagto("cartao")} placeholder="ex.: Itaú final 1234 (nunca o número completo)" />
+              </div>
+            )}
+          </fieldset>
           <div>
             <p className="text-xs font-semibold mb-1">Anexos *</p>
             <p className="text-[11px] text-slate-400 mb-2">
@@ -748,6 +828,18 @@ const Campo = ({
       inputMode={decimal ? "decimal" : undefined}
       className="border rounded-lg px-2 py-2 w-full text-sm"
     />
+  </div>
+);
+
+const Selecao = ({ rotulo, valor, opcoes, onChange }: { rotulo: string; valor: string; opcoes: string[]; onChange: (v: string) => void }) => (
+  <div>
+    <label className="block text-xs font-semibold mb-1">{rotulo}</label>
+    <select value={valor} onChange={(e) => onChange(e.target.value)} className="border rounded-lg px-2 py-2 w-full text-sm bg-white">
+      <option value="">Escolha…</option>
+      {opcoes.map((o) => (
+        <option key={o}>{o}</option>
+      ))}
+    </select>
   </div>
 );
 
@@ -865,6 +957,16 @@ export function DetalheNfTerceiros({
               <p className="text-slate-500">
                 Encaminhada por {nf.nome_encaminhou} em {fmtDataHora(nf.encaminhado_em)} (NT {nf.numero})
               </p>
+              {nf.forma_pagamento && (
+                <div className="border rounded-lg p-3">
+                  <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Forma de pagamento</p>
+                  {resumoPagamento(nf.forma_pagamento, nf.dados_pagamento).map((l, i) => (
+                    <p key={i} className={i === 0 ? "font-semibold" : "text-slate-600 break-words"}>
+                      {l}
+                    </p>
+                  ))}
+                </div>
+              )}
               {nf.observacao && <p className="whitespace-pre-wrap border rounded-lg p-3">{nf.observacao}</p>}
               <div>
                 <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Anexos ({anexosDa(nf).length})</p>
