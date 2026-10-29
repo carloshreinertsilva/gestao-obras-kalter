@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ETAPAS, PASSOS, proximaPendencia, situacoesDosPassos } from "./navegacao";
+import { ETAPAS, PASSOS, alvoDoAjuste, proximaPendencia, situacoesDosPassos } from "./navegacao";
+import { revisar } from "./regras";
+import type { Processo } from "./tipos";
 import type { Ajuste } from "./tipos";
 
 const aj = (nivel: Ajuste["nivel"], campo: string, onde: Ajuste["onde"] = "documento"): Ajuste => ({ nivel, campo, onde, texto: "" });
@@ -34,5 +36,30 @@ describe("navegacao em etapas", () => {
     expect(proximaPendencia(s, "volumes")).toBe("importador");
     expect(proximaPendencia(s, "revisao")).toBe("importador");
     expect(proximaPendencia(situacoesDosPassos([aj("aviso", "itens")], base), "erp")).toBeNull();
+  });
+
+  it("corrigir vai ao campo: o texto da revisao aponta o campo; cabecalho do romaneio vai para Embarque", () => {
+    const proc = {
+      pedido: 1,
+      documento: {},
+      exportador: { razao: "KALTER", endereco: "R", cidade: "JOINVILLE", pais: "BRASIL" },
+      importador: { razao: "C", endereco: "E" },
+      consignatario: { igual_importador: true },
+      comercial: { moeda: "USD", incoterm: "FCA" },
+      embarque: {},
+      itens: [{ descricao: "A", ncm: "84818099", quantidade: 1, valor_unit: 1 }, { descricao: "", ncm: "12", quantidade: 1, valor_unit: 1 }],
+      packing: { materiais: [] },
+    } as unknown as Processo;
+    const alvos = Object.fromEntries(revisar(proc, {}).ajustes.map((a) => [a.texto, alvoDoAjuste(a)]));
+    expect(alvos["Informe o número da Invoice/Proforma."]).toEqual({ passo: "erp", campo: "exp-documento-numero" });
+    expect(alvos["Exportador: falta o CNPJ."]).toEqual({ passo: "exportador", campo: "exp-exportador-cnpj" });
+    expect(alvos["Importador: falta cidade."]).toEqual({ passo: "importador", campo: "exp-importador-cidade" });
+    expect(alvos["Informe a condição de pagamento."]).toEqual({ passo: "comercial", campo: "exp-comercial-condicao_pagamento" });
+    expect(alvos["Embarque: falta modal de transporte."]).toEqual({ passo: "embarque", campo: "exp-embarque-modal" });
+    expect(alvos["Item 2: falta a descrição."]).toEqual({ passo: "itens", campo: "item-1-descricao" });
+    expect(alvos["Item 2 (): NCM precisa ter 8 dígitos."]).toEqual({ passo: "itens", campo: "item-1-ncm" });
+    expect(alvos["Packing List: falta nº da NF no cabeçalho do romaneio."]).toEqual({ passo: "embarque", campo: "exp-embarque-nf" });
+    expect(alvoDoAjuste(aj("erro", "erp", "erp"))).toBeNull();
+    expect(alvoDoAjuste({ nivel: "aviso", onde: "documento", campo: "volumes", texto: "Packing List: 3 de 9 materiais sem peso líquido (X)." })).toEqual({ passo: "volumes" });
   });
 });

@@ -3,6 +3,7 @@
 // (rascunho ou definitivo) e gerado pelo robo a partir dos mesmos dados.
 import { useState, type ReactNode } from "react";
 import { CheckCircle2, Download, FileSpreadsheet, Loader2 } from "lucide-react";
+import { HistoricoProcesso } from "./HistoricoProcesso";
 import { milhar, num } from "./numeros";
 import { UN_NOME, emiteCertificado, m3Material, qtdAduaneira } from "./regras";
 import type { Aprovacao, DocumentoLista, Material, Processo, Revisao } from "./tipos";
@@ -375,6 +376,7 @@ function Certificado({ proc }: { proc: Processo }) {
 // ------------------------------------------------------------------------------------------------ passo
 
 interface Props {
+  idObra: string;
   proc: Processo;
   revisao: Revisao;
   aprovado: boolean;
@@ -389,7 +391,7 @@ interface Props {
   onVerRevisao: () => void;
 }
 
-export function PassoPrevia({ proc, revisao, aprovado, aprovacao, podeAprovar, ocupado, rascunho, mensagem, onAprovar, onPedirRascunho, onBaixar, onVerRevisao }: Props) {
+export function PassoPrevia({ idObra, proc, revisao, aprovado, aprovacao, podeAprovar, ocupado, rascunho, mensagem, onAprovar, onPedirRascunho, onBaixar, onVerRevisao }: Props) {
   const emite = emiteCertificado(proc);
   const abas = [
     { id: "proforma", nome: "Proforma Invoice" },
@@ -421,8 +423,9 @@ export function PassoPrevia({ proc, revisao, aprovado, aprovacao, podeAprovar, o
         />
         <Cartao rotulo="Documento final" valor={liberado ? "Liberado" : "Bloqueado"} sub={liberado ? "pode gerar" : erros ? "corrija os erros" : "falta aprovar"} tom={liberado ? "ok" : "aviso"} />
       </div>
-      {alteradoDepois && <Aviso tom="aviso">Houve alteração depois da aprovação: aprove de novo para liberar os documentos finais.</Aviso>}
+      {alteradoDepois && <Aviso tom="aviso">Houve alteração depois da aprovação: aprove de novo para liberar os documentos finais. O que mudou está logo abaixo.</Aviso>}
       {mensagem && <Aviso tom={mensagem.tom}>{mensagem.texto}</Aviso>}
+      <HistoricoProcesso idObra={idObra} proc={proc} aprovado={aprovado} aprovacao={aprovacao} />
       <div className="flex flex-wrap items-center gap-2">
         <Botao onClick={onPedirRascunho} desabilitado={ocupado}>
           <FileSpreadsheet size={15} /> Baixar rascunho (Excel)

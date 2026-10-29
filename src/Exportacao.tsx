@@ -336,9 +336,25 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
     await salvarAgora();
   };
 
-  const ir = (p: PassoId) => {
+  // "Corrigir" da revisao: abre o passo e poe o cursor no campo (depois que a tela do passo desenhou)
+  const [foco, setFoco] = useState<{ campo: string } | null>(null);
+  useEffect(() => {
+    if (!foco) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById(foco.campo);
+      if (el) {
+        el.scrollIntoView({ block: "center" });
+        el.focus({ preventScroll: true });
+      }
+      setFoco(null);
+    }, 60);
+    return () => clearTimeout(t);
+  }, [foco, passo]);
+
+  const ir = (p: PassoId, campo?: string) => {
     setPasso(p);
-    window.scrollTo({ top: 0 });
+    if (campo) setFoco({ campo });
+    else window.scrollTo({ top: 0 });
   };
 
   // ------------------------------------------------------------------ tela
@@ -459,12 +475,13 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
           {passo === "importador" && <PassoImportador {...base} />}
           {passo === "comercial" && <PassoComercial {...base} />}
           {passo === "embarque" && <PassoEmbarque {...base} />}
-          {passo === "itens" && <PassoItens {...base} modificar={modificar} />}
+          {passo === "itens" && <PassoItens {...base} modificar={modificar} onIrPara={ir} />}
           {passo === "volumes" && <PassoPacking {...base} modificar={modificar} tabela={tabela} podeReler={Boolean(linhaErp)} onReler={reler} onIrPara={ir} />}
           {passo === "certificado" && <PassoCertificado {...base} />}
           {passo === "revisao" && <PassoRevisao proc={proc} revisao={revisao} aoIrPara={ir} />}
           {passo === "previa" && (
             <PassoPrevia
+              idObra={obra.id}
               proc={proc}
               revisao={revisao}
               aprovado={aprovado}

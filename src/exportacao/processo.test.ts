@@ -4,17 +4,23 @@ import {
   aceitarSugestoes,
   aplicarFamilia,
   brutoPorPercentual,
+  converterValores,
   definir,
   editarMaterial,
   hojeISO,
+  itemDaFamilia,
+  itensParaConverter,
   ler,
   mesclarSma,
+  pendenciasItem,
   pendenciasMaterial,
+  pesosDoPacking,
+  pesosPorFamilia,
   processoInicial,
   situacaoMaterial,
   type LinhaErp,
 } from "./processo";
-import type { Material, Processo, TabelaEstimativas } from "./tipos";
+import type { ItemInvoice, Material, Processo, TabelaEstimativas } from "./tipos";
 import crusJson from "./__fixtures__/materiais_cru_2126.json";
 import tabelaJson from "./__fixtures__/estimativas_tabela.json";
 
@@ -209,5 +215,61 @@ describe("definir e ler por caminho", () => {
     expect(n).toEqual({ p: { q: [{ r: "ok" }] } });
     expect(ler(n, "p.q.0.r")).toBe("ok");
     expect(ler(n, "p.z.0.r")).toBeUndefined();
+  });
+});
+
+describe("itens da Invoice", () => {
+  // como no pedido 2126: itens das familias 180, 250 e 310; materiais em SMA de outras familias tambem
+  const itens: ItemInvoice[] = [
+    { codigo: "40.180.2126", descricao: "Purgador", ncm: "8481.80.99", quantidade: 1, valor_unit: 0, valor_unit_brl: 5500 },
+    { codigo: "40.250.2126", descricao: "Acessórios", ncm: "84818099", quantidade: 1, valor_unit: 2000, valor_unit_brl: 11000 },
+    { codigo: "40.310.2126", descricao: "", ncm: "123", quantidade: 0, valor_unit: 10, peso_liq: 5, peso_bruto: 4 },
+  ];
+  const mats: Material[] = [
+    { sma: 1, seq: 1, familia: "2126.250", familia_desc: "ACESSORIOS", quantidade: 2, peso_liq: 10, peso_bruto: 11 },
+    { sma: 1, seq: 2, familia: "2126.250", quantidade: 1, peso_liq: 0.5, peso_bruto: 0.6 },
+    { sma: 1, seq: 3, familia: "2126.310", quantidade: 1, peso_liq: 3, peso_bruto: 3.5 },
+    { sma: 1, seq: 4, familia: "2126.230", quantidade: 1, peso_liq: 7, peso_bruto: 8 },
+    { sma: 1, seq: 5, familia: "2126.230", quantidade: 0, peso_liq: 100, peso_bruto: 100 },
+  ];
+
+  it("pendencias do item: as mesmas condicoes de erro da revisao", () => {
+    expect(pendenciasItem(itens[1])).toEqual([]);
+    expect(pendenciasItem(itens[0])).toEqual(["valor unitário"]);
+    expect(pendenciasItem(itens[2])).toEqual(["descrição", "NCM com 8 dígitos", "quantidade", "peso líquido maior que o bruto"]);
+  });
+
+  it("converter pelo cambio: R$ do pedido / taxa; conta so os itens que nao batem", () => {
+    expect(converterValores(itens, "USD", 5.5).map((i) => i.valor_unit)).toEqual([1000, 2000, 10]);
+    expect(itensParaConverter(itens, "USD", 5.5)).toBe(1);
+    expect(itensParaConverter(itens, "USD", 0)).toBe(0);
+    expect(itensParaConverter(converterValores(itens, "USD", 5.5), "USD", 5.5)).toBe(0);
+    expect(converterValores(itens, "BRL", 0)[1].valor_unit).toBe(11000);
+  });
+
+  it("pesos por familia (so o que embarca) e o item da mesma familia pelo codigo do pedido", () => {
+    const f = pesosPorFamilia(mats);
+    expect(f.map((x) => [x.familia, x.materiais, x.peso_liq, x.peso_bruto])).toEqual([
+      ["2126.230", 1, 7, 8],
+      ["2126.250", 2, 10.5, 11.6],
+      ["2126.310", 1, 3, 3.5],
+    ]);
+    expect(f[1].descricao).toBe("ACESSORIOS");
+    expect(itemDaFamilia(itens, "2126.250")).toBe(1);
+    expect(itemDaFamilia(itens, "2126.230")).toBe(-1);
+    expect(itemDaFamilia(itens, "9999.250")).toBe(-1);
+  });
+
+  it("usar os pesos do Packing: soma das familias apontadas; item sem familia fica zerado; soma bate com a Packing", () => {
+    const f = pesosPorFamilia(mats);
+    const r = pesosDoPacking(itens, f, { "2126.230": 1, "2126.250": 1, "2126.310": 2 });
+    expect(r.map((i) => [i.peso_liq, i.peso_bruto])).toEqual([
+      [0, 0],
+      [17.5, 19.6],
+      [3, 3.5],
+    ]);
+    expect(r[1].descricao).toBe("Acessórios");
+    const sem = pesosDoPacking(itens, f, { "2126.250": 1 });
+    expect(sem.map((i) => i.peso_liq)).toEqual([0, 10.5, 0]);
   });
 });

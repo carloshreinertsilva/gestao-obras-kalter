@@ -4,7 +4,7 @@
 import { aplicarEstimativas, bruto } from "./estimativas";
 import { num } from "./numeros";
 import { m3Material, qtdAduaneira } from "./regras";
-import type { ErpPedido, Material, Parte, Processo, TabelaEstimativas } from "./tipos";
+import type { ErpPedido, ItemInvoice, Material, Parte, Processo, TabelaEstimativas } from "./tipos";
 
 /** Uma linha de public.exportacao_erp (instantaneo do ERP por obra, gravado pelo robo). */
 export interface LinhaErp {
@@ -132,6 +132,79 @@ export function situacaoMaterial(m: Material): SituacaoMaterial {
   if (pendenciasMaterial(m).length) return "falta";
   if ((m.estimado ?? []).length) return "conferir";
   return "pronto";
+}
+
+/** O que falta num item da Invoice (as mesmas condicoes de erro da revisao dos itens, em regras.ts). */
+export function pendenciasItem(i: ItemInvoice): string[] {
+  const f: string[] = [];
+  if (!String(i.descricao ?? "").trim()) f.push("descrição");
+  if (String(i.ncm ?? "").replace(/\D/g, "").length !== 8) f.push("NCM com 8 dígitos");
+  if (num(i.quantidade) <= 0) f.push("quantidade");
+  if (num(i.valor_unit) <= 0) f.push("valor unitário");
+  if (num(i.peso_bruto) > 0 && num(i.peso_liq) > num(i.peso_bruto)) f.push("peso líquido maior que o bruto");
+  return f;
+}
+
+/** Valor unitario na moeda da Invoice = valor do pedido em R$ / cambio (BRL: o proprio valor). Itens sem valor do pedido ficam como estao. */
+export function converterValores(itens: ItemInvoice[], moeda: string, taxa: number): ItemInvoice[] {
+  return itens.map((i) =>
+    num(i.valor_unit_brl) ? { ...i, valor_unit: moeda === "BRL" ? num(i.valor_unit_brl) : Math.round((num(i.valor_unit_brl) / taxa) * 100) / 100 } : i,
+  );
+}
+
+/** Quantos itens com valor do pedido nao batem com R$ / cambio (0 = nada a converter ou sem cambio). */
+export function itensParaConverter(itens: ItemInvoice[], moeda: string, taxa: number): number {
+  if (moeda !== "BRL" && taxa <= 0) return 0;
+  const conv = converterValores(itens, moeda, taxa);
+  return itens.filter((i, k) => num(i.valor_unit_brl) > 0 && Math.abs(num(i.valor_unit) - num(conv[k].valor_unit)) > 0.005).length;
+}
+
+export interface PesoFamilia {
+  familia: string;
+  descricao: string;
+  materiais: number;
+  peso_liq: number;
+  peso_bruto: number;
+}
+
+/** Pesos da Packing List somados por familia (so o que embarca). */
+export function pesosPorFamilia(materiais: Material[]): PesoFamilia[] {
+  const fams = new Map<string, PesoFamilia>();
+  for (const m of materiais) {
+    if (num(m.quantidade) <= 0) continue;
+    const k = m.familia || "";
+    const f = fams.get(k) ?? { familia: k, descricao: m.familia_desc || "", materiais: 0, peso_liq: 0, peso_bruto: 0 };
+    f.materiais += 1;
+    f.peso_liq += num(m.peso_liq);
+    f.peso_bruto += num(m.peso_bruto);
+    fams.set(k, f);
+  }
+  return [...fams.values()]
+    .map((f) => ({ ...f, peso_liq: arred3(f.peso_liq), peso_bruto: arred3(f.peso_bruto) }))
+    .sort((a, b) => a.familia.localeCompare(b.familia));
+}
+
+/** Item da Invoice da mesma familia pelo codigo do pedido (item 40.250.2126 <-> familia 2126.250); -1 se nenhum. */
+export function itemDaFamilia(itens: ItemInvoice[], familia: string): number {
+  const [obra, fam] = familia.split(".");
+  return itens.findIndex((i) => {
+    const g = /^(\d+)\.(\d{3})\.(\d+)$/.exec(String(i.codigo ?? "").trim());
+    return Boolean(g && g[2] === fam && g[3] === obra);
+  });
+}
+
+/** "Usar os pesos do Packing List": cada item recebe a soma das familias apontadas para ele (destino: familia -> indice do
+ *  item; -1 = nao entra em item nenhum). Itens sem familia ficam com peso zero, para a soma dos itens bater com a Packing List. */
+export function pesosDoPacking(itens: ItemInvoice[], familias: PesoFamilia[], destino: Record<string, number>): ItemInvoice[] {
+  const pl = itens.map(() => 0);
+  const pb = itens.map(() => 0);
+  for (const f of familias) {
+    const k = destino[f.familia] ?? -1;
+    if (k < 0 || k >= itens.length) continue;
+    pl[k] += f.peso_liq;
+    pb[k] += f.peso_bruto;
+  }
+  return itens.map((i, k) => ({ ...i, peso_liq: arred3(pl[k]), peso_bruto: arred3(pb[k]) }));
 }
 
 /** Valor de um caminho "a.b.0.c" dentro de um objeto. */

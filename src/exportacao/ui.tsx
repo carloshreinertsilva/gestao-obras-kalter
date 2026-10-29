@@ -1,5 +1,6 @@
 // Pecas de tela do modulo Exportacao, no mesmo visual do cadastro de obras (TelaCadastroObras.tsx).
 import { useState, type ReactNode } from "react";
+import { idDoCampo } from "./navegacao";
 import { num } from "./numeros";
 import { ler } from "./processo";
 import type { Processo } from "./tipos";
@@ -214,7 +215,7 @@ export function CampoProcesso({
   linhas?: number;
   casas?: number;
 }) {
-  const id = `exp-${caminho.replace(/\./g, "-")}`;
+  const id = idDoCampo(caminho);
   const valor = ler(proc, caminho);
   const texto = valor == null ? "" : String(valor);
   let controle: ReactNode;

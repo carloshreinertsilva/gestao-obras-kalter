@@ -1,11 +1,14 @@
 // Passo 9: revisao. Erros (vermelho) bloqueiam os documentos finais; avisos (amarelo) nao; ajustes no ERP (roxo) so o Carlos
 // Silva corrige (o app nunca grava no ERP).
 import { ArrowRight } from "lucide-react";
-import { PASSO_DO_CAMPO, nomeDoPasso, type PassoId } from "./navegacao";
+import { alvoDoAjuste, nomeDoPasso, type PassoId } from "./navegacao";
 import { Botao, Cartao, Titulo, fmtBR } from "./ui";
 import type { Ajuste, Processo, Revisao } from "./tipos";
 
-function Grupo({ titulo, tom, lista, aoIrPara }: { titulo: string; tom: "erro" | "aviso" | "erp"; lista: Ajuste[]; aoIrPara: (p: PassoId) => void }) {
+/** Vai ao passo e, quando se sabe o campo, poe o cursor nele. */
+export type IrPara = (p: PassoId, campo?: string) => void;
+
+function Grupo({ titulo, tom, lista, aoIrPara }: { titulo: string; tom: "erro" | "aviso" | "erp"; lista: Ajuste[]; aoIrPara: IrPara }) {
   if (!lista.length) return null;
   const cor = tom === "erro" ? "bg-red-50 border-red-200 text-red-700" : tom === "aviso" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-violet-50 border-violet-200 text-violet-800";
   return (
@@ -15,16 +18,20 @@ function Grupo({ titulo, tom, lista, aoIrPara }: { titulo: string; tom: "erro" |
       </h4>
       <ul className="space-y-1.5">
         {lista.map((a, i) => {
-          const passo = PASSO_DO_CAMPO[a.campo];
+          const alvo = alvoDoAjuste(a);
           return (
-            <li key={i} className={`rounded-lg border px-3 py-2 text-sm flex items-start gap-3 ${cor}`}>
-              <span className="flex-1 min-w-0">{a.texto}</span>
+            <li key={i} className={`rounded-lg border px-3 py-2 text-sm flex flex-wrap sm:flex-nowrap items-start gap-x-3 gap-y-1.5 ${cor}`}>
+              <span className="flex-1 min-w-[12rem]">{a.texto}</span>
               {a.onde === "erp" ? (
                 <span className="text-[11px] font-bold rounded-full bg-white/70 px-2 py-0.5 whitespace-nowrap">Carlos Silva</span>
               ) : (
-                passo && (
-                  <Botao tamanho="pequeno" onClick={() => aoIrPara(passo)}>
-                    Corrigir em {nomeDoPasso(passo)}
+                alvo && (
+                  <Botao
+                    tamanho="pequeno"
+                    onClick={() => aoIrPara(alvo.passo, alvo.campo)}
+                    titulo={alvo.campo ? `Abre ${nomeDoPasso(alvo.passo)} com o cursor no campo` : `Abre ${nomeDoPasso(alvo.passo)}`}
+                  >
+                    Corrigir <span className="font-normal text-slate-500">· {nomeDoPasso(alvo.passo)}</span>
                   </Botao>
                 )
               )}
@@ -36,7 +43,7 @@ function Grupo({ titulo, tom, lista, aoIrPara }: { titulo: string; tom: "erro" |
   );
 }
 
-export function PassoRevisao({ proc, revisao, aoIrPara }: { proc: Processo; revisao: Revisao; aoIrPara: (p: PassoId) => void }) {
+export function PassoRevisao({ proc, revisao, aoIrPara }: { proc: Processo; revisao: Revisao; aoIrPara: IrPara }) {
   const erros = revisao.ajustes.filter((a) => a.nivel === "erro");
   const avisos = revisao.ajustes.filter((a) => a.nivel === "aviso" && a.onde !== "erp");
   const erp = revisao.ajustes.filter((a) => a.onde === "erp");
