@@ -1043,6 +1043,7 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
   const [nfs, setNfs] = useState<NfTerceiros[] | null>(null);
   const [filtro, setFiltro] = useState("pendentes");
   const [busca, setBusca] = useState("");
+  const [reenvio, setReenvio] = useState<{ pedido: PedidoServico; nf: NfTerceiros } | null>(null);
 
   const carregar = async () => {
     const { data: d } = await supabase.from("nfs_terceiros").select("*").order("vencimento");
@@ -1174,7 +1175,38 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
           </table>
         </div>
       </div>
-      {idAberto && <DetalheNfTerceiros id={idAberto} usuario={usuario} onFechar={() => onAbrir(null)} onAlterada={carregar} />}
+      {idAberto && (
+        <DetalheNfTerceiros
+          id={idAberto}
+          usuario={usuario}
+          onFechar={() => onAbrir(null)}
+          onAlterada={carregar}
+          onReenviar={async (nf) => {
+            // o aviso de devolucao abre esta tela: o gestor corrige aqui mesmo, sem cancelar e encaminhar de novo
+            const { data: p, error } = await supabase
+              .from("obra_servicos_parcelas")
+              .select("*")
+              .eq("id_obra", nf.id_obra)
+              .eq("nr_pedido", nf.nr_pedido);
+            const ped = agruparPedidos((p as ParcelaServico[]) || [])[0];
+            if (error || !ped) return alert("Não foi possível carregar o pedido de serviço desta NF.");
+            onAbrir(null);
+            setReenvio({ pedido: ped, nf });
+          }}
+        />
+      )}
+      {reenvio && (
+        <ModalEncaminharNf
+          idObra={reenvio.nf.id_obra}
+          pedido={reenvio.pedido}
+          devolvida={reenvio.nf}
+          onFechar={() => setReenvio(null)}
+          onFeito={() => {
+            setReenvio(null);
+            carregar();
+          }}
+        />
+      )}
     </div>
   );
 }
