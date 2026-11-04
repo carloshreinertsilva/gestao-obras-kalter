@@ -10,6 +10,14 @@ import type { Usuario } from "./types";
 // (usuarios.revisa_fiscal_material) define NCM/tipo/IPI e cria o item no ERP pela tela; o robo liga o codigo
 // criado (mesma descricao) ou o fiscal informa. Gravacoes so pelas funcoes do banco mat_*.
 
+type Origem = "comprado" | "produzido" | "servico";
+export const ORIGENS: [Origem, string][] = [
+  ["comprado", "Comprado"],
+  ["produzido", "Produzido"],
+  ["servico", "Serviço"],
+];
+const origemTxt = (o?: string | null) => ORIGENS.find(([k]) => k === o)?.[1] || "";
+
 type StatusMat = "cadastro" | "fiscal" | "erp" | "concluida" | "devolvida" | "recusada" | "cancelada";
 
 interface SolicitacaoMaterial {
@@ -26,6 +34,7 @@ interface SolicitacaoMaterial {
   aplicacao: string | null;
   ncm_sugerido: string | null;
   similares: Similar[] | null;
+  origem: Origem | null;
   nome_cadastro: string | null;
   cadastro_em: string | null;
   obs_cadastro: string | null;
@@ -108,8 +117,15 @@ const EVENTO: Record<string, string> = {
   cancelada: "Cancelou",
 };
 
-// 100230 -> "10.230" (classe.tipo como no codigo do material)
-export const codigoClasse = (c: number) => `${Math.floor(c / 10000)}.${String(c % 10000).padStart(3, "0")}`;
+// 100230 -> "10/230"; rotulo "10/230 · MATERIA PRIMA / TUBULACOES E CONEXOES" (a classe-mae e a linha xx0000 do CLASTIP)
+export const codigoClasse = (c: number) => `${Math.floor(c / 10000)}/${String(c % 10000).padStart(3, "0")}`;
+export function rotuloClasse(c: number | null | undefined, classes: { classe_tipo: number; descricao: string }[]) {
+  if (c == null) return "";
+  const mae = classes.find((x) => x.classe_tipo === Math.floor(c / 10000) * 10000)?.descricao;
+  const tipo = c % 10000 ? classes.find((x) => x.classe_tipo === c)?.descricao : undefined;
+  const nome = [mae, tipo].filter(Boolean).join(" / ");
+  return nome ? `${codigoClasse(c)} · ${nome}` : codigoClasse(c);
+}
 export const formatarNcm = (n?: string | null) => (n && n.length === 8 ? `${n.slice(0, 4)}.${n.slice(4, 6)}.${n.slice(6)}` : n || "");
 const fmtDataHora = (v?: string | null) =>
   v ? new Date(v).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
@@ -229,11 +245,19 @@ function SelecaoClasse({ valor, onChange, classes }: { valor: string; onChange: 
   return (
     <select value={valor} onChange={(e) => onChange(e.target.value)} className={`${entrada} bg-white`}>
       <option value="">Escolha…</option>
-      {classes.map((c) => (
-        <option key={c.classe_tipo} value={c.classe_tipo}>
-          {codigoClasse(c.classe_tipo)} - {c.descricao}
-        </option>
-      ))}
+      {classes
+        .filter((m) => m.classe_tipo % 10000 === 0)
+        .map((m) => (
+          <optgroup key={m.classe_tipo} label={`${Math.floor(m.classe_tipo / 10000)} · ${m.descricao}`}>
+            {classes
+              .filter((c) => c.classe_tipo % 10000 !== 0 && Math.floor(c.classe_tipo / 10000) === Math.floor(m.classe_tipo / 10000))
+              .map((c) => (
+                <option key={c.classe_tipo} value={c.classe_tipo}>
+                  {codigoClasse(c.classe_tipo)} · {c.descricao}
+                </option>
+              ))}
+          </optgroup>
+        ))}
     </select>
   );
 }
@@ -251,6 +275,25 @@ function SelecaoUnidade({ valor, onChange, unidades }: { valor: string; onChange
   );
 }
 
+function SelecaoOrigem({ valor, onChange }: { valor: string; onChange: (v: Origem) => void }) {
+  return (
+    <div className="flex gap-2 flex-wrap" role="radiogroup" aria-label="Origem do item">
+      {ORIGENS.map(([k, t]) => (
+        <button
+          key={k}
+          type="button"
+          role="radio"
+          aria-checked={valor === k}
+          onClick={() => onChange(k)}
+          className={`px-3 py-1.5 rounded-lg border text-sm font-semibold ${valor === k ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+        >
+          {t}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------------------------------------
 // Nova solicitacao (ou correcao de uma devolvida)
 // ------------------------------------------------------------------------------------------------
@@ -262,6 +305,7 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
   const [aplicacao, setAplicacao] = useState(devolvida?.aplicacao || "");
   const [ncm, setNcm] = useState(devolvida?.ncm_sugerido || "");
   const [urgente, setUrgente] = useState(Boolean(devolvida?.urgente));
+  const [origem, setOrigem] = useState<string>(devolvida?.origem || "");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
   const { lista, buscando } = useSimilares(descricao, devolvida?.id);
@@ -269,6 +313,7 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
   const enviar = async () => {
     setErro("");
     if (descricao.trim().length < 5) return setErro("Descreva o item.");
+    if (!origem) return setErro("Marque se o item é comprado, produzido ou serviço.");
     if (!classe) return setErro("Escolha a classe/tipo.");
     if (!unidade) return setErro("Escolha a unidade de medida.");
     const n = ncm.replace(/\D/g, "");
@@ -282,6 +327,7 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
       p_aplicacao: aplicacao || null,
       p_ncm: n || null,
       p_urgente: urgente,
+      p_origem: origem,
     });
     setEnviando(false);
     if (error) return setErro(msgErro(error));
@@ -317,6 +363,10 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
             <p className="text-[11px] text-slate-400 mt-1">Nome técnico: tipo do item, material, medidas, norma/padrão e acabamento. {descricao.length}/120</p>
           </div>
           <ListaSimilares lista={lista} buscando={buscando} titulo="Itens parecidos já cadastrados ou pedidos" />
+          <div>
+            <Rotulo>O item é *</Rotulo>
+            <SelecaoOrigem valor={origem} onChange={setOrigem} />
+          </div>
           <div className="grid md:grid-cols-3 gap-3">
             <div className="md:col-span-2">
               <Rotulo>Classe / tipo *</Rotulo>
@@ -398,6 +448,7 @@ function DetalheMaterial({
   const [classe, setClasse] = useState("");
   const [unidade, setUnidade] = useState("");
   const [obs, setObs] = useState("");
+  const [origem, setOrigem] = useState<string>("");
   // revisao fiscal
   const [ncm, setNcm] = useState("");
   const [ncmDesc, setNcmDesc] = useState<string | null>(null);
@@ -427,8 +478,9 @@ function DetalheMaterial({
     setClasse(String(d.classe_tipo));
     setUnidade(d.unidade);
     setObs(d.obs_cadastro || "");
+    setOrigem(d.origem || "");
     setNcm(d.ncm || d.ncm_sugerido || "");
-    setTipoItem(d.tipo_item != null ? String(d.tipo_item) : "");
+    setTipoItem(d.tipo_item != null ? String(d.tipo_item) : d.status === "fiscal" && d.origem === "servico" ? "9" : "");
     setIpi(d.pct_ipi != null ? String(d.pct_ipi).replace(".", ",") : "");
     setObsFiscal(d.obs_fiscal || "");
   };
@@ -479,10 +531,7 @@ function DetalheMaterial({
     if (motivo && motivo.trim()) rpc("mat_recusar", { p_motivo: motivo.trim(), p_codigo_existente: codigoExistente || null });
   };
 
-  const nomeClasse = (c?: number | null) => {
-    const k = classes.find((x) => x.classe_tipo === c);
-    return c == null ? "" : `${codigoClasse(c)}${k ? ` - ${k.descricao}` : ""}`;
-  };
+  const nomeClasse = (c?: number | null) => rotuloClasse(c, classes);
   const nomeUnidade = (u?: string | null) => {
     const k = unidades.find((x) => x.unidade === u);
     return u ? `${u}${k ? ` - ${k.descricao}` : ""}` : "";
@@ -492,6 +541,7 @@ function DetalheMaterial({
   const resumoErp = s
     ? [
         `Descrição: ${s.descricao}`,
+        `Origem: ${origemTxt(s.origem)}`,
         `Unidade: ${s.unidade}`,
         `Classe/tipo: ${nomeClasse(s.classe_tipo)}`,
         `NCM: ${formatarNcm(s.ncm)}`,
@@ -545,6 +595,7 @@ function DetalheMaterial({
               )}
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <Info rotulo="Origem" valor={origemTxt(s.origem) || "-"} />
                 <Info rotulo="Classe / tipo" valor={nomeClasse(s.classe_tipo)} />
                 <Info rotulo="Unidade" valor={nomeUnidade(s.unidade)} />
                 <Info rotulo="NCM sugerido" valor={s.ncm_sugerido ? formatarNcm(s.ncm_sugerido) : "-"} />
@@ -580,6 +631,10 @@ function DetalheMaterial({
                   <div>
                     <Rotulo>Descrição padronizada *</Rotulo>
                     <input value={descricao} onChange={(e) => setDescricao(e.target.value)} maxLength={120} className={entrada} />
+                  </div>
+                  <div>
+                    <Rotulo>O item é *</Rotulo>
+                    <SelecaoOrigem valor={origem} onChange={setOrigem} />
                   </div>
                   <ListaSimilares
                     lista={lista}
@@ -633,7 +688,10 @@ function DetalheMaterial({
                       <input value={ipi} onChange={(e) => setIpi(e.target.value)} inputMode="decimal" placeholder="0" className={entrada} />
                     </div>
                   </div>
-                  <p className="text-[11px] text-slate-500">O gênero é o capítulo do NCM (2 primeiros dígitos) e é preenchido sozinho.</p>
+                  <p className="text-[11px] text-slate-500">
+                    O gênero é o capítulo do NCM (2 primeiros dígitos) e é preenchido sozinho. Item de serviço usa sempre o tipo 09 (e o tipo 09 só serve
+                    para serviço) - é ele que faz o pedido aparecer na seção de serviços do app.
+                  </p>
                   <div>
                     <Rotulo>Observação fiscal (opcional)</Rotulo>
                     <input value={obsFiscal} onChange={(e) => setObsFiscal(e.target.value)} placeholder="Ex.: CEST, origem, benefício…" className={entrada} />
@@ -734,7 +792,7 @@ function DetalheMaterial({
               {revisandoCadastro && (
                 <button
                   disabled={ocupado}
-                  onClick={() => rpc("mat_aprovar_cadastro", { p_descricao: descricao, p_classe_tipo: Number(classe), p_unidade: unidade, p_obs: obs || null })}
+                  onClick={() => rpc("mat_aprovar_cadastro", { p_descricao: descricao, p_classe_tipo: Number(classe), p_unidade: unidade, p_obs: obs || null, p_origem: origem || null })}
                   className="px-4 py-2 rounded-lg bg-blue-700 text-white font-bold flex items-center gap-1 text-sm disabled:opacity-60"
                 >
                   <CheckCircle2 size={14} /> Aprovar e enviar ao fiscal
@@ -783,7 +841,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
     const { data } = await supabase
       .from("solicitacoes_material")
       .select(
-        "id, numero, status, urgente, id_solicitante, nome_solicitante, descricao, descricao_solicitada, classe_tipo, unidade, codigo_erp, codigo_edit, codigo_existente, created_at",
+        "id, numero, status, urgente, id_solicitante, nome_solicitante, descricao, descricao_solicitada, classe_tipo, unidade, origem, codigo_erp, codigo_edit, codigo_existente, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -798,10 +856,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
     ((s.status === "fiscal" || s.status === "erp") && ehFiscal) ||
     (s.status === "devolvida" && s.id_solicitante === usuario?.id);
 
-  const nomeClasse = useMemo(() => {
-    const m = new Map(classes.map((c) => [c.classe_tipo, c.descricao]));
-    return (c: number) => `${codigoClasse(c)}${m.get(c) ? ` - ${m.get(c)}` : ""}`;
-  }, [classes]);
+  const nomeClasse = useMemo(() => (c: number) => rotuloClasse(c, classes), [classes]);
 
   // quem nao tem nada pendente comeca vendo as proprias solicitacoes
   useEffect(() => {
@@ -897,7 +952,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
                   <td className="px-3 py-2 text-slate-500">{s.numero}</td>
                   <td className="px-3 py-2">
                     <b>{s.descricao}</b>
-                    <span className="block text-[11px] text-slate-500">{nomeClasse(s.classe_tipo)}</span>
+                    <span className="block text-[11px] text-slate-500">{[origemTxt(s.origem), nomeClasse(s.classe_tipo)].filter(Boolean).join(" · ")}</span>
                   </td>
                   <td className="px-3 py-2 text-center">{s.unidade}</td>
                   <td className="px-3 py-2 text-[12px] text-slate-500">
