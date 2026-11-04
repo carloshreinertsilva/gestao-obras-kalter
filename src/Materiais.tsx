@@ -17,6 +17,11 @@ export const ORIGENS: [Origem, string][] = [
   ["servico", "Serviço"],
 ];
 const origemTxt = (o?: string | null) => ORIGENS.find(([k]) => k === o)?.[1] || "";
+// no ERP fica em MATERPCP.mpcp_tipo_item (FD MATERPCP do Prosyst): 0 normal (produzido), 1 fantasma, 2 comprado,
+// 3 servico, 4 revenda, 5 consumo, 6 requisicao (7 aparece desde set/2026 e nao esta na FD de 2024)
+export const PCP_DA_ORIGEM: Record<Origem, number> = { comprado: 2, produzido: 0, servico: 3 };
+const TIPOS_PCP: Record<number, string> = { 0: "Produzido", 1: "Fantasma", 2: "Comprado", 3: "Serviço", 4: "Revenda", 5: "Consumo", 6: "Requisição" };
+const pcpTxt = (t?: number | null) => (t == null ? "" : TIPOS_PCP[t] || `tipo PCP ${t}`);
 
 type StatusMat = "cadastro" | "fiscal" | "erp" | "concluida" | "devolvida" | "recusada" | "cancelada";
 
@@ -67,6 +72,7 @@ interface Similar {
   numero_solicitacao: number | null;
   situacao: string;
   semelhanca: number;
+  tipo_pcp: number | null;
 }
 
 interface Classe {
@@ -219,7 +225,7 @@ function ListaSimilares({
               <span className="flex-1">
                 <b className="text-slate-700">{s.descricao}</b>
                 <span className="block text-[11px] text-slate-400">
-                  {[s.unidade, s.classe, s.ncm ? `NCM ${formatarNcm(s.ncm)}` : "", s.origem === "solicitacao" ? `solicitação ${STATUS[s.situacao as StatusMat]?.rotulo.toLowerCase() || s.situacao}` : ""]
+                  {[s.unidade, pcpTxt(s.tipo_pcp), s.classe, s.ncm ? `NCM ${formatarNcm(s.ncm)}` : "", s.origem === "solicitacao" ? `solicitação ${STATUS[s.situacao as StatusMat]?.rotulo.toLowerCase() || s.situacao}` : ""]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
@@ -541,7 +547,7 @@ function DetalheMaterial({
   const resumoErp = s
     ? [
         `Descrição: ${s.descricao}`,
-        `Origem: ${origemTxt(s.origem)}`,
+        `Tipo do item no PCP (MATERPCP): ${s.origem ? `${PCP_DA_ORIGEM[s.origem]} - ${origemTxt(s.origem)}` : ""}`,
         `Unidade: ${s.unidade}`,
         `Classe/tipo: ${nomeClasse(s.classe_tipo)}`,
         `NCM: ${formatarNcm(s.ncm)}`,
