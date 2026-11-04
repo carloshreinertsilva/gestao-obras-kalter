@@ -37,6 +37,9 @@ export interface Usuario {
   recebe_nf_terceiros?: boolean;
   // recebe os alertas de robo parado / backup / fila de e-mail (verificar_saude_robo no banco)
   recebe_alerta_sistema?: boolean;
+  // solicitacao de material (04/11): revisa descricao/unidade/classe (Andre) e revisa NCM/tipo/IPI (Daniela)
+  cadastra_materiais?: boolean;
+  revisa_fiscal_material?: boolean;
   created_at?: string;
 }
 

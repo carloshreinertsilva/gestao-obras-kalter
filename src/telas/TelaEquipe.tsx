@@ -26,6 +26,8 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
     recebe_copia_faturamento: false,
     recebe_nf_terceiros: false,
     recebe_alerta_sistema: false,
+    cadastra_materiais: false,
+    revisa_fiscal_material: false,
     login_erp: "",
   });
   const [salvando, setSalvando] = useState(false);
@@ -59,6 +61,8 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
         recebe_copia_faturamento: Boolean(novoUsuario.recebe_copia_faturamento),
         recebe_nf_terceiros: Boolean(novoUsuario.recebe_nf_terceiros),
         recebe_alerta_sistema: Boolean(novoUsuario.recebe_alerta_sistema),
+        cadastra_materiais: Boolean(novoUsuario.cadastra_materiais),
+        revisa_fiscal_material: Boolean(novoUsuario.revisa_fiscal_material),
         login_erp: novoUsuario.login_erp || null,
       };
 
@@ -86,6 +90,8 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
         recebe_copia_faturamento: false,
         recebe_nf_terceiros: false,
         recebe_alerta_sistema: false,
+        cadastra_materiais: false,
+        revisa_fiscal_material: false,
         login_erp: "",
       });
       onAtualizar();
@@ -109,6 +115,8 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       recebe_copia_faturamento: Boolean(usuario.recebe_copia_faturamento),
       recebe_nf_terceiros: Boolean(usuario.recebe_nf_terceiros),
       recebe_alerta_sistema: Boolean(usuario.recebe_alerta_sistema),
+      cadastra_materiais: Boolean(usuario.cadastra_materiais),
+      revisa_fiscal_material: Boolean(usuario.revisa_fiscal_material),
       login_erp: usuario.login_erp || "",
     });
     setTimeout(() => {
@@ -131,6 +139,8 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       recebe_copia_faturamento: false,
       recebe_nf_terceiros: false,
       recebe_alerta_sistema: false,
+      cadastra_materiais: false,
+      revisa_fiscal_material: false,
       login_erp: "",
     });
   };
@@ -329,6 +339,34 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 </span>
               </span>
             </label>
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(novoUsuario.cadastra_materiais)}
+                onChange={(e) => setNovoUsuario({ ...novoUsuario, cadastra_materiais: e.target.checked })}
+                className="mt-0.5 accent-[#2A6377]"
+              />
+              <span>
+                <b>Responsável pelo cadastro de materiais</b>
+                <span className="block text-[11px] text-slate-400">
+                  Revisa as solicitações de material novo (descrição, unidade, classe/tipo), aprova para o fiscal, devolve ou recusa apontando o item que já existe.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(novoUsuario.revisa_fiscal_material)}
+                onChange={(e) => setNovoUsuario({ ...novoUsuario, revisa_fiscal_material: e.target.checked })}
+                className="mt-0.5 accent-[#2A6377]"
+              />
+              <span>
+                <b>Revisão fiscal de materiais</b>
+                <span className="block text-[11px] text-slate-400">
+                  Revisa NCM, tipo do item e % de IPI dos materiais aprovados pelo cadastro e cria o item no ERP.
+                </span>
+              </span>
+            </label>
           </div>
           <div className="mt-4 pt-4 border-t space-y-2">
             <p className="text-xs font-bold uppercase text-slate-400 tracking-wider">Sistema</p>
@@ -402,7 +440,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                     {user.email}
                     {user.login_erp && <span className="text-slate-400"> · ERP {user.login_erp}</span>}
                   </p>
-                  {(user.aprova_previsao || user.recebe_copia_previsao || user.aprova_faturamento || user.recebe_copia_faturamento || user.recebe_nf_terceiros || user.recebe_alerta_sistema) && (
+                  {(user.aprova_previsao || user.recebe_copia_previsao || user.aprova_faturamento || user.recebe_copia_faturamento || user.recebe_nf_terceiros || user.recebe_alerta_sistema || user.cadastra_materiais || user.revisa_fiscal_material) && (
                     <p className="flex flex-wrap gap-1 mt-1">
                       {user.aprova_previsao && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -437,6 +475,16 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                       {user.recebe_nf_terceiros && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">
                           NFs de terceiros
+                        </span>
+                      )}
+                      {user.cadastra_materiais && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          Cadastro de materiais
+                        </span>
+                      )}
+                      {user.revisa_fiscal_material && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                          Fiscal de materiais
                         </span>
                       )}
                     </p>
