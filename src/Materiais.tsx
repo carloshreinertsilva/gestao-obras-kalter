@@ -18,9 +18,9 @@ export const ORIGENS: [Origem, string][] = [
 ];
 const origemTxt = (o?: string | null) => ORIGENS.find(([k]) => k === o)?.[1] || "";
 // no ERP fica em MATERPCP.mpcp_tipo_item (FD MATERPCP do Prosyst): 0 normal (produzido), 1 fantasma, 2 comprado,
-// 3 servico, 4 revenda, 5 consumo, 6 requisicao (7 aparece desde set/2026 e nao esta na FD de 2024)
+// 3 servico, 4 revenda, 5 consumo, 6 requisicao, 7 producao externa / beneficiado (informado pelo Carlos, nao esta na FD de 2024)
 export const PCP_DA_ORIGEM: Record<Origem, number> = { comprado: 2, produzido: 0, servico: 3 };
-const TIPOS_PCP: Record<number, string> = { 0: "Produzido", 1: "Fantasma", 2: "Comprado", 3: "Serviço", 4: "Revenda", 5: "Consumo", 6: "Requisição" };
+const TIPOS_PCP: Record<number, string> = { 0: "Produzido", 1: "Fantasma", 2: "Comprado", 3: "Serviço", 4: "Revenda", 5: "Consumo", 6: "Requisição", 7: "Produção externa" };
 const pcpTxt = (t?: number | null) => (t == null ? "" : TIPOS_PCP[t] || `tipo PCP ${t}`);
 
 type StatusMat = "cadastro" | "fiscal" | "erp" | "concluida" | "devolvida" | "recusada" | "cancelada";
