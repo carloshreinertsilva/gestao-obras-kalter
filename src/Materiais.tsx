@@ -57,6 +57,9 @@ interface SolicitacaoMaterial {
   motivo: string | null;
   nome_motivo: string | null;
   codigo_existente: number | null;
+  codigo_edit_proposto: string | null;
+  codigo_edit_automatico: boolean | null;
+  erp_erro: string | null;
   created_at: string;
 }
 
@@ -121,6 +124,8 @@ const EVENTO: Record<string, string> = {
   reaberta_fiscal: "Voltou para a revisão fiscal",
   recusada: "Recusou",
   cancelada: "Cancelou",
+  codigo_alterado: "Alterou o código do ERP",
+  erro_erp: "Robô não conseguiu criar no ERP",
 };
 
 // 100230 -> "10/230"; rotulo "10/230 · MATERIA PRIMA / TUBULACOES E CONEXOES" (a classe-mae e a linha xx0000 do CLASTIP)
@@ -462,6 +467,10 @@ function DetalheMaterial({
   const [ipi, setIpi] = useState("");
   const [obsFiscal, setObsFiscal] = useState("");
   const [codigo, setCodigo] = useState("");
+  // fase 2: codigo editado sugerido (sequencia da classe/tipo + 1) e se o robo ja cria o item no ERP
+  const [codigoEdit, setCodigoEdit] = useState("");
+  const [sugestao, setSugestao] = useState("");
+  const [robo, setRobo] = useState(false);
 
   const admin = usuario?.perfil === "admin";
   const ehCadastro = admin || Boolean(usuario?.cadastra_materiais);
@@ -492,8 +501,20 @@ function DetalheMaterial({
   };
   useEffect(() => {
     carregar();
+    supabase.rpc("mat_criacao_erp_ligada").then(({ data }) => setRobo(data === true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // codigo sugerido para a revisao fiscal (ou para trocar o codigo de uma aprovada)
+  useEffect(() => {
+    if (!s || !ehFiscal || (s.status !== "fiscal" && s.status !== "erp")) return;
+    supabase.rpc("mat_proximo_codigo_edit", { p_classe_tipo: s.classe_tipo, p_excluir: s.id }).then(({ data }) => {
+      const sug = typeof data === "string" ? data : "";
+      setSugestao(sug);
+      setCodigoEdit(s.status === "erp" ? s.codigo_edit_proposto || sug : sug);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s?.id, s?.status, s?.codigo_edit_proposto, ehFiscal]);
 
   // descricao do NCM digitado (tabela do ERP)
   useEffect(() => {
@@ -546,6 +567,7 @@ function DetalheMaterial({
 
   const resumoErp = s
     ? [
+        `Código: ${s.codigo_edit_proposto || ""}`,
         `Descrição: ${s.descricao}`,
         `Tipo do item no PCP (MATERPCP): ${s.origem ? `${PCP_DA_ORIGEM[s.origem]} - ${origemTxt(s.origem)}` : ""}`,
         `Unidade: ${s.unidade}`,
@@ -698,6 +720,16 @@ function DetalheMaterial({
                     O gênero é o capítulo do NCM (2 primeiros dígitos) e é preenchido sozinho. Item de serviço usa sempre o tipo 09 (e o tipo 09 só serve
                     para serviço) - é ele que faz o pedido aparecer na seção de serviços do app.
                   </p>
+                  <div className="grid md:grid-cols-3 gap-3">
+                    <div>
+                      <Rotulo>Código no ERP *</Rotulo>
+                      <input value={codigoEdit} onChange={(e) => setCodigoEdit(e.target.value)} placeholder={sugestao} className={`${entrada} font-mono`} />
+                    </div>
+                    <p className="md:col-span-2 text-[11px] text-slate-500 self-end">
+                      Sugerido: <b className="font-mono">{sugestao || "…"}</b> (próximo da sequência da classe/tipo). Pode trocar; tem que começar com a
+                      classe/tipo e não pode existir no ERP.
+                    </p>
+                  </div>
                   <div>
                     <Rotulo>Observação fiscal (opcional)</Rotulo>
                     <input value={obsFiscal} onChange={(e) => setObsFiscal(e.target.value)} placeholder="Ex.: CEST, origem, benefício…" className={entrada} />
@@ -708,7 +740,39 @@ function DetalheMaterial({
               {/* ---------------- criar no ERP ---------------- */}
               {s.status === "erp" && (
                 <div className="border-2 border-violet-200 rounded-xl p-3 space-y-3 bg-violet-50/30">
-                  <p className="font-bold text-violet-800">Aprovado - falta criar o item no ERP</p>
+                  <p className="font-bold text-violet-800">
+                    {robo ? "Aprovado - o robô está criando o item no ERP" : "Aprovado - falta criar o item no ERP"}
+                  </p>
+                  {robo && (
+                    <p className="text-[12px] text-slate-600">
+                      O robô cria o item no ERP com o código <b className="font-mono">{s.codigo_edit_proposto}</b> em até 5 minutos e avisa o solicitante, o
+                      cadastro e a coordenação.
+                    </p>
+                  )}
+                  {s.erp_erro && (
+                    <p className="rounded-lg px-3 py-2 border bg-red-50 border-red-200 text-red-700 text-[12px]">
+                      <b>O robô não conseguiu criar:</b> {s.erp_erro}
+                    </p>
+                  )}
+                  {ehFiscal && (
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <Rotulo>Código no ERP</Rotulo>
+                        <input value={codigoEdit} onChange={(e) => setCodigoEdit(e.target.value)} placeholder={sugestao} className={`${entrada} font-mono`} />
+                      </div>
+                      <button
+                        disabled={ocupado || !codigoEdit.trim() || codigoEdit.trim().toUpperCase() === s.codigo_edit_proposto}
+                        onClick={() =>
+                          rpc("mat_alterar_codigo_proposto", {
+                            p_codigo_edit: codigoEdit.trim().toUpperCase() === sugestao ? null : codigoEdit.trim(),
+                          })
+                        }
+                        className="px-3 py-2 rounded-lg border border-violet-300 text-violet-800 font-bold text-sm disabled:opacity-50"
+                      >
+                        Trocar código
+                      </button>
+                    </div>
+                  )}
                   <pre className="text-[12px] bg-white border rounded-lg p-2 whitespace-pre-wrap">{resumoErp}</pre>
                   <button
                     onClick={() => navigator.clipboard?.writeText(resumoErp)}
@@ -716,11 +780,13 @@ function DetalheMaterial({
                   >
                     <Copy size={12} /> Copiar os dados
                   </button>
-                  <p className="text-[12px] text-slate-600">
-                    Crie o item na tela de materiais do ERP com <b>exatamente esta descrição</b>: o robô liga o código sozinho em até 5 minutos. Se a
-                    descrição ficou diferente, informe o código abaixo.
-                  </p>
-                  {(ehFiscal || ehCadastro) && (
+                  {!robo && (
+                    <p className="text-[12px] text-slate-600">
+                      Crie o item na tela de materiais do ERP com <b>exatamente esta descrição</b> e o código acima: o robô liga o código sozinho em até 5
+                      minutos. Se a descrição ficou diferente, informe o código abaixo.
+                    </p>
+                  )}
+                  {(ehFiscal || ehCadastro) && !robo && (
                     <div className="flex gap-2 items-end">
                       <div className="flex-1">
                         <Rotulo>Código criado no ERP</Rotulo>
@@ -813,6 +879,7 @@ function DetalheMaterial({
                       p_tipo_item: tipoItem === "" ? null : Number(tipoItem),
                       p_pct_ipi: ipi.trim() === "" ? null : Number(ipi.replace(",", ".")),
                       p_obs: obsFiscal || null,
+                      p_codigo_edit: codigoEdit.trim() && codigoEdit.trim().toUpperCase() !== sugestao ? codigoEdit.trim() : null,
                     })
                   }
                   className="px-4 py-2 rounded-lg bg-amber-600 text-white font-bold flex items-center gap-1 text-sm disabled:opacity-60"
