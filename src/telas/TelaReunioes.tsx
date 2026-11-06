@@ -6,6 +6,7 @@ import ReunioesHistorico from "../ReunioesHistorico";
 import { formatarDataSegura, formatarMoeda, dataHojeISO, labelFase, labelOcorrencia } from "../utils";
 import { Save, Clock, User, Loader2, Trash2, Edit2, X, Mail, CheckCheck, Send, FileText, Mic } from "lucide-react";
 import type { Usuario, Obra } from "../types";
+import { useDialogos } from "../Dialogos";
 
 // Reunioes: historico (ReunioesHistorico), nova reuniao (formulario por obra com
 // ocorrencias e tarefas, sessao do dia, contexto da obra, gravacao Plaud) e a ata
@@ -46,6 +47,7 @@ export default function TelaReunioes({
   falhaAoCarregar,
   onAviso,
 }: Props) {
+  const { confirmar } = useDialogos();
   const [reuniaoForm, setReuniaoForm] = useState<any>({
     id_obra: "",
     data_reuniao: new Date().toISOString().split("T")[0],
@@ -235,6 +237,9 @@ export default function TelaReunioes({
           .select("fase, status, fim_previsto")
           .eq("id_obra", idDaObra),
       ]);
+      // erro numa das consultas: nao mostra o contexto como se estivesse tudo em dia
+      const falha = tarefasResp.error || parcelasResp.error || cronogramaResp.error;
+      if (falha) throw falha;
 
       const tarefasAtrasadas = (tarefasResp.data || []).filter(
         (t: any) =>
@@ -276,24 +281,26 @@ export default function TelaReunioes({
 
   const iniciarOuRetomarSessaoAta = async () => {
     try {
-      const { data: sessaoAberta } = await supabase
+      const { data: sessaoAberta, error: errSessao } = await supabase
         .from("reunioes_sessoes")
         .select("id, data_reuniao")
         .eq("status", "em_andamento")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (errSessao) throw errSessao;
 
       if (!sessaoAberta) return;
       if (String(sessaoAberta.data_reuniao).slice(0, 10) === new Date().toLocaleDateString("sv-SE"))
         setAbaReunioes("nova");
 
-      const { data: reunioesDaSessao } = await supabase
+      const { data: reunioesDaSessao, error: errReunioes } = await supabase
         .from("reunioes")
         .select(
           `id, id_obra, data_reuniao, resumo_geral, obras(codigo_externo, nome, id_responsavel, usuarios(nome)), ocorrencias(id, tipo, descricao), tarefas(id, titulo, descricao, data_vencimento, id_responsavel, prioridade, usuarios(nome))`,
         )
         .eq("id_sessao", sessaoAberta.id);
+      if (errReunioes) throw errReunioes;
 
       if (!reunioesDaSessao || reunioesDaSessao.length === 0) {
         setIdSessaoAtaAtual(sessaoAberta.id);
@@ -399,8 +406,11 @@ export default function TelaReunioes({
         .single();
       if (errReuniao) throw errReuniao;
 
-      if (listaOcorrencias.length > 0)
-        await supabase.from("ocorrencias").insert(
+      // a reuniao ja foi gravada: falha nas ocorrencias/tarefas vira aviso (nao lanca erro, para a
+      // obra nao ser salva de novo em dobro)
+      const falhasParciais: string[] = [];
+      if (listaOcorrencias.length > 0) {
+        const { error: errOcorrencias } = await supabase.from("ocorrencias").insert(
           listaOcorrencias.map((o) => ({
             id_reuniao: reuniaoSalva.id,
             id_obra: reuniaoForm.id_obra,
@@ -408,8 +418,10 @@ export default function TelaReunioes({
             descricao: o.descricao,
           })),
         );
+        if (errOcorrencias) falhasParciais.push(`ocorrências (${errOcorrencias.message})`);
+      }
       if (listaTarefas.length > 0) {
-        const { data: tarefasCriadas } = await supabase
+        const { data: tarefasCriadas, error: errTarefas } = await supabase
           .from("tarefas")
           .insert(
             listaTarefas.map((t) => ({
@@ -425,6 +437,7 @@ export default function TelaReunioes({
             })),
           )
           .select();
+        if (errTarefas) falhasParciais.push(`tarefas (${errTarefas.message})`);
 
         (tarefasCriadas || []).forEach((tarefaCriada: any) => {
           enviarEmailAtribuicaoTarefa(tarefaCriada.id, {
@@ -454,9 +467,15 @@ export default function TelaReunioes({
       };
       setObrasNaAtaAtual((prev: any) => [...prev, registroObraAta]);
 
-      onAviso(
-        `${obraSelecionada?.nome || "Obra"} salva! Vá para a próxima.`,
-      );
+      if (falhasParciais.length)
+        onAviso(
+          `${obraSelecionada?.nome || "Obra"} salva, mas não foi possível gravar: ${falhasParciais.join("; ")}. Reabra a obra na ata para conferir.`,
+          "erro",
+        );
+      else
+        onAviso(
+          `${obraSelecionada?.nome || "Obra"} salva! Vá para a próxima.`,
+        );
       setReuniaoForm((prev: any) => ({
         ...prev,
         id_obra: "",
@@ -476,22 +495,29 @@ export default function TelaReunioes({
 
   const editarRegistroAta = async (registro: any, index: number) => {
     if (
-      !window.confirm(
-        `Deseja reabrir ${registro.nome_obra} para edição? O registo atual será removido até que você salve novamente.`,
-      )
+      !(await confirmar({
+        titulo: `Reabrir ${registro.nome_obra} para edição?`,
+        texto: "O registro atual (resumo, ocorrências e tarefas) será removido até que você salve a obra novamente.",
+        rotuloConfirmar: "Reabrir para edição",
+        rotuloCancelar: "Manter como está",
+        perigo: true,
+      }))
     )
       return;
     setCarregando(true);
     try {
-      await supabase
+      const { error: errOc } = await supabase
         .from("ocorrencias")
         .delete()
         .eq("id_reuniao", registro.id_reuniao);
-      await supabase
+      if (errOc) throw errOc;
+      const { error: errTar } = await supabase
         .from("tarefas")
         .delete()
         .eq("id_reuniao_origem", registro.id_reuniao);
-      await supabase.from("reunioes").delete().eq("id", registro.id_reuniao);
+      if (errTar) throw errTar;
+      const { error: errReu } = await supabase.from("reunioes").delete().eq("id", registro.id_reuniao);
+      if (errReu) throw errReu;
 
       setObrasNaAtaAtual((prev: any) =>
         prev.filter((_: any, i: number) => i !== index),
@@ -608,10 +634,12 @@ export default function TelaReunioes({
     setStatusEnvioEmailAta(null);
 
     if (idSessaoAtaAtual) {
-      await supabase
+      const { error: errFechar } = await supabase
         .from("reunioes_sessoes")
         .update({ status: "fechada", fechada_at: new Date().toISOString() })
         .eq("id", idSessaoAtaAtual);
+      if (errFechar)
+        onAviso(`A ata foi gerada, mas a sessão da reunião não foi fechada no banco: ${errFechar.message}`, "erro");
     }
 
     setEnviandoEmailAta(true);

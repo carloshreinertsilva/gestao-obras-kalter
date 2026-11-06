@@ -18,6 +18,7 @@ export interface ItemMenu {
   rotulo: string;
   icone: Icone;
   ativo: boolean;
+  contador?: number; // pendencias com a pessoa (06/11)
 }
 
 export interface GrupoMenu {
@@ -58,12 +59,20 @@ function BotaoItem({ item, onIr, compacto }: { item: ItemMenu; onIr: (tela: stri
       role={compacto ? "menuitem" : undefined}
       onClick={() => onIr(item.tela)}
       aria-current={item.ativo ? "page" : undefined}
-      className={`w-full flex items-center gap-3 px-3 ${compacto ? "py-1.5" : "py-2"} rounded-lg transition text-left ${
+      className={`w-full flex items-center gap-2.5 px-3 ${compacto ? "py-1.5" : "py-2"} rounded-lg transition text-left ${
         item.ativo ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"
       }`}
     >
       <I size={compacto ? 18 : 20} className="shrink-0" />
-      <span className="truncate">{item.rotulo}</span>
+      <span className="truncate flex-1">{item.rotulo}</span>
+      {item.contador ? (
+        <span
+          className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-amber-400 text-[#1e3a45] text-[11px] font-bold flex items-center justify-center"
+          aria-label={`${item.contador} pendente(s)`}
+        >
+          {item.contador > 99 ? "99+" : item.contador}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -121,6 +130,7 @@ export function MenuGrupos({ grupos, recolhido, onIr }: { grupos: GrupoMenu[]; r
           const I = g.icone;
           const ativo = g.itens.some((i) => i.ativo);
           const unico = g.itens.length === 1;
+          const pendentes = g.itens.reduce((s, i) => s + (i.contador || 0), 0);
           return (
             <button
               key={g.id}
@@ -133,11 +143,14 @@ export function MenuGrupos({ grupos, recolhido, onIr }: { grupos: GrupoMenu[]; r
               onClick={(e) =>
                 unico ? ir(g.itens[0].tela) : flutuante?.id === g.id ? setFlutuante(null) : abrirFlutuante(g.id, e.currentTarget)
               }
-              className={`w-full flex justify-center py-2.5 rounded-lg transition ${
+              className={`relative w-full flex justify-center py-2.5 rounded-lg transition ${
                 ativo ? "bg-white/20 text-white" : flutuante?.id === g.id ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white"
               }`}
             >
               <I size={20} />
+              {pendentes > 0 && (
+                <span className="absolute top-1 right-1.5 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-[#2A6377]" aria-label={`${pendentes} pendente(s)`} />
+              )}
             </button>
           );
         })}
@@ -167,7 +180,7 @@ export function MenuGrupos({ grupos, recolhido, onIr }: { grupos: GrupoMenu[]; r
 
   // ---------------- aberto (e celular): grupos com titulo que recolhe/abre
   return (
-    <nav aria-label="Menu" className="px-4 mt-3 space-y-3">
+    <nav aria-label="Menu" className="px-3 mt-3 space-y-3">
       {visiveis.map((g) => {
         const temAtivo = g.itens.some((i) => i.ativo);
         const aberto = temAtivo || !fechados[g.id];
@@ -177,11 +190,14 @@ export function MenuGrupos({ grupos, recolhido, onIr }: { grupos: GrupoMenu[]; r
               onClick={() => !temAtivo && alternar(g.id)}
               aria-expanded={aberto}
               title={temAtivo ? "Grupo da tela aberta" : aberto ? "Recolher" : "Abrir"}
-              className={`w-full flex items-center justify-between text-[10px] uppercase font-bold tracking-wider py-1 mb-1 ${
+              className={`w-full flex items-center justify-between text-[11px] uppercase font-bold tracking-wider py-2.5 md:py-1 mb-1 ${
                 temAtivo ? "text-white/70 cursor-default" : "text-white/50 hover:text-white/80"
               }`}
             >
-              <span>{g.titulo}</span>
+              <span className="flex items-center gap-2">
+                {g.titulo}
+                {!aberto && g.itens.some((i) => i.contador) && <span className="w-2 h-2 rounded-full bg-amber-400" aria-label="há pendências" />}
+              </span>
               {!temAtivo && <ChevronDown size={14} className={`transition-transform ${aberto ? "" : "-rotate-90"}`} />}
             </button>
             {aberto && (

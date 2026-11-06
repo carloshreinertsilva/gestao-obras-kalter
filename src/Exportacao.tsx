@@ -19,6 +19,7 @@ import { revisar } from "./exportacao/regras";
 import { soDigitos } from "./exportacao/numeros";
 import type { Aprovacao, DocumentoLista, Material, Processo, TabelaEstimativas } from "./exportacao/tipos";
 import { Aviso, Botao, ListasDeSugestoes } from "./exportacao/ui";
+import { confirmar } from "./Dialogos";
 
 const COLUNAS_DOCUMENTO = "id, tipo, situacao, erro, nome_arquivo, tamanho, nome_pedido_por, created_at, gerado_em, hash_dados";
 const PERFIS_EXPORTACAO = ["admin", "coordenador", "fiscal"];
@@ -272,7 +273,15 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   };
 
   const aprovar = async () => {
-    if (!window.confirm("Aprovar os documentos como estão na pré-visualização?")) return;
+    if (
+      !(await confirmar({
+        titulo: "Aprovar os documentos?",
+        texto: "Os documentos serão aprovados como estão na pré-visualização.",
+        rotuloConfirmar: "Aprovar documentos",
+        rotuloCancelar: "Voltar",
+      }))
+    )
+      return;
     setOcupado(true);
     setMensagem(null);
     try {

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Copy, Loader2, Plus, RotateCcw, Search, Send, X, XCircle } from "lucide-react";
 import { supabase } from "./supabase";
 import { linhaClicavel } from "./teclado";
+import { avisar, useAviso } from "./aviso";
+import { ErroCarga, useDialogos } from "./Dialogos";
 import type { Usuario } from "./types";
 
 // Solicitacao de cadastro de material (04/11/2026, fase 1). Qualquer usuario pede um item novo; o app mostra os
@@ -162,6 +164,7 @@ function useListas() {
       supabase.from("materiais_erp_classes").select("classe_tipo, descricao").order("classe_tipo"),
       supabase.from("materiais_erp_unidades").select("unidade, descricao").order("unidade"),
     ]).then(([c, u]) => {
+      if (c.error || u.error) avisar.erro("Não foi possível carregar as classes/unidades do ERP. Feche e abra a tela de novo.");
       const l = { classes: (c.data as Classe[]) || [], unidades: (u.data as Unidade[]) || [] };
       if (l.classes.length) cacheListas = l;
       setListas(l);
@@ -184,9 +187,11 @@ function useSimilares(texto: string, excluir?: string) {
     let vivo = true;
     setBuscando(true);
     const h = setTimeout(async () => {
-      const { data } = await supabase.rpc("mat_similares", { p_texto: t, p_limite: 10, p_excluir: excluir || null });
+      const { data, error } = await supabase.rpc("mat_similares", { p_texto: t, p_limite: 10, p_excluir: excluir || null });
       if (!vivo) return;
-      setLista((data as Similar[]) || []);
+      if (error) avisar.erro("Não foi possível buscar os itens parecidos: " + msgErro(error));
+      // com erro fica "sem lista" (nao mostra "nenhum parecido", que seria enganoso)
+      setLista(error ? null : (data as Similar[]) || []);
       setBuscando(false);
     }, 450);
     return () => {
@@ -320,6 +325,7 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
   const { lista, buscando } = useSimilares(descricao, devolvida?.id);
+  const aviso = useAviso();
 
   const enviar = async () => {
     setErro("");
@@ -342,6 +348,11 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
     });
     setEnviando(false);
     if (error) return setErro(msgErro(error));
+    aviso.sucesso(
+      devolvida
+        ? `Solicitação de material nº ${devolvida.numero} corrigida e reenviada ao cadastro.`
+        : `Solicitação de material “${descricao.trim()}” enviada ao cadastro.`,
+    );
     onFeito(data as string);
   };
 
@@ -479,6 +490,8 @@ function DetalheMaterial({
   const revisandoCadastro = s?.status === "cadastro" && ehCadastro;
   const revisandoFiscal = s?.status === "fiscal" && ehFiscal;
   const { lista, buscando } = useSimilares(revisandoCadastro ? descricao : "", id);
+  const aviso = useAviso();
+  const { pedirMotivo } = useDialogos();
 
   const carregar = async () => {
     const [r, e] = await Promise.all([
@@ -508,7 +521,8 @@ function DetalheMaterial({
   // codigo sugerido para a revisao fiscal (ou para trocar o codigo de uma aprovada)
   useEffect(() => {
     if (!s || !ehFiscal || (s.status !== "fiscal" && s.status !== "erp")) return;
-    supabase.rpc("mat_proximo_codigo_edit", { p_classe_tipo: s.classe_tipo, p_excluir: s.id }).then(({ data }) => {
+    supabase.rpc("mat_proximo_codigo_edit", { p_classe_tipo: s.classe_tipo, p_excluir: s.id }).then(({ data, error }) => {
+      if (error) aviso.erro("Não foi possível sugerir o próximo código do ERP: " + msgErro(error));
       const sug = typeof data === "string" ? data : "";
       setSugestao(sug);
       setCodigoEdit(s.status === "erp" ? s.codigo_edit_proposto || sug : sug);
@@ -531,31 +545,47 @@ function DetalheMaterial({
       .then(({ data }) => setNcmDesc(data ? (data as { descricao: string }).descricao : ""));
   }, [ncm]);
 
-  const rpc = async (fn: string, args: Record<string, unknown>) => {
+  const nSol = s ? `nº ${s.numero}` : "";
+  const rpc = async (fn: string, args: Record<string, unknown>, sucesso?: string) => {
     setOcupado(true);
     setErro("");
     const { error } = await supabase.rpc(fn, { p_id: id, ...args });
     setOcupado(false);
     if (error) {
       setErro(msgErro(error));
+      aviso.erro(msgErro(error));
       return false;
     }
+    if (sucesso) aviso.sucesso(sucesso);
     await carregar();
     onAlterada();
     return true;
   };
-  const comMotivo = (fn: string, pergunta: string) => {
-    const motivo = window.prompt(pergunta);
-    if (motivo && motivo.trim()) rpc(fn, { p_motivo: motivo.trim() });
+  const comMotivo = async (
+    fn: string,
+    pergunta: string,
+    sucesso: string,
+    extra: { rotuloConfirmar?: string; perigo?: boolean; motivosRapidos?: string[] } = {},
+  ) => {
+    const motivo = await pedirMotivo({ titulo: pergunta, ...extra });
+    if (motivo && motivo.trim()) rpc(fn, { p_motivo: motivo.trim() }, sucesso);
   };
-  const recusar = (codigoExistente?: string) => {
-    const motivo = window.prompt(
-      codigoExistente
-        ? `Recusar e indicar o item ${codigoExistente} ao solicitante. Motivo:`
-        : 'Motivo da recusa (se o item já existe, use "Usar este" na lista de parecidos):',
-      codigoExistente ? "Item já cadastrado no ERP" : "",
-    );
-    if (motivo && motivo.trim()) rpc("mat_recusar", { p_motivo: motivo.trim(), p_codigo_existente: codigoExistente || null });
+  const recusar = async (codigoExistente?: string) => {
+    const motivo = await pedirMotivo({
+      titulo: codigoExistente ? `Recusar e indicar o item ${codigoExistente} ao solicitante` : "Motivo da recusa",
+      texto: codigoExistente ? undefined : 'Se o item já existe, use "Usar este" na lista de parecidos.',
+      valorInicial: codigoExistente ? "Item já cadastrado no ERP" : "",
+      rotuloConfirmar: "Recusar solicitação",
+      perigo: true,
+    });
+    if (motivo && motivo.trim())
+      rpc(
+        "mat_recusar",
+        { p_motivo: motivo.trim(), p_codigo_existente: codigoExistente || null },
+        codigoExistente
+          ? `Solicitação de material ${nSol} recusada: o solicitante foi avisado para usar o item ${codigoExistente}.`
+          : `Solicitação de material ${nSol} recusada.`,
+      );
   };
 
   const nomeClasse = (c?: number | null) => rotuloClasse(c, classes);
@@ -763,9 +793,11 @@ function DetalheMaterial({
                       <button
                         disabled={ocupado || !codigoEdit.trim() || codigoEdit.trim().toUpperCase() === s.codigo_edit_proposto}
                         onClick={() =>
-                          rpc("mat_alterar_codigo_proposto", {
-                            p_codigo_edit: codigoEdit.trim().toUpperCase() === sugestao ? null : codigoEdit.trim(),
-                          })
+                          rpc(
+                            "mat_alterar_codigo_proposto",
+                            { p_codigo_edit: codigoEdit.trim().toUpperCase() === sugestao ? null : codigoEdit.trim() },
+                            `Código proposto da solicitação ${nSol} trocado para ${codigoEdit.trim().toUpperCase()}.`,
+                          )
                         }
                         className="px-3 py-2 rounded-lg border border-violet-300 text-violet-800 font-bold text-sm disabled:opacity-50"
                       >
@@ -794,7 +826,7 @@ function DetalheMaterial({
                       </div>
                       <button
                         disabled={ocupado || !codigo.trim()}
-                        onClick={() => rpc("mat_informar_codigo", { p_codigo: codigo.trim() })}
+                        onClick={() => rpc("mat_informar_codigo", { p_codigo: codigo.trim() }, `Código ${codigo.trim()} ligado à solicitação de material ${nSol}.`)}
                         className="px-3 py-2 rounded-lg bg-violet-700 text-white font-bold text-sm disabled:opacity-50"
                       >
                         Informar código
@@ -823,7 +855,12 @@ function DetalheMaterial({
               {["cadastro", "fiscal", "devolvida"].includes(s.status) && (ehSolicitante || admin) && (
                 <button
                   disabled={ocupado}
-                  onClick={() => comMotivo("mat_cancelar", "Motivo do cancelamento:")}
+                  onClick={() =>
+                    comMotivo("mat_cancelar", "Motivo do cancelamento", `Solicitação de material ${nSol} cancelada.`, {
+                      rotuloConfirmar: "Cancelar pedido",
+                      perigo: true,
+                    })
+                  }
                   className="px-3 py-2 rounded-lg border text-slate-600 font-semibold flex items-center gap-1 text-sm"
                 >
                   <XCircle size={14} /> Cancelar pedido
@@ -845,7 +882,16 @@ function DetalheMaterial({
                   </button>
                   <button
                     disabled={ocupado}
-                    onClick={() => comMotivo("mat_devolver", revisandoCadastro ? "O que o solicitante precisa corrigir?" : "Motivo da devolução ao cadastro:")}
+                    onClick={() =>
+                      comMotivo(
+                        "mat_devolver",
+                        revisandoCadastro ? "O que o solicitante precisa corrigir?" : "Motivo da devolução ao cadastro",
+                        revisandoCadastro
+                          ? `Solicitação de material ${nSol} devolvida ao solicitante para correção.`
+                          : `Solicitação de material ${nSol} devolvida ao cadastro.`,
+                        { rotuloConfirmar: "Devolver" },
+                      )
+                    }
                     className="px-3 py-2 rounded-lg border border-red-200 text-red-700 font-semibold flex items-center gap-1 text-sm"
                   >
                     <RotateCcw size={14} /> {revisandoCadastro ? "Devolver ao solicitante" : "Devolver ao cadastro"}
@@ -855,7 +901,11 @@ function DetalheMaterial({
               {s.status === "erp" && ehFiscal && (
                 <button
                   disabled={ocupado}
-                  onClick={() => comMotivo("mat_devolver", "Por que voltar para a revisão fiscal?")}
+                  onClick={() =>
+                    comMotivo("mat_devolver", "Por que voltar para a revisão fiscal?", `Solicitação de material ${nSol} voltou para a revisão fiscal.`, {
+                      rotuloConfirmar: "Voltar para revisão fiscal",
+                    })
+                  }
                   className="px-3 py-2 rounded-lg border text-slate-600 font-semibold flex items-center gap-1 text-sm"
                 >
                   <RotateCcw size={14} /> Voltar para revisão fiscal
@@ -864,7 +914,13 @@ function DetalheMaterial({
               {revisandoCadastro && (
                 <button
                   disabled={ocupado}
-                  onClick={() => rpc("mat_aprovar_cadastro", { p_descricao: descricao, p_classe_tipo: Number(classe), p_unidade: unidade, p_obs: obs || null, p_origem: origem || null })}
+                  onClick={() =>
+                    rpc(
+                      "mat_aprovar_cadastro",
+                      { p_descricao: descricao, p_classe_tipo: Number(classe), p_unidade: unidade, p_obs: obs || null, p_origem: origem || null },
+                      `Solicitação de material ${nSol} aprovada e enviada ao fiscal.`,
+                    )
+                  }
                   className="px-4 py-2 rounded-lg bg-blue-700 text-white font-bold flex items-center gap-1 text-sm disabled:opacity-60"
                 >
                   <CheckCircle2 size={14} /> Aprovar e enviar ao fiscal
@@ -874,13 +930,19 @@ function DetalheMaterial({
                 <button
                   disabled={ocupado}
                   onClick={() =>
-                    rpc("mat_aprovar_fiscal", {
-                      p_ncm: ncm,
-                      p_tipo_item: tipoItem === "" ? null : Number(tipoItem),
-                      p_pct_ipi: ipi.trim() === "" ? null : Number(ipi.replace(",", ".")),
-                      p_obs: obsFiscal || null,
-                      p_codigo_edit: codigoEdit.trim() && codigoEdit.trim().toUpperCase() !== sugestao ? codigoEdit.trim() : null,
-                    })
+                    rpc(
+                      "mat_aprovar_fiscal",
+                      {
+                        p_ncm: ncm,
+                        p_tipo_item: tipoItem === "" ? null : Number(tipoItem),
+                        p_pct_ipi: ipi.trim() === "" ? null : Number(ipi.replace(",", ".")),
+                        p_obs: obsFiscal || null,
+                        p_codigo_edit: codigoEdit.trim() && codigoEdit.trim().toUpperCase() !== sugestao ? codigoEdit.trim() : null,
+                      },
+                      robo
+                        ? `Solicitação de material ${nSol} aprovada pelo fiscal: o robô cria o item no ERP em até 5 minutos.`
+                        : `Solicitação de material ${nSol} aprovada pelo fiscal: crie o item no ERP com os dados mostrados.`,
+                    )
                   }
                   className="px-4 py-2 rounded-lg bg-amber-600 text-white font-bold flex items-center gap-1 text-sm disabled:opacity-60"
                 >
@@ -905,19 +967,25 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
   const [busca, setBusca] = useState("");
   const [nova, setNova] = useState(false);
   const [corrigir, setCorrigir] = useState<SolicitacaoMaterial | null>(null);
+  const [erroCarga, setErroCarga] = useState("");
 
   const admin = usuario?.perfil === "admin";
   const ehCadastro = admin || Boolean(usuario?.cadastra_materiais);
   const ehFiscal = admin || Boolean(usuario?.revisa_fiscal_material);
 
   const carregar = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("solicitacoes_material")
       .select(
         "id, numero, status, urgente, id_solicitante, nome_solicitante, descricao, descricao_solicitada, classe_tipo, unidade, origem, codigo_erp, codigo_edit, codigo_existente, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
+    if (error) {
+      setErroCarga(msgErro(error));
+      return;
+    }
+    setErroCarga("");
     setLista((data as SolicitacaoMaterial[]) || []);
   };
   useEffect(() => {
@@ -937,6 +1005,12 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lista === null]);
 
+  if (lista === null && erroCarga)
+    return (
+      <div className="bg-white rounded-xl shadow-sm border m-4">
+        <ErroCarga mensagem="Não foi possível carregar as solicitações de material." detalhe={erroCarga} onTentar={carregar} />
+      </div>
+    );
   if (lista === null)
     return (
       <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
@@ -1000,6 +1074,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Item, nº, solicitante, código…" className="border rounded-lg pl-7 pr-2 py-1.5 w-56" />
           </div>
         </div>
+        {erroCarga && <ErroCarga compacto mensagem="Não foi possível atualizar a lista (mostrando a última carregada)." detalhe={erroCarga} onTentar={carregar} />}
         <div className="overflow-x-auto">
           <table className="w-full text-[13px] min-w-[760px]">
             <thead className="bg-slate-50 text-slate-600">

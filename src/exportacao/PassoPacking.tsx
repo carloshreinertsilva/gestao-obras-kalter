@@ -21,6 +21,7 @@ import { UN_NOME, m3Material, qtdAduaneira } from "./regras";
 import type { PropsPasso } from "./passos";
 import type { PassoId } from "./navegacao";
 import type { Material, Processo, TabelaEstimativas } from "./tipos";
+import { confirmar } from "../Dialogos";
 import { Aviso, Botao, CampoNumero, Cartao, Rotulo, Titulo, classeCampo, classeEstimado, dataBR, fmtBR, lerNumero } from "./ui";
 
 type Filtro = "falta" | "conferir" | "todos";
@@ -329,12 +330,24 @@ export function PassoPacking({
     setTextoPct(d.modo === "todos" ? "1,5" : "");
     setDialogo(d);
   };
-  const aceitarFamilia = (familia: string, q: number) => {
-    if (window.confirm(`Aceitar as sugestões (valores em azul) de ${q} material(is) desta família?`))
+  const aceitarFamilia = async (familia: string, q: number) => {
+    if (
+      await confirmar({
+        titulo: "Aceitar as sugestões desta família?",
+        texto: `Os valores em azul de ${q} material(is) desta família passam a valer.`,
+        rotuloConfirmar: "Aceitar sugestões",
+      })
+    )
       trocarMateriais((ms) => ms.map((m) => (m.familia === familia ? aceitarSugestoes(m) : m)));
   };
-  const aceitarTodas = () => {
-    if (window.confirm(`Aceitar as sugestões (valores em azul) de todos os ${nConferir} materiais? Confira antes os que forem importantes.`))
+  const aceitarTodas = async () => {
+    if (
+      await confirmar({
+        titulo: "Aceitar todas as sugestões?",
+        texto: `Os valores em azul de todos os ${nConferir} materiais passam a valer. Confira antes os que forem importantes.`,
+        rotuloConfirmar: "Aceitar todas",
+      })
+    )
       trocarMateriais((ms) => ms.map(aceitarSugestoes));
   };
 

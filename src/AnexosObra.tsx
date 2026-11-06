@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import { confirmar } from "./Dialogos";
 import {
   formatarDataSegura,
   formatarTamanhoArquivo,
@@ -142,7 +143,15 @@ export default function AnexosObra({
   };
 
   const excluirAnexo = async (anexo: any) => {
-    if (!window.confirm(`Excluir o anexo "${anexo.nome_arquivo}"?`)) return;
+    if (
+      !(await confirmar({
+        titulo: "Excluir anexo?",
+        texto: `O arquivo "${anexo.nome_arquivo}" será excluído da obra. Esta ação não pode ser desfeita.`,
+        rotuloConfirmar: "Excluir anexo",
+        perigo: true,
+      }))
+    )
+      return;
     try {
       const { error: storageError } = await supabase.storage
         .from(BUCKET)

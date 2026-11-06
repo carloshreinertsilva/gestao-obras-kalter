@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { supabase } from "./supabase";
+import { confirmar } from "./Dialogos";
 import { formatarDataSegura, labelOcorrencia } from "./utils";
 
 interface Props {
@@ -256,7 +257,6 @@ export default function ReunioesHistorico({
     const totalOcorrencias = m.reunioes.reduce((a, r) => a + (r.ocorrencias || []).length, 0);
     const totalTarefas = m.reunioes.reduce((a, r) => a + (r.tarefas || []).length, 0);
     const aviso =
-      `Excluir a reunião de ${titulo(m)}?\n\n` +
       `${m.reunioes.length} obra(s) e ${totalOcorrencias} ocorrência(s) serão excluídas` +
       (m.sessao?.resumo_gravacao ? ", junto com o resumo da gravação (Plaud)" : "") +
       "." +
@@ -265,7 +265,15 @@ export default function ReunioesHistorico({
         : "") +
       "\n\nAnotações importadas do Bitrix não são afetadas." +
       "\n\nEsta ação não pode ser desfeita.";
-    if (!window.confirm(aviso)) return;
+    if (
+      !(await confirmar({
+        titulo: `Excluir a reunião de ${titulo(m)}?`,
+        texto: aviso,
+        rotuloConfirmar: "Excluir reunião",
+        perigo: true,
+      }))
+    )
+      return;
 
     setExcluindo(true);
     try {

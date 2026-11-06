@@ -1,4 +1,6 @@
 import { linhaClicavel } from "./teclado";
+import { useAviso } from "./aviso";
+import { ErroCarga, useDialogos } from "./Dialogos";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -188,6 +190,7 @@ function ModalSolicitarFaturamento({
   const [pctTodos, setPctTodos] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const aviso = useAviso();
 
   useEffect(() => {
     supabase
@@ -285,6 +288,8 @@ function ModalSolicitarFaturamento({
         p_anexos: novosAnexos,
       });
       if (error) throw error;
+      const sf = existente ? `SF ${existente.solicitacao.numero}` : `Solicitação de faturamento de ${tipoTexto(tipo).toLowerCase()} (${formatarMoeda(total)})`;
+      aviso.sucesso(enviar ? `${sf} enviada à logística para conferência.` : `${sf} salva como rascunho (ainda não foi enviada).`);
       onSalvo(data as string);
     } catch (e) {
       if (enviados.length) await supabase.storage.from("previsao-anexos").remove(enviados);
@@ -577,6 +582,8 @@ function ModalConferencia({
   const [obs, setObs] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const aviso = useAviso();
+  const { confirmar } = useDialogos();
 
   useEffect(() => {
     if (produto)
@@ -584,7 +591,10 @@ function ModalConferencia({
         .from("transportadoras")
         .select("codigo, nome, cidade, uf")
         .order("nome")
-        .then(({ data }) => setTransportadoras((data as any[]) || []));
+        .then(({ data, error }) => {
+          if (error) setErro("Não foi possível carregar as transportadoras: " + msgErro(error) + ". Feche e abra a conferência de novo.");
+          setTransportadoras((data as any[]) || []);
+        });
   }, [produto]);
 
   const n = (t: string) => parseFloat((t || "").replace(/\./g, "").replace(",", "."));
@@ -612,10 +622,14 @@ function ModalConferencia({
       if (totalVolumes <= 0) return setErro("Informe ao menos 1 volume.");
     }
     if (
-      !window.confirm(
-        `Aprovar o faturamento SF ${solicitacao.numero} (${formatarMoeda(total)}) e enviar para o fiscal?` +
+      !(await confirmar({
+        titulo: `Aprovar o faturamento SF ${solicitacao.numero}?`,
+        texto:
+          `${formatarMoeda(total)} · obra ${solicitacao.codigo_obra}. A solicitação segue para o fiscal emitir a NF.` +
           (produto ? "\n\nO romaneio será gerado no ERP automaticamente em alguns minutos." : ""),
-      )
+        rotuloConfirmar: "Aprovar e enviar ao fiscal",
+        rotuloCancelar: "Voltar",
+      }))
     )
       return;
     setEnviando(true);
@@ -632,6 +646,9 @@ function ModalConferencia({
     });
     setEnviando(false);
     if (error) return setErro(msgErro(error));
+    aviso.sucesso(
+      `SF ${solicitacao.numero} aprovada e enviada ao fiscal.` + (produto ? " O romaneio será gerado no ERP em alguns minutos." : ""),
+    );
     onFeito();
   };
 
@@ -781,6 +798,8 @@ export function DetalheSolicitacaoFaturamento({
   const [editando, setEditando] = useState(false);
   const [conferindo, setConferindo] = useState(false);
   const [ocupado, setOcupado] = useState(false);
+  const aviso = useAviso();
+  const { pedirMotivo } = useDialogos();
 
   const carregar = async () => {
     const [s, i, n, e, r] = await Promise.all([
@@ -790,7 +809,11 @@ export function DetalheSolicitacaoFaturamento({
       supabase.from("solicitacoes_faturamento_eventos").select("*").eq("id_solicitacao", id).order("id"),
       supabase.from("solicitacoes_faturamento_romaneios").select("*").eq("id_solicitacao", id).order("created_at"),
     ]);
-    if (s.error || !s.data) setErro("Solicitação não encontrada ou sem acesso.");
+    if (s.error) setErro("Não foi possível carregar a solicitação: " + msgErro(s.error));
+    else if (!s.data) setErro("Solicitação não encontrada ou sem acesso.");
+    else if (i.error || n.error || e.error || r.error)
+      setErro("Parte dos dados (itens, NFs, histórico ou romaneio) não carregou. Feche e abra a solicitação de novo.");
+    else setErro("");
     setSol(s.data as SolicitacaoFaturamento);
     setItens((i.data as ItemSolicitacao[]) || []);
     setNfs(n.data || []);
@@ -802,18 +825,27 @@ export function DetalheSolicitacaoFaturamento({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const acao = async (fn: string, args: Record<string, unknown>) => {
+  const acao = async (fn: string, args: Record<string, unknown>, sucesso: string) => {
     setOcupado(true);
     setErro("");
     const { error } = await supabase.rpc(fn, args);
     setOcupado(false);
-    if (error) return setErro(msgErro(error));
+    if (error) {
+      aviso.erro(msgErro(error));
+      return setErro(msgErro(error));
+    }
+    aviso.sucesso(sucesso);
     await carregar();
     onAlterada();
   };
-  const comMotivo = (fn: string, pergunta: string) => {
-    const motivo = window.prompt(pergunta);
-    if (motivo && motivo.trim()) acao(fn, { p_id: id, p_motivo: motivo.trim() });
+  const comMotivo = async (
+    fn: string,
+    pergunta: string,
+    sucesso: string,
+    extra: { rotuloConfirmar?: string; perigo?: boolean; motivosRapidos?: string[] } = {},
+  ) => {
+    const motivo = await pedirMotivo({ titulo: pergunta, ...extra });
+    if (motivo && motivo.trim()) acao(fn, { p_id: id, p_motivo: motivo.trim() }, sucesso);
   };
   const abrirAnexo = async (caminho: string) => {
     const { data, error } = await supabase.storage.from("previsao-anexos").createSignedUrl(caminho, 300);
@@ -1036,7 +1068,12 @@ export function DetalheSolicitacaoFaturamento({
           {podeCancelar && (
             <button
               disabled={ocupado}
-              onClick={() => comMotivo("faturamento_cancelar", "Motivo do cancelamento:")}
+              onClick={() =>
+                comMotivo("faturamento_cancelar", `Cancelar a solicitação SF ${sol.numero}?`, `SF ${sol.numero} cancelada.`, {
+                  rotuloConfirmar: "Cancelar solicitação",
+                  perigo: true,
+                })
+              }
               className="px-3 py-2 rounded-lg border border-red-200 text-red-700 flex items-center justify-center gap-1.5 text-sm"
             >
               <XCircle size={15} /> Cancelar solicitação
@@ -1051,7 +1088,11 @@ export function DetalheSolicitacaoFaturamento({
             <>
               <button
                 disabled={ocupado}
-                onClick={() => comMotivo("faturamento_devolver", "Motivo da devolução ao solicitante:")}
+                onClick={() =>
+                  comMotivo("faturamento_devolver", "Motivo da devolução ao solicitante", `SF ${sol.numero} devolvida ao solicitante.`, {
+                    rotuloConfirmar: "Devolver ao solicitante",
+                  })
+                }
                 className="px-3 py-2 rounded-lg border text-slate-700 flex items-center justify-center gap-1.5 text-sm"
               >
                 <RotateCcw size={15} /> Devolver ao solicitante
@@ -1064,7 +1105,11 @@ export function DetalheSolicitacaoFaturamento({
           {sol.status === "aguardando_fiscal" && (ehFiscal || ehAprovador) && (
             <button
               disabled={ocupado}
-              onClick={() => comMotivo("faturamento_devolver", "Motivo da devolução à logística:")}
+              onClick={() =>
+                comMotivo("faturamento_devolver", "Motivo da devolução à logística", `SF ${sol.numero} devolvida à logística.`, {
+                  rotuloConfirmar: "Devolver à logística",
+                })
+              }
               className="px-3 py-2 rounded-lg border text-slate-700 flex items-center justify-center gap-1.5 text-sm"
             >
               <RotateCcw size={15} /> Devolver à logística
@@ -1111,7 +1156,7 @@ export function DetalheSolicitacaoFaturamento({
 const Moldura = ({ onFechar, children }: { onFechar: () => void; children: React.ReactNode }) => (
   <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
     <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-      <button onClick={onFechar} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 z-10">
+      <button onClick={onFechar} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 z-10" aria-label="Fechar">
         <X size={20} />
       </button>
       {children}
@@ -1222,6 +1267,7 @@ export function SolicitacoesFaturamentoObra({
   const [novo, setNovo] = useState<"produto" | "servico" | null>(null);
   const [aberto, setAberto] = useState<string | null>(null);
   const [verTodas, setVerTodas] = useState(false);
+  const [erroCarga, setErroCarga] = useState("");
 
   const carregar = () =>
     supabase
@@ -1229,7 +1275,11 @@ export function SolicitacoesFaturamentoObra({
       .select(SELECT_LISTA)
       .eq("id_obra", idObra)
       .order("created_at", { ascending: false })
-      .then(({ data }) => setLista((data as SolicitacaoFaturamento[]) || []));
+      .then(({ data, error }) => {
+        if (error) return setErroCarga(msgErro(error));
+        setErroCarga("");
+        setLista((data as SolicitacaoFaturamento[]) || []);
+      });
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1258,7 +1308,12 @@ export function SolicitacoesFaturamentoObra({
           </div>
         )}
       </div>
-      {lista === null ? (
+      {erroCarga && lista !== null && (
+        <ErroCarga compacto mensagem="Não foi possível atualizar a lista (mostrando a última carregada)." detalhe={erroCarga} onTentar={carregar} />
+      )}
+      {lista === null && erroCarga ? (
+        <ErroCarga mensagem="Não foi possível carregar as solicitações de faturamento." detalhe={erroCarga} onTentar={carregar} />
+      ) : lista === null ? (
         <p className="p-4 text-sm text-slate-400">Carregando…</p>
       ) : mostradas.length === 0 ? (
         <p className="p-4 text-sm text-slate-400">
@@ -1323,6 +1378,7 @@ export function TelaFaturamento({
   const [filtro, setFiltro] = useState(padrao);
   const [obra, setObra] = useState("todas");
   const [lista, setLista] = useState<SolicitacaoFaturamento[] | null>(null);
+  const [erroCarga, setErroCarga] = useState("");
 
   const carregar = () =>
     supabase
@@ -1331,7 +1387,11 @@ export function TelaFaturamento({
       .neq("status", "rascunho")
       .order("created_at", { ascending: false })
       .limit(500)
-      .then(({ data }) => setLista((data as SolicitacaoFaturamento[]) || []));
+      .then(({ data, error }) => {
+        if (error) return setErroCarga(msgErro(error));
+        setErroCarga("");
+        setLista((data as SolicitacaoFaturamento[]) || []);
+      });
   useEffect(() => {
     carregar();
   }, []);
@@ -1389,7 +1449,12 @@ export function TelaFaturamento({
             ))}
           </select>
         </div>
-        {lista === null ? (
+        {erroCarga && lista !== null && (
+          <ErroCarga compacto mensagem="Não foi possível atualizar a lista (mostrando a última carregada)." detalhe={erroCarga} onTentar={carregar} />
+        )}
+        {lista === null && erroCarga ? (
+          <ErroCarga mensagem="Não foi possível carregar as solicitações de faturamento." detalhe={erroCarga} onTentar={carregar} />
+        ) : lista === null ? (
           <p className="p-4 text-sm text-slate-400">Carregando…</p>
         ) : filtradas.length === 0 ? (
           <p className="p-6 text-sm text-slate-400 text-center">Nenhuma solicitação com esse filtro.</p>

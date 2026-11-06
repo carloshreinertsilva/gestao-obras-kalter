@@ -4,6 +4,7 @@ import { supabase } from "../supabase";
 import { perfisUsuario } from "../constants";
 import { labelPerfilUsuario } from "../utils";
 import type { Usuario } from "../types";
+import { ErroCarga } from "../Dialogos";
 
 // Cadastros -> Equipe (so admin): cadastro e edicao de colaboradores, perfil,
 // engenheiro vinculado do assistente e indicadores de previsao.
@@ -34,12 +35,19 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
   const [salvando, setSalvando] = useState(false);
   // logins do ERP espelhados pelo robo (sync_romaneios.py)
   const [loginsErp, setLoginsErp] = useState<string[]>([]);
-  useEffect(() => {
+  const [erroLogins, setErroLogins] = useState("");
+  const carregarLogins = () =>
     supabase
       .from("usuarios_erp")
       .select("login")
       .order("login")
-      .then(({ data }) => setLoginsErp(((data as { login: string }[]) || []).map((r) => r.login)));
+      .then(({ data, error }) => {
+        if (error) return setErroLogins(error.message || "Erro ao buscar os usuários do ERP.");
+        setErroLogins("");
+        setLoginsErp(((data as { login: string }[]) || []).map((r) => r.login));
+      });
+  useEffect(() => {
+    carregarLogins();
   }, []);
 
   const nomeUsuarioPorId = (id: any) => listaUsuarios.find((u) => u.id === id)?.nome || "";
@@ -78,7 +86,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       } else {
         const { error } = await supabase.from("usuarios").insert([dadosUsuario]);
         if (error) throw error;
-        onAviso("Registado com sucesso!");
+        onAviso("Colaborador cadastrado com sucesso!");
       }
       setNovoUsuario({
         id: null,
@@ -290,7 +298,10 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               >
                 <option value="">Sem vínculo</option>
                 {novoUsuario.login_erp && !loginsErp.includes(novoUsuario.login_erp) && (
-                  <option value={novoUsuario.login_erp}>{novoUsuario.login_erp} (não encontrado no ERP)</option>
+                  <option value={novoUsuario.login_erp}>
+                    {novoUsuario.login_erp}
+                    {erroLogins ? "" : " (não encontrado no ERP)"}
+                  </option>
                 )}
                 {loginsErp.map((l) => (
                   <option key={l} value={l}>
@@ -298,6 +309,9 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                   </option>
                 ))}
               </select>
+              {erroLogins && (
+                <ErroCarga compacto mensagem="Não foi possível carregar os usuários do ERP." detalhe={erroLogins} onTentar={carregarLogins} />
+              )}
               <span className="block text-[11px] text-slate-400 mt-1">
                 Gravado no romaneio que o app gera no ERP quando este usuário aprova um faturamento de produto (obrigatório para quem aprova).
               </span>

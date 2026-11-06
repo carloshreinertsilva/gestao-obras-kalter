@@ -4,6 +4,8 @@ import './index.css'
 import App from './App.tsx'
 import { registrarServiceWorker } from './push'
 import { instalarAtalhosGlobais } from './teclado'
+import { AvisoProvider } from './aviso'
+import { DialogosProvider } from './Dialogos'
 
 registrarServiceWorker()
 instalarAtalhosGlobais()
@@ -25,6 +27,10 @@ window.addEventListener('vite:preloadError', (evento) => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AvisoProvider>
+      <DialogosProvider>
+        <App />
+      </DialogosProvider>
+    </AvisoProvider>
   </StrictMode>,
 )

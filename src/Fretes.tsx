@@ -3,6 +3,8 @@ import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, Pencil, Plus, Search,
 import { supabase } from "./supabase";
 import { formatarDataSegura, formatarMoeda } from "./utils";
 import { linhaClicavel } from "./teclado";
+import { useAviso } from "./aviso";
+import { ErroCarga, useDialogos } from "./Dialogos";
 import type { Usuario } from "./types";
 
 // Fretes (2026-10-20): solicitacao de frete com controle da verba da familia <obra>.510.
@@ -231,6 +233,7 @@ export function TelaFretes({
   const [busca, setBusca] = useState("");
   const [editando, setEditando] = useState<Frete | "novo" | null>(null);
   const [erro, setErro] = useState("");
+  const [erroCarga, setErroCarga] = useState("");
 
   const carregar = async () => {
     const [f, fo, o] = await Promise.all([
@@ -238,11 +241,24 @@ export function TelaFretes({
       supabase.from("fornecedores_erp").select("codigo, nome, cidade, uf, ibge, transportadora").order("nome"),
       supabase.from("obras").select("id, codigo_externo, nome, id_responsavel, cidade_ibge").eq("status", "em_andamento").order("codigo_externo"),
     ]);
-    if (f.error) setErro("Não foi possível carregar os fretes.");
-    setFretes((f.data as Frete[]) || []);
-    setFornecedores((fo.data as Fornecedor[]) || []);
-    const todas = (o.data as ObraOpcao[]) || [];
-    setObras(verTodasObras || ehLogistica ? todas : todas.filter((x) => x.id_responsavel === idResponsavelEscopo));
+    if (f.error) {
+      // mantem a lista anterior (se houver) e mostra o erro no lugar de "nenhum frete"
+      setErroCarga(msgErro(f.error));
+      setFretes((ant) => ant ?? []);
+    } else {
+      setErroCarga("");
+      setFretes((f.data as Frete[]) || []);
+    }
+    setErro(
+      fo.error || o.error
+        ? `Não foi possível carregar ${fo.error ? "os fornecedores" : "as obras"}: ${msgErro(fo.error || o.error)}. Tente de novo antes de lançar um frete.`
+        : "",
+    );
+    if (!fo.error) setFornecedores((fo.data as Fornecedor[]) || []);
+    if (!o.error) {
+      const todas = (o.data as ObraOpcao[]) || [];
+      setObras(verTodasObras || ehLogistica ? todas : todas.filter((x) => x.id_responsavel === idResponsavelEscopo));
+    }
   };
 
   useEffect(() => {
@@ -377,7 +393,19 @@ export function TelaFretes({
                   </tr>
                 </thead>
                 <tbody>
-                  {lista.length === 0 ? (
+                  {erroCarga && (
+                    <tr>
+                      <td colSpan={8}>
+                        <ErroCarga
+                          mensagem={fretes.length ? "Não foi possível atualizar a lista (mostrando a última carregada)." : "Não foi possível carregar os fretes."}
+                          detalhe={erroCarga}
+                          compacto={fretes.length > 0}
+                          onTentar={carregar}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  {erroCarga && !fretes.length ? null : lista.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
                         Nenhum frete neste filtro.
@@ -631,6 +659,7 @@ function ModalFrete({
   const [cidadeObra, setCidadeObra] = useState<Municipio | null>(null);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const aviso = useAviso();
 
   const obra = obras.find((o) => o.id === idObra) || null;
 
@@ -679,13 +708,17 @@ function ModalFrete({
   useEffect(() => {
     setSaldo(null);
     if (!idObra) return;
-    supabase.rpc("frete_saldo", { p_id_obra: idObra, p_excluir: frete?.id || null }).then(({ data: s }) => setSaldo(s === null ? null : Number(s)));
+    supabase.rpc("frete_saldo", { p_id_obra: idObra, p_excluir: frete?.id || null }).then(({ data: s, error }) => {
+      if (error) aviso.erro("Não foi possível consultar a verba de fretes (.510) da obra: " + msgErro(error));
+      setSaldo(error || s === null ? null : Number(s));
+    });
   }, [idObra, frete?.id]);
 
   // distancia estimada quando a rota muda
   useEffect(() => {
     if (!origem.ibge || !destino.ibge) return setKmEstimado(null);
-    supabase.rpc("frete_distancia", { p_origem: origem.ibge, p_destino: destino.ibge }).then(({ data: d }) => {
+    supabase.rpc("frete_distancia", { p_origem: origem.ibge, p_destino: destino.ibge }).then(({ data: d, error }) => {
+      if (error) aviso.erro("Não foi possível estimar a distância da rota: " + msgErro(error));
       const v = d === null ? null : Number(d);
       setKmEstimado(v);
       if (v !== null) setKm(txtNum(v, 0));
@@ -698,7 +731,11 @@ function ModalFrete({
     if (!origem.ibge || !destino.ibge || !veiculo) return;
     supabase
       .rpc("frete_sugestoes", { p_origem: origem.ibge, p_destino: destino.ibge, p_tipo_veiculo: veiculo })
-      .then(({ data: s }) => setSugestoes((s as Sugestao[]) || []));
+      .then(({ data: s, error }) => {
+        if (error) aviso.erro("Não foi possível buscar as transportadoras sugeridas: " + msgErro(error));
+        // com erro nao mostra "nenhuma sugestao" (seria enganoso)
+        setSugestoes(error ? null : (s as Sugestao[]) || []);
+      });
   }, [origem.ibge, destino.ibge, veiculo]);
 
   const escolherSugestao = (s: Sugestao) => {
@@ -748,6 +785,9 @@ function ModalFrete({
     });
     setSalvando(false);
     if (error) return setErro(msgErro(error));
+    const quem = obra ? ` da obra ${obra.codigo_externo}` : "";
+    aviso.sucesso(frete ? `Frete ${frete.numero}${quem} salvo.` : `Frete${quem} solicitado à logística.`);
+    if (ficaBloqueado) aviso.info("Sem verba na família de fretes (.510): o frete fica bloqueado e o gestor é avisado.");
     onSalvo(String(id));
   };
 
@@ -1126,6 +1166,9 @@ function DetalheFrete({
   const [erro, setErro] = useState("");
   const aberto = ["aguardando_cotacao", "liberado", "bloqueado"].includes(frete.status);
   const gestorDaObra = ["engenheiro", "assistente", "admin", "coordenador"].includes(usuario?.perfil || "");
+  const aviso = useAviso();
+  const { pedirMotivo } = useDialogos();
+  const [erroEventos, setErroEventos] = useState("");
 
   useEffect(() => {
     supabase
@@ -1133,16 +1176,29 @@ function DetalheFrete({
       .select("*")
       .eq("id_frete", frete.id)
       .order("id")
-      .then(({ data }) => setEventos(data || []));
+      .then(({ data, error }) => {
+        setErroEventos(error ? msgErro(error) : "");
+        setEventos(data || []);
+      });
   }, [frete.id, frete.status]);
 
   const cancelar = async () => {
-    const motivo = window.prompt("Motivo do cancelamento:");
+    const motivo = await pedirMotivo({
+      titulo: `Cancelar o frete ${frete.numero}?`,
+      rotulo: "Motivo do cancelamento",
+      rotuloConfirmar: "Cancelar frete",
+      rotuloCancelar: "Voltar",
+      perigo: true,
+    });
     if (!motivo?.trim()) return;
     setOcupado(true);
     const { error } = await supabase.rpc("frete_cancelar", { p_id: frete.id, p_motivo: motivo });
     setOcupado(false);
-    if (error) return setErro(msgErro(error));
+    if (error) {
+      aviso.erro(msgErro(error));
+      return setErro(msgErro(error));
+    }
+    aviso.sucesso(`Frete ${frete.numero} (obra ${frete.codigo_obra}) cancelado.`);
     onMudou();
   };
 
@@ -1201,6 +1257,7 @@ function DetalheFrete({
           )}
           <div>
             <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Histórico</p>
+            {erroEventos && <ErroCarga compacto mensagem="Não foi possível carregar o histórico." detalhe={erroEventos} />}
             <ul className="space-y-1">
               {eventos.map((e) => (
                 <li key={e.id} className="text-[12px] text-slate-600">
@@ -1249,6 +1306,8 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
   const [busca, setBusca] = useState("");
   const [novaBusca, setNovaBusca] = useState("");
   const [erro, setErro] = useState("");
+  const [erroCarga, setErroCarga] = useState("");
+  const aviso = useAviso();
 
   const carregar = async () => {
     const [u, t, h] = await Promise.all([
@@ -1256,9 +1315,11 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
       supabase.from("fretes_transp_tarifas").select("*"),
       supabase.from("fretes_transp_historico").select("*"),
     ]);
-    setUfs(u.data || []);
-    setTarifas((t.data as Tarifa[]) || []);
-    setHistorico((h.data as Historico[]) || []);
+    const falha = u.error || t.error || h.error;
+    setErroCarga(falha ? msgErro(falha) : "");
+    if (!u.error) setUfs(u.data || []);
+    if (!t.error) setTarifas((t.data as Tarifa[]) || []);
+    if (!h.error) setHistorico((h.data as Historico[]) || []);
   };
   useEffect(() => {
     carregar();
@@ -1267,7 +1328,10 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
   const gravar = async (p: PromiseLike<{ error: any }>) => {
     setErro("");
     const { error } = await p;
-    if (error) return setErro(msgErro(error));
+    if (error) {
+      aviso.erro("Não foi possível gravar: " + msgErro(error));
+      return setErro(msgErro(error));
+    }
     carregar();
   };
 
@@ -1310,8 +1374,11 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
                     onClick={async () => {
                       setNovaBusca("");
                       const { error } = await supabase.rpc("frete_marcar_transportadora", { p_codigo: f.codigo, p_sim: true });
-                      if (error) setErro(msgErro(error));
-                      else {
+                      if (error) {
+                        setErro(msgErro(error));
+                        aviso.erro(msgErro(error));
+                      } else {
+                        aviso.sucesso(`${f.nome} marcada como transportadora.`);
                         onMudou();
                         setAberta(f.codigo);
                       }
@@ -1328,6 +1395,9 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
       {erro && <p className="text-sm text-red-600">{erro}</p>}
 
       <div className="bg-white border rounded-xl divide-y">
+        {erroCarga && (
+          <ErroCarga compacto mensagem="Não foi possível carregar UFs, tarifas ou histórico das transportadoras." detalhe={erroCarga} onTentar={carregar} />
+        )}
         {transportadoras.length === 0 && <p className="p-4 text-sm text-slate-400">Nenhuma transportadora.</p>}
         {transportadoras.map((t) => {
           const ufsT = ufs.filter((u) => u.transportadora_codigo === t.codigo);
@@ -1401,6 +1471,7 @@ function TarifasTransportadora({
   const [rsKm, setRsKm] = useState(rsKmHistorico ? txtNum(rsKmHistorico) : "");
   const [minimo, setMinimo] = useState("");
   const livres = VEICULOS.filter((v) => !tarifas.some((t) => t.tipo_veiculo === v));
+  const { confirmar } = useDialogos();
   return (
     <div>
       <p className="text-xs font-bold uppercase text-slate-500 mb-2">Tarifa por tipo de veículo</p>
@@ -1432,7 +1503,15 @@ function TarifasTransportadora({
             />
             <button
               type="button"
-              onClick={() => gravar(supabase.from("fretes_transp_tarifas").delete().eq("id", t.id))}
+              onClick={async () => {
+                const ok = await confirmar({
+                  titulo: `Remover a tarifa de ${t.tipo_veiculo}?`,
+                  texto: `${formatarMoeda(t.valor_km)}/km · mínimo ${formatarMoeda(t.valor_minimo)}. A tarifa deixa de ser usada nas sugestões de frete.`,
+                  rotuloConfirmar: "Remover tarifa",
+                  perigo: true,
+                });
+                if (ok) gravar(supabase.from("fretes_transp_tarifas").delete().eq("id", t.id));
+              }}
               className="p-1 text-slate-400 hover:text-red-600"
               aria-label={`Remover tarifa ${t.tipo_veiculo}`}
               title="Remover tarifa"

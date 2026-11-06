@@ -9,6 +9,9 @@ import { TelaNfsTerceiros } from "./NfsTerceiros";
 import { TelaFretes } from "./Fretes";
 import { TelaMateriais } from "./Materiais";
 import { MenuGrupos } from "./MenuGrupos";
+import { avisar } from "./aviso";
+import { confirmar as confirmarDialogo } from "./Dialogos";
+import { MinhasPendencias, contadorDoMenu, type Pendencias } from "./MinhasPendencias";
 import { AtivarPush, ItemNotificacao } from "./Notificacoes";
 import { removerPushAoSair } from "./push";
 import { caminhoParaRota, rotaParaCaminho, type Rota } from "./rotas";
@@ -143,7 +146,6 @@ export default function App() {
   const rotaPronta = useRef(false);
   const aplicandoRota = useRef(false);
   const [carregando, setCarregando] = useState<boolean>(false);
-  const [toasts, setToasts] = useState<any[]>([]);
 
 
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
@@ -174,6 +176,16 @@ export default function App() {
   const [tarefasKanban, setTarefasKanban] = useState<Tarefa[]>([]);
   const [filtroObraKanban, setFiltroObraKanban] = useState<string>("todas");
   const [minhasNotificacoes, setMinhasNotificacoes] = useState<Tarefa[]>([]);
+  // 06/11: o que esta esperando a pessoa (contadores do menu e "Minhas pendencias" do Dashboard)
+  const [pendencias, setPendencias] = useState<Pendencias | null>(null);
+  // quadro de tarefas: concluidas/canceladas so dos ultimos 30 dias, as antigas sob demanda
+  const [tarefasAntigas, setTarefasAntigas] = useState(false);
+  // usuarios e obras: recarrega no maximo a cada poucos minutos (antes: a cada troca de tela)
+  const ultimaCarga = useRef({ usuarios: 0, obras: 0 });
+  const telaAnterior = useRef("");
+  const ultimaNovidade = useRef<string | null>(null);
+  // painel da obra: lista de materiais (SMA) e rentabilidade so quando a aba e aberta
+  const carregadoNaAba = useRef<Record<string, string>>({});
   const [painelNotificacaoAberto, setPainelNotificacaoAberto] =
     useState<boolean>(false);
   const [menuMobileAberto, setMenuMobileAberto] = useState<boolean>(false);
@@ -277,13 +289,11 @@ export default function App() {
     gruposFaturamentoObra.find((g) => String(g.id) === String(idGrupo));
 
 
+  // 06/11: aviso unico do app (aviso.tsx): no celular em cima, com X para fechar, erro fica ate fechar
   const mostrarAviso = (mensagem: string, tipo: string = "sucesso") => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, mensagem, tipo }]);
-    setTimeout(
-      () => setToasts((prev) => prev.filter((t) => t.id !== id)),
-      4000,
-    );
+    if (tipo === "erro") avisar.erro(mensagem);
+    else if (tipo === "info") avisar.info(mensagem);
+    else avisar.sucesso(mensagem);
   };
 
   // Falha ao carregar dados: registra no console e avisa na tela, sem repetir o mesmo
@@ -355,7 +365,7 @@ export default function App() {
         // usuario desativado: o banco ja bloqueia os dados; aqui so encerra a sessao
         await supabase.auth.signOut();
         setUsuarioAtual(null);
-        setErroLogin("Seu acesso ao sistema está desativado. Fale com o administrador.");
+        setErroLogin("Seu acesso ainda não foi liberado (ou foi desativado). O administrador já foi avisado; fale com ele se precisar.");
         return;
       }
       if (data) setUsuarioAtual(data);
@@ -388,14 +398,14 @@ export default function App() {
           password: senhaAuth,
         });
         if (error) throw error;
-        if (data.user)
-          await supabase
+        if (data.user) {
+          const { error: erroCadastro } = await supabase
             .from("usuarios")
-            .insert([
-              { nome: nomeAuth, email: emailAuth, perfil: "engenheiro" },
-            ]);
+            .insert([{ nome: nomeAuth, email: emailAuth, perfil: "engenheiro" }]);
+          if (erroCadastro) throw erroCadastro;
+        }
         setMensagemSucesso(
-          "Conta criada! Enviamos um link de confirmação para o seu e-mail (veja também o spam). Confirme o e-mail e depois entre.",
+          "Conta criada! Enviamos um link de confirmação para o seu e-mail (veja também o spam). Depois de confirmar, o administrador precisa liberar o seu acesso.",
         );
         setModoAuth("login");
         setSenhaAuth("");
@@ -537,17 +547,33 @@ export default function App() {
       }
     }
     buscarNotificacoes();
-  }, [usuarioAtual, telaAtiva]);
+    buscarPendencias();
+  }, [usuarioAtual?.id, telaAtiva]);
 
-  const buscarNovidades = async () => {
+  const buscarPendencias = async () => {
+    const { data, error } = await supabase.rpc("minhas_pendencias");
+    if (!error && data) setPendencias(data as Pendencias);
+  };
+
+  // completo = relê as 50 mais recentes (ao abrir o sino); senao so as que chegaram depois da ultima (egress)
+  const buscarNovidades = async (completo: boolean = false) => {
     if (!usuarioAtual) return;
     try {
-      const { data } = await supabase
+      const incremental = !completo && Boolean(ultimaNovidade.current);
+      let consulta = supabase
         .from("notificacoes")
         .select("id, tipo, titulo, detalhe, id_obra, id_tarefa, financeira, lida_em, created_at, chave")
         .order("created_at", { ascending: false })
         .limit(50);
-      if (data) setNovidades(data);
+      if (incremental) consulta = consulta.gt("created_at", ultimaNovidade.current as string);
+      const { data, error } = await consulta;
+      if (error) throw error;
+      if (data) {
+        if (!incremental) setNovidades(data);
+        else if (data.length) setNovidades((atual) => [...data, ...atual.filter((n) => !data.some((d) => d.id === n.id))].slice(0, 50));
+        if (data.length) ultimaNovidade.current = data[0].created_at;
+      }
+      buscarPendencias();
       const { data: sync } = await supabase
         .from("sync_status")
         .select("iniciou_em, terminou_em, ok, etapas_com_erro")
@@ -582,7 +608,7 @@ export default function App() {
     try {
       if (rota.abrirNotificacoes) {
         setPainelNotificacaoAberto(true);
-        buscarNovidades();
+        buscarNovidades(true);
       }
       let tela = rota.tela;
       if (tela === "solicitacoes_previsao" && !podeSolicitarPrevisao(usuarioAtual)) tela = "dashboard";
@@ -674,7 +700,7 @@ export default function App() {
       }
       if (ev.data?.tipo === "abrir-notificacoes") {
         setPainelNotificacaoAberto(true);
-        buscarNovidades();
+        buscarNovidades(true);
       }
     };
     window.addEventListener("popstate", aoVoltar);
@@ -751,11 +777,20 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (sessao && usuarioAtual) {
+    if (!(sessao && usuarioAtual)) return;
+    // voltar de um cadastro (obras/equipe) recarrega na hora; nas demais telas, no maximo a cada 2-5 min
+    const saiuDeCadastro = telaAnterior.current.startsWith("cadastros") && telaAnterior.current !== telaAtiva;
+    telaAnterior.current = telaAtiva;
+    const agora = Date.now();
+    if (saiuDeCadastro || agora - ultimaCarga.current.usuarios > 5 * 60000) {
+      ultimaCarga.current.usuarios = agora;
       buscarUsuarios();
+    }
+    if (saiuDeCadastro || agora - ultimaCarga.current.obras > 2 * 60000) {
+      ultimaCarga.current.obras = agora;
       buscarObras();
     }
-  }, [telaAtiva, sessao, usuarioAtual]);
+  }, [telaAtiva, sessao?.user?.id, usuarioAtual?.id]);
 
   const buscarParcelasCliente = async (idDaObra: any) => {
     if (!idDaObra) return;
@@ -887,7 +922,7 @@ export default function App() {
   };
 
   const excluirArquivoDocumento = async (arquivo: any) => {
-    if (!window.confirm(`Deseja excluir o anexo ${arquivo.nome_arquivo}?`))
+    if (!(await confirmarDialogo({ titulo: "Excluir anexo?", texto: arquivo.nome_arquivo, rotuloConfirmar: "Excluir anexo", rotuloCancelar: "Manter", perigo: true })))
       return;
 
     try {
@@ -1140,9 +1175,13 @@ export default function App() {
   const reabrirParcelaCliente = async (parcela: any) => {
     if (!parcela || !obraEcoSelecionada) return;
     if (
-      !window.confirm(
-        `Deseja reabrir a parcela "${parcela.descricao}"? A data de recebimento e o valor recebido serão zerados.`,
-      )
+      !(await confirmarDialogo({
+        titulo: "Reabrir a parcela?",
+        texto: `"${parcela.descricao}": a data de recebimento e o valor recebido serão zerados.`,
+        rotuloConfirmar: "Reabrir parcela",
+        rotuloCancelar: "Manter",
+        perigo: true,
+      }))
     )
       return;
 
@@ -1386,9 +1425,13 @@ export default function App() {
 
   const zerarFaseCronograma = async (fase: any) => {
     if (
-      !window.confirm(
-        `Deseja zerar a fase ${labelFase(fase.fase)} e voltar para Não iniciado?`,
-      )
+      !(await confirmarDialogo({
+        titulo: `Zerar a fase ${labelFase(fase.fase)}?`,
+        texto: "A fase volta para Não iniciado.",
+        rotuloConfirmar: "Zerar fase",
+        rotuloCancelar: "Manter",
+        perigo: true,
+      }))
     )
       return;
 
@@ -1414,7 +1457,7 @@ export default function App() {
   };
 
   const deletarRegistroPMIS = async (tabela: string, id: any) => {
-    if (!window.confirm("Deseja realmente excluir este registro?")) return;
+    if (!(await confirmarDialogo({ titulo: "Excluir este registro?", rotuloConfirmar: "Excluir", rotuloCancelar: "Manter", perigo: true }))) return;
     try {
       const { error } = await supabase.from(tabela).delete().eq("id", id);
       if (error) throw error;
@@ -1432,30 +1475,57 @@ export default function App() {
     }
   };
 
+  // 06/11 (egress): dependia do objeto da obra, entao abrir o painel (card + linha completa) e qualquer edicao da
+  // obra recarregavam as 10 tabelas; agora carrega 1x por obra aberta.
+  const idObraPainel = telaAtiva === "painel_obra" ? obraEcoSelecionada?.id : undefined;
   useEffect(() => {
-    if (telaAtiva === "painel_obra" && obraEcoSelecionada) {
-      buscarParcelasCliente(obraEcoSelecionada.id);
-      buscarDocumentosProjeto(obraEcoSelecionada.id);
-      buscarArquivosDocumentos(obraEcoSelecionada.id);
-      buscarCronogramaObra(obraEcoSelecionada.id);
-      buscarFamiliasFaturamento(obraEcoSelecionada.id);
-      buscarGruposFaturamentoObra(obraEcoSelecionada.id);
-      buscarPrevisoesFaturamento(obraEcoSelecionada.id);
-      buscarRealizadosFaturamento(obraEcoSelecionada.id);
-      buscarMateriaisSma(obraEcoSelecionada.id);
-      if (podeVerRentabilidade) buscarRentabilidadeFamilias(obraEcoSelecionada.id);
+    if (!idObraPainel) return;
+    buscarParcelasCliente(idObraPainel);
+    buscarDocumentosProjeto(idObraPainel);
+    buscarArquivosDocumentos(idObraPainel);
+    buscarCronogramaObra(idObraPainel);
+    buscarFamiliasFaturamento(idObraPainel);
+    buscarGruposFaturamentoObra(idObraPainel);
+    buscarPrevisoesFaturamento(idObraPainel);
+    buscarRealizadosFaturamento(idObraPainel);
+    carregadoNaAba.current = {};
+    setMateriaisSma([]);
+    setRentabilidadeFamilias([]);
+  }, [idObraPainel]);
+
+  // lista de materiais (a maior tabela da obra) e rentabilidade: so quando a aba e aberta, 1x por obra
+  useEffect(() => {
+    if (!idObraPainel) return;
+    if (abaPainelObra === "lista_materiais" && carregadoNaAba.current.sma !== idObraPainel) {
+      carregadoNaAba.current.sma = idObraPainel;
+      buscarMateriaisSma(idObraPainel);
     }
-  }, [telaAtiva, obraEcoSelecionada, podeVerRentabilidade]);
+    if (abaPainelObra === "rentabilidade" && podeVerRentabilidade && carregadoNaAba.current.rent !== idObraPainel) {
+      carregadoNaAba.current.rent = idObraPainel;
+      buscarRentabilidadeFamilias(idObraPainel);
+    }
+  }, [idObraPainel, abaPainelObra, podeVerRentabilidade]);
 
   const buscarTarefasKanban = async () => {
     if (!usuarioAtual) return;
     try {
-      let query = supabase
-        .from("tarefas")
-        .select(
-          `id, id_obra, titulo, descricao, status, data_vencimento, id_responsavel, created_at, origem, prioridade, data_conclusao, observacao_conclusao, obras!inner(codigo_externo, nome, id_responsavel), usuarios(nome)`,
-        )
-        .order("created_at", { ascending: false });
+      // 06/11 (egress): abertas sempre; concluidas/canceladas so as dos ultimos 30 dias (as antigas sob demanda)
+      const corte = new Date(Date.now() - 30 * 86400000).toISOString();
+      const montar = (abertas: boolean) => {
+        let q = supabase
+          .from("tarefas")
+          .select(
+            `id, id_obra, titulo, descricao, status, data_vencimento, id_responsavel, created_at, updated_at, origem, prioridade, data_conclusao, observacao_conclusao, obras!inner(codigo_externo, nome, id_responsavel), usuarios(nome)`,
+          )
+          .order("created_at", { ascending: false });
+        if (abertas) q = q.in("status", ["pendente", "em_andamento"]);
+        else {
+          q = q.in("status", ["concluida", "cancelada"]);
+          if (!tarefasAntigas) q = q.gte("updated_at", corte);
+        }
+        return q;
+      };
+      let filtroEscopo: string | null = null;
       if (!veTodasObras) {
         const { data: obrasUsuario, error: erroObras } = await supabase
           .from("obras")
@@ -1463,15 +1533,16 @@ export default function App() {
           .eq("id_responsavel", idResponsavelEscopo); // so entra aqui quem nao ve todas
         if (erroObras) throw erroObras;
         const idsMinhasObras = obrasUsuario?.map((o) => o.id) || [];
-        if (idsMinhasObras.length > 0)
-          query = query.or(
-            `id_responsavel.eq.${usuarioAtual.id},id_obra.in.(${idsMinhasObras.join(",")})`,
-          );
-        else query = query.eq("id_responsavel", usuarioAtual.id);
+        filtroEscopo =
+          idsMinhasObras.length > 0
+            ? `id_responsavel.eq.${usuarioAtual.id},id_obra.in.(${idsMinhasObras.join(",")})`
+            : `id_responsavel.eq.${usuarioAtual.id}`;
       }
-      const { data, error } = await query;
-      if (error) throw error;
-      setTarefasKanban(data || []);
+      const consultas = [montar(true), montar(false)].map((q) => (filtroEscopo ? q.or(filtroEscopo) : q));
+      const [abertas, fechadas] = await Promise.all(consultas);
+      if (abertas.error) throw abertas.error;
+      if (fechadas.error) throw fechadas.error;
+      setTarefasKanban([...(abertas.data || []), ...(fechadas.data || [])]);
     } catch (error) {
       falhaAoCarregar("as tarefas", error);
     }
@@ -1484,7 +1555,7 @@ export default function App() {
       telaAtiva === "dashboard"
     )
       buscarTarefasKanban();
-  }, [telaAtiva, usuarioAtual]);
+  }, [telaAtiva, usuarioAtual?.id, tarefasAntigas]);
 
   useEffect(() => {
     const buscarComentarios = async () => {
@@ -1534,7 +1605,13 @@ export default function App() {
     // quando o painel era aberto a partir do Dashboard.
     setObraEcoSelecionada(obra);
     setFiltroObraKanban(obra.id);
-    setAbaPainelObra(abaInicialObra);
+    let abaSalva = "";
+    try {
+      abaSalva = localStorage.getItem("aba_obra") || "";
+    } catch {
+      /* sem armazenamento local */
+    }
+    setAbaPainelObra(abaSalva && abaSalva !== "exportacao" && abaObraPermitida(abaSalva) ? abaSalva : abaInicialObra);
     setTelaAtiva("painel_obra");
     try {
       const { data } = await supabase
@@ -1550,18 +1627,34 @@ export default function App() {
     }
   };
 
+  const abrirTarefaPorId = async (idTarefa: string) => {
+    const { data, error } = await supabase
+      .from("tarefas")
+      .select(
+        `id, id_obra, titulo, descricao, status, data_vencimento, id_responsavel, created_at, origem, prioridade, data_conclusao, observacao_conclusao, obras!inner(codigo_externo, nome, id_responsavel), usuarios(nome)`,
+      )
+      .eq("id", idTarefa)
+      .maybeSingle();
+    if (error) return falhaAoCarregar("a tarefa", error);
+    if (data) setTarefaSelecionada(data as any);
+    else mostrarAviso("Tarefa não encontrada ou sem acesso.", "erro");
+  };
+
+  const SEM_PERMISSAO_TAREFA = "Você não pode alterar esta tarefa: só o responsável ou o gestor da obra.";
+
   const atualizarStatusTarefa = async (idTarefa: any, novoStatus: any) => {
     try {
       const payload: any = { status: novoStatus, updated_at: new Date().toISOString() };
       if (novoStatus === "concluida") payload.data_conclusao = new Date().toISOString();
       if (["pendente", "em_andamento"].includes(novoStatus)) payload.data_conclusao = null;
 
-      await supabase
-        .from("tarefas")
-        .update(payload)
-        .eq("id", idTarefa);
+      // 06/11: confere o retorno (antes mostrava "atualizado" mesmo quando o banco recusava)
+      const { data, error } = await supabase.from("tarefas").update(payload).eq("id", idTarefa).select("id");
+      if (error) throw error;
+      if (!data?.length) throw new Error(SEM_PERMISSAO_TAREFA);
       buscarTarefasKanban();
-      mostrarAviso("Status atualizado!");
+      buscarPendencias();
+      mostrarAviso(novoStatus === "concluida" ? "Tarefa concluída!" : novoStatus === "em_andamento" ? "Tarefa iniciada!" : "Status atualizado!");
     } catch (error: any) {
       mostrarAviso(error.message, "erro");
     }
@@ -1569,7 +1662,16 @@ export default function App() {
 
   const cancelarTarefa = async (tarefa: any) => {
     if (!tarefa?.id) return;
-    if (!window.confirm(`Deseja cancelar a tarefa "${tarefa.titulo}"? Ela sairá das tarefas abertas, mas continuará disponível no histórico.`)) return;
+    if (
+      !(await confirmarDialogo({
+        titulo: "Cancelar a tarefa?",
+        texto: `"${tarefa.titulo}" sai das tarefas abertas, mas continua no histórico.`,
+        rotuloConfirmar: "Cancelar tarefa",
+        rotuloCancelar: "Manter tarefa",
+        perigo: true,
+      }))
+    )
+      return;
 
     try {
       const { error } = await supabase
@@ -1593,10 +1695,13 @@ export default function App() {
 
   const atualizarDataTarefa = async (idTarefa: any, novaData: any) => {
     try {
-      await supabase
+      const { data, error } = await supabase
         .from("tarefas")
         .update({ data_vencimento: novaData || null })
-        .eq("id", idTarefa);
+        .eq("id", idTarefa)
+        .select("id");
+      if (error) throw error;
+      if (!data?.length) throw new Error(SEM_PERMISSAO_TAREFA);
       if (tarefaSelecionada)
         setTarefaSelecionada({ ...tarefaSelecionada, data_vencimento: novaData });
       buscarTarefasKanban();
@@ -1803,7 +1908,7 @@ export default function App() {
     <button
       onClick={() => {
         setPainelNotificacaoAberto(true);
-        buscarNovidades();
+        buscarNovidades(true);
       }}
       title="Notificações"
       className={`relative ${classe}`}
@@ -2017,9 +2122,13 @@ export default function App() {
       return;
     }
 
-    const confirmar = window.confirm(
-      "Tem certeza que deseja cancelar esta obra? Ela sairá das obras em andamento, mas o histórico permanecerá disponível.",
-    );
+    const confirmar = await confirmarDialogo({
+      titulo: "Cancelar esta obra?",
+      texto: "Ela sai das obras em andamento, mas o histórico continua disponível.",
+      rotuloConfirmar: "Cancelar obra",
+      rotuloCancelar: "Manter obra",
+      perigo: true,
+    });
 
     if (!confirmar) return;
 
@@ -2376,21 +2485,6 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans relative overflow-hidden flex-col md:flex-row">
-      <div className="fixed bottom-6 right-6 z-[90] flex flex-col gap-3">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-lg text-white font-medium ${toast.tipo === "sucesso" ? "bg-green-600" : "bg-red-600"}`}
-          >
-            {toast.tipo === "sucesso" ? (
-              <CheckCircle2 size={24} />
-            ) : (
-              <AlertTriangle size={24} />
-            )}{" "}
-            {toast.mensagem}
-          </div>
-        ))}
-      </div>
 
 
       {/* HEADER MOBILE */}
@@ -3411,6 +3505,7 @@ export default function App() {
                             onClick={() => {
                               setTelaAtiva("tarefas");
                               setPainelNotificacaoAberto(false);
+                              abrirTarefaPorId(notif.id);
                             }}
                             className="text-white bg-[#2A6377] px-3 py-1.5 rounded hover:bg-[#1e4857] font-medium transition"
                           >
@@ -3430,7 +3525,7 @@ export default function App() {
 
       {/* MENU LATERAL (ARQUITETURA ERP) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[50] w-64 ${menuRecolhido ? "md:w-16 2xl:w-16" : "md:w-56 2xl:w-64"} bg-[#2A6377] text-white flex flex-col shadow-2xl transition-[transform,width] duration-300 md:relative md:translate-x-0 ${menuMobileAberto ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-[50] w-64 ${menuRecolhido ? "md:w-16 2xl:w-16" : "md:w-60 2xl:w-64"} bg-[#2A6377] text-white flex flex-col shadow-2xl transition-[transform,width] duration-300 md:relative md:translate-x-0 ${menuMobileAberto ? "translate-x-0" : "-translate-x-full"}`}
       >
         {/* min-h-0: a lista de itens rola dentro do menu e o rodape (usuario / Sair) fica sempre visivel */}
         <div className="flex-1 min-h-0 flex flex-col">
@@ -3481,7 +3576,7 @@ export default function App() {
                   icone: LayoutDashboard,
                   itens: [
                     { tela: "dashboard", rotulo: "Dashboard", icone: LayoutDashboard, ativo: telaAtiva === "dashboard" },
-                    { tela: "tarefas", rotulo: "Tarefas", icone: CheckSquare, ativo: telaAtiva === "tarefas" },
+                    { tela: "tarefas", rotulo: "Tarefas", icone: CheckSquare, ativo: telaAtiva === "tarefas" , contador: contadorDoMenu(pendencias, "tarefas") },
                   ],
                 },
                 {
@@ -3497,7 +3592,7 @@ export default function App() {
                     },
                     { tela: "reunioes", rotulo: "Reuniões", icone: ClipboardList, ativo: telaAtiva === "reunioes" },
                     ...(podeSolicitarPrevisao(usuarioAtual)
-                      ? [{ tela: "solicitacoes_previsao", rotulo: "Previsões", icone: Wallet, ativo: telaAtiva === "solicitacoes_previsao" }]
+                      ? [{ tela: "solicitacoes_previsao", rotulo: "Previsões", icone: Wallet, ativo: telaAtiva === "solicitacoes_previsao" , contador: contadorDoMenu(pendencias, "solicitacoes_previsao") }]
                       : []),
                   ],
                 },
@@ -3507,9 +3602,9 @@ export default function App() {
                   icone: Boxes,
                   itens: [
                     ...(podeVerCompras ? [{ tela: "compras", rotulo: "Compras", icone: ShoppingCart, ativo: telaAtiva === "compras" }] : []),
-                    ...(podeVerFretes ? [{ tela: "fretes", rotulo: "Fretes", icone: Truck, ativo: telaAtiva === "fretes" }] : []),
+                    ...(podeVerFretes ? [{ tela: "fretes", rotulo: "Fretes", icone: Truck, ativo: telaAtiva === "fretes" , contador: contadorDoMenu(pendencias, "fretes") }] : []),
                     ...(podeVerNfsTerceiros
-                      ? [{ tela: "nfs_terceiros", rotulo: "NFs de terceiros", icone: FileInput, ativo: telaAtiva === "nfs_terceiros" }]
+                      ? [{ tela: "nfs_terceiros", rotulo: "NFs de terceiros", icone: FileInput, ativo: telaAtiva === "nfs_terceiros" , contador: contadorDoMenu(pendencias, "nfs_terceiros") }]
                       : []),
                   ],
                 },
@@ -3517,14 +3612,14 @@ export default function App() {
                   id: "faturamento",
                   titulo: "Faturamento",
                   icone: Receipt,
-                  itens: [{ tela: "faturamento", rotulo: "Faturamento", icone: Receipt, ativo: telaAtiva === "faturamento" }],
+                  itens: [{ tela: "faturamento", rotulo: "Faturamento", icone: Receipt, ativo: telaAtiva === "faturamento" , contador: contadorDoMenu(pendencias, "faturamento") }],
                 },
                 {
                   id: "cadastros",
                   titulo: "Cadastros",
                   icone: Settings,
                   itens: [
-                    ...(podeVerMateriais ? [{ tela: "materiais", rotulo: "Materiais", icone: Package, ativo: telaAtiva === "materiais" }] : []),
+                    ...(podeVerMateriais ? [{ tela: "materiais", rotulo: "Materiais", icone: Package, ativo: telaAtiva === "materiais" , contador: contadorDoMenu(pendencias, "materiais") }] : []),
                     ...(podeCadastrarObras
                       ? [{ tela: "cadastros_obras", rotulo: "Obras", icone: HardHat, ativo: telaAtiva === "cadastros_obras" }]
                       : []),
@@ -3577,6 +3672,7 @@ export default function App() {
       {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 p-4 md:p-5 2xl:p-8 overflow-y-auto overflow-x-hidden bg-slate-50/50">
         <Suspense fallback={<CarregandoTela />}>
+        {telaAtiva === "dashboard" && <MinhasPendencias pendencias={pendencias} onIr={setTelaAtiva} />}
         {telaAtiva === "dashboard" && (
           <TelaDashboard
             usuarioAtual={usuarioAtual}
@@ -3726,20 +3822,21 @@ export default function App() {
 
             <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur pb-3 mb-3">
               <div className="bg-white rounded-xl border shadow-sm overflow-visible">
-                <div className="flex flex-wrap">
+                {/* 06/11: no celular, uma linha so com rolagem (antes 4-5 linhas fixas no topo); Diario logo depois do Resumo */}
+                <div className="flex overflow-x-auto md:flex-wrap" role="tablist" aria-label="Seções da obra">
                   {[
                     { id: "resumo", label: "Resumo", icon: LayoutDashboard },
+                    {
+                      id: "diario_tarefas",
+                      label: "Diário e Tarefas",
+                      icon: ClipboardList,
+                    },
                     { id: "financeiro", label: "Financeiro", icon: DollarSign },
                     { id: "faturamento", label: "Faturamento", icon: Receipt },
                     { id: "lista_materiais", label: "Lista de Materiais", icon: Boxes },
                     { id: "compras", label: "Compras", icon: ShoppingCart },
                     { id: "cronograma", label: "Cronograma", icon: Calendar },
                     { id: "documentos", label: "Documentos", icon: FileText },
-                    {
-                      id: "diario_tarefas",
-                      label: "Diário e Tarefas",
-                      icon: ClipboardList,
-                    },
                     { id: "previsoes", label: "Previsões", icon: Wallet },
                     { id: "rentabilidade", label: "Rentabilidade", icon: TrendingUp },
                     { id: "exportacao", label: "Exportação", icon: Ship },
@@ -3748,7 +3845,18 @@ export default function App() {
                     return (
                       <button
                         key={aba.id}
-                        onClick={() => setAbaPainelObra(aba.id)}
+                        id={`aba-obra-${aba.id}`}
+                        role="tab"
+                        aria-selected={abaPainelObra === aba.id}
+                        onClick={(e) => {
+                          setAbaPainelObra(aba.id);
+                          try {
+                            localStorage.setItem("aba_obra", aba.id);
+                          } catch {
+                            /* sem armazenamento local */
+                          }
+                          e.currentTarget.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+                        }}
                         className={`shrink-0 px-4 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition ${abaPainelObra === aba.id ? "border-[#2A6377] text-[#2A6377] bg-[#2A6377]/5" : "border-transparent text-slate-500 hover:text-[#2A6377] hover:bg-slate-50"}`}
                       >
                         <IconeAba size={16} /> {aba.label}
@@ -3992,6 +4100,11 @@ export default function App() {
             setFiltroObraKanban={setFiltroObraKanban}
             tarefasFiltradas={tarefasFiltradas}
             onAbrirTarefa={setTarefaSelecionada}
+            idUsuario={usuarioAtual?.id}
+            veTudo={veTudo}
+            onMudarStatus={(t, status) => atualizarStatusTarefa(t.id, status)}
+            incluiAntigas={tarefasAntigas}
+            onCarregarAntigas={() => setTarefasAntigas(true)}
           />
         )}
         </Suspense>

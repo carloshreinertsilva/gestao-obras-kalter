@@ -9,6 +9,7 @@ import { milhar, num } from "./numeros";
 import { converterValores, itemDaFamilia, itensParaConverter, pendenciasItem, pesosDoPacking, pesosPorFamilia, type PesoFamilia } from "./processo";
 import type { PropsPasso } from "./passos";
 import type { ItemInvoice, Processo } from "./tipos";
+import { confirmar } from "../Dialogos";
 import { Aviso, Botao, CampoNumero, Cartao, Rotulo, Titulo, classeCampo, fmtBR } from "./ui";
 
 const formatarNcm = (codigo: number | string) => {
@@ -322,8 +323,9 @@ export function PassoItens({
       ...p,
       itens: [...p.itens, { descricao: "", descricao_en: "", ncm: "", unidade: "UN", quantidade: 1, valor_unit: 0, peso_liq: 0, peso_bruto: 0 } as ItemInvoice],
     }));
-  const tirarItem = (n: number) => {
-    if (window.confirm(`Remover o item ${n + 1}?`)) modificar((p) => ({ ...p, itens: p.itens.filter((_, k) => k !== n) }));
+  const tirarItem = async (n: number) => {
+    if (await confirmar({ titulo: `Remover o item ${n + 1}?`, rotuloConfirmar: "Remover item", perigo: true }))
+      modificar((p) => ({ ...p, itens: p.itens.filter((_, k) => k !== n) }));
   };
   const usarPesos = (destino: Record<string, number>) => {
     modificar((p) => ({ ...p, itens: pesosDoPacking(p.itens, familias, destino) }));

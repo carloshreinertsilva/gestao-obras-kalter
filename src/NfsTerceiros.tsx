@@ -1,4 +1,6 @@
 import { linhaClicavel } from "./teclado";
+import { avisar, useAviso } from "./aviso";
+import { ErroCarga, useDialogos } from "./Dialogos";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Download, FileText, Loader2, Paperclip, RotateCcw, Search, Send, Trash2, X, XCircle } from "lucide-react";
 import { supabase } from "./supabase";
@@ -140,7 +142,7 @@ const tamanhoTxt = (bytes?: number | null) =>
 
 const abrirArquivo = async (caminho: string) => {
   const { data: d, error } = await supabase.storage.from(BUCKET).createSignedUrl(caminho, 300);
-  if (error || !d?.signedUrl) return alert("Não foi possível abrir o arquivo.");
+  if (error || !d?.signedUrl) return avisar.erro("Não foi possível abrir o arquivo.");
   window.open(d.signedUrl, "_blank");
 };
 
@@ -205,9 +207,13 @@ export function ServicosTerceirosObra({
       supabase.from("obra_servicos_parcelas").select("*").eq("id_obra", idObra).order("nr_pedido", { ascending: false }).order("nr_solicitacao"),
       supabase.from("nfs_terceiros").select("*").eq("id_obra", idObra).order("encaminhado_em", { ascending: false }),
     ]);
-    if (p.error) setErro("Não foi possível carregar os pedidos de serviço.");
-    setParcelas((p.data as ParcelaServico[]) || []);
-    setNfs((n.data as NfTerceiros[]) || []);
+    if (p.error || n.error) {
+      // nao mostra "nenhum pedido" quando a carga falhou: mantem o que havia e mostra o erro
+      setErro(p.error ? "Não foi possível carregar os pedidos de serviço." : "Não foi possível carregar as NFs encaminhadas.");
+      setParcelas((ant) => ant ?? []);
+    } else setErro("");
+    if (!p.error) setParcelas((p.data as ParcelaServico[]) || []);
+    if (!n.error) setNfs((n.data as NfTerceiros[]) || []);
   };
   useEffect(() => {
     setParcelas(null);
@@ -299,7 +305,13 @@ export function ServicosTerceirosObra({
             </button>
           </div>
         </div>
-        {erro && <p className="px-4 py-3 text-sm text-red-600">{erro}</p>}
+        {erro && (
+          <ErroCarga
+            compacto
+            mensagem={pedidos.length ? `${erro} Mostrando a última lista carregada.` : erro}
+            onTentar={carregar}
+          />
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-[13px] min-w-[1000px]">
             <thead className="bg-slate-50 text-slate-600">
@@ -315,7 +327,7 @@ export function ServicosTerceirosObra({
               </tr>
             </thead>
             <tbody>
-              {filtrados.length === 0 && (
+              {filtrados.length === 0 && !(erro && pedidos.length === 0) && (
                 <tr>
                   <td colSpan={8} className="p-6 text-center text-slate-400">
                     {pedidos.length === 0 ? "Nenhum pedido de serviço para esta obra no ERP." : "Nenhum pedido com esses filtros."}
@@ -533,6 +545,8 @@ function ModalEncaminharNf({
   const [novos, setNovos] = useState<File[]>([]);
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const aviso = useAviso();
+  const { confirmar } = useDialogos();
 
   const listaAnexos = [
     ...mantidos.map((a) => ({ chave: a.caminho, nome: a.nome, tamanho: a.tamanho, remover: () => setMantidos((l) => l.filter((x) => x !== a)) })),
@@ -557,12 +571,26 @@ function ModalEncaminharNf({
     if (grande) return setErro(`${grande.name} passa de 15 MB.`);
     if (novos.reduce((t, f) => t + f.size, 0) + mantidos.reduce((t, a) => t + (a.tamanho || 0), 0) > MAX_TOTAL)
       return setErro("Os anexos passam de 20 MB no total (limite do e-mail). Reduza ou compacte os arquivos.");
-    if (acimaDoSaldo && !window.confirm(`O valor (${formatarMoeda(valorNum)}) passa do saldo do pedido (${formatarMoeda(pedido.saldo)}). Encaminhar assim mesmo?`))
+    if (
+      acimaDoSaldo &&
+      !(await confirmar({
+        titulo: "Valor acima do saldo do pedido",
+        texto: `O valor (${formatarMoeda(valorNum)}) passa do saldo do pedido ${pedido.nr_pedido} (${formatarMoeda(pedido.saldo)}). Encaminhar assim mesmo?`,
+        rotuloConfirmar: "Encaminhar assim mesmo",
+        rotuloCancelar: "Revisar valor",
+      }))
+    )
       return;
+    // boleto com 1 anexo so: o botao de confirmar segue com o envio; "Anexar boleto" volta para o formulario
     if (
       forma === "boleto" &&
       mantidos.length + novos.length < 2 &&
-      !window.confirm("Pagamento por boleto, mas só há 1 anexo. O boleto está no mesmo arquivo da NF? (Cancelar para anexar o boleto)")
+      !(await confirmar({
+        titulo: "Pagamento por boleto, mas só há 1 anexo",
+        texto: "O boleto está no mesmo arquivo da NF?",
+        rotuloConfirmar: "Está no mesmo arquivo",
+        rotuloCancelar: "Anexar boleto",
+      }))
     )
       return;
     setEnviando(true);
@@ -599,6 +627,11 @@ function ModalEncaminharNf({
         p_dados_pagamento: limparPagamento(forma as FormaPagamento, pagto),
       });
       if (error) throw error;
+      aviso.sucesso(
+        devolvida
+          ? `NF ${numero.trim()} corrigida e reenviada ao fiscal e ao financeiro.`
+          : `NF ${numero.trim()} (${formatarMoeda(valorNum)}) encaminhada ao fiscal e ao financeiro.`,
+      );
       onFeito();
     } catch (e) {
       if (enviados.length) await supabase.storage.from(BUCKET).remove(enviados);
@@ -872,15 +905,20 @@ export function DetalheNfTerceiros({
   const [nf, setNf] = useState<NfTerceiros | null>(null);
   const [eventos, setEventos] = useState<any[]>([]);
   const [erro, setErro] = useState("");
+  const [erroEventos, setErroEventos] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const aviso = useAviso();
+  const { pedirMotivo } = useDialogos();
 
   const carregar = async () => {
     const [n, e] = await Promise.all([
       supabase.from("nfs_terceiros").select("*").eq("id", id).maybeSingle(),
       supabase.from("nfs_terceiros_eventos").select("*").eq("id_nf", id).order("id"),
     ]);
-    if (n.error || !n.data) setErro("NF não encontrada ou sem acesso.");
+    if (n.error) setErro("Não foi possível carregar a NF: " + msgErro(n.error));
+    else if (!n.data) setErro("NF não encontrada ou sem acesso.");
     setNf(n.data as NfTerceiros);
+    setErroEventos(e.error ? msgErro(e.error) : "");
     setEventos(e.data || []);
   };
   useEffect(() => {
@@ -888,14 +926,23 @@ export function DetalheNfTerceiros({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const acao = async (fn: string, pergunta: string) => {
-    const motivo = window.prompt(pergunta);
+  const acao = async (
+    fn: string,
+    pergunta: string,
+    sucesso: string,
+    extra: { rotuloConfirmar?: string; perigo?: boolean; motivosRapidos?: string[] } = {},
+  ) => {
+    const motivo = await pedirMotivo({ titulo: pergunta, ...extra });
     if (!motivo || !motivo.trim()) return;
     setOcupado(true);
     setErro("");
     const { error } = await supabase.rpc(fn, { p_id: id, p_motivo: motivo.trim() });
     setOcupado(false);
-    if (error) return setErro(msgErro(error));
+    if (error) {
+      aviso.erro(msgErro(error));
+      return setErro(msgErro(error));
+    }
+    aviso.sucesso(sucesso);
     await carregar();
     onAlterada();
   };
@@ -908,7 +955,7 @@ export function DetalheNfTerceiros({
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onFechar} className="absolute right-3 top-3 text-slate-400">
+        <button onClick={onFechar} className="absolute right-3 top-3 text-slate-400" aria-label="Fechar">
           <X size={20} />
         </button>
         {!nf ? (
@@ -983,6 +1030,7 @@ export function DetalheNfTerceiros({
               </div>
               <div>
                 <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Histórico</p>
+                {erroEventos && <ErroCarga compacto mensagem="Não foi possível carregar o histórico." detalhe={erroEventos} onTentar={carregar} />}
                 <ul className="space-y-1">
                   {eventos.map((e) => (
                     <li key={e.id} className="text-[12px] text-slate-600">
@@ -1000,7 +1048,12 @@ export function DetalheNfTerceiros({
                 {podeDevolver && (
                   <button
                     disabled={ocupado}
-                    onClick={() => acao("nft_devolver", "Motivo da devolução (o gestor corrige e reenvia):")}
+                    onClick={() =>
+                      acao("nft_devolver", "Motivo da devolução (o gestor corrige e reenvia)", `NF ${nf.numero_nf} devolvida ao gestor para correção.`, {
+                        rotuloConfirmar: "Devolver ao gestor",
+                        motivosRapidos: ["Falta o boleto", "Valor diferente do pedido", "Dados de pagamento incorretos", "Anexo ilegível"],
+                      })
+                    }
                     className="px-3 py-2 rounded-lg border border-red-200 text-red-700 font-semibold flex items-center gap-1 text-sm"
                   >
                     <RotateCcw size={14} /> Devolver ao gestor
@@ -1009,7 +1062,12 @@ export function DetalheNfTerceiros({
                 {podeCancelar && (
                   <button
                     disabled={ocupado}
-                    onClick={() => acao("nft_cancelar", "Motivo do cancelamento:")}
+                    onClick={() =>
+                      acao("nft_cancelar", `Cancelar a NF ${nf.numero_nf}?`, `NF ${nf.numero_nf} cancelada.`, {
+                        rotuloConfirmar: "Cancelar NF",
+                        perigo: true,
+                      })
+                    }
                     className="px-3 py-2 rounded-lg border text-slate-600 font-semibold flex items-center gap-1 text-sm"
                   >
                     <XCircle size={14} /> Cancelar
@@ -1044,9 +1102,15 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
   const [filtro, setFiltro] = useState("pendentes");
   const [busca, setBusca] = useState("");
   const [reenvio, setReenvio] = useState<{ pedido: PedidoServico; nf: NfTerceiros } | null>(null);
+  const [erroCarga, setErroCarga] = useState("");
 
   const carregar = async () => {
-    const { data: d } = await supabase.from("nfs_terceiros").select("*").order("vencimento");
+    const { data: d, error } = await supabase.from("nfs_terceiros").select("*").order("vencimento");
+    if (error) {
+      setErroCarga(msgErro(error));
+      return;
+    }
+    setErroCarga("");
     setNfs((d as NfTerceiros[]) || []);
   };
   useEffect(() => {
@@ -1054,6 +1118,12 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
   }, []);
 
   const hoje = hojeISO();
+  if (nfs === null && erroCarga)
+    return (
+      <div className="bg-white rounded-xl shadow-sm border m-4">
+        <ErroCarga mensagem="Não foi possível carregar as NFs de terceiros." detalhe={erroCarga} onTentar={carregar} />
+      </div>
+    );
   if (nfs === null)
     return (
       <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
@@ -1120,6 +1190,7 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
             <Download size={13} /> Exportar
           </button>
         </div>
+        {erroCarga && <ErroCarga compacto mensagem="Não foi possível atualizar a lista (mostrando a última carregada)." detalhe={erroCarga} onTentar={carregar} />}
         <div className="overflow-x-auto">
           <table className="w-full text-[13px] min-w-[900px]">
             <thead className="bg-slate-50 text-slate-600">
@@ -1189,7 +1260,7 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
               .eq("id_obra", nf.id_obra)
               .eq("nr_pedido", nf.nr_pedido);
             const ped = agruparPedidos((p as ParcelaServico[]) || [])[0];
-            if (error || !ped) return alert("Não foi possível carregar o pedido de serviço desta NF.");
+            if (error || !ped) return avisar.erro("Não foi possível carregar o pedido de serviço desta NF.");
             onAbrir(null);
             setReenvio({ pedido: ped, nf });
           }}

@@ -18,6 +18,8 @@ import { supabase } from "./supabase";
 import { formatarMoeda, normalizarNomeArquivo } from "./utils";
 import type { SolicitacaoPrevisao, Usuario } from "./types";
 import { SeloAlertaFamilia } from "./AlertaFamilia";
+import { useAviso } from "./aviso";
+import { ErroCarga, useDialogos } from "./Dialogos";
 
 // Familia da obra como vem de obra_rentabilidade_familias (saldo de previsoes em aberto sincronizado do ERP)
 export interface FamiliaPrevisao {
@@ -124,6 +126,7 @@ export function ModalSolicitarPrevisao({
   const [justificativa, setJustificativa] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const aviso = useAviso();
   // cotacao/orcamento anexados (bucket previsao-anexos, caminho obras/<id_obra>/previsoes/...)
   const [arquivos, setArquivos] = useState<File[]>([]);
   const escolherArquivos = (lista: FileList | null) => {
@@ -224,6 +227,9 @@ export function ModalSolicitarPrevisao({
         if (anexos.length) await supabase.storage.from("previsao-anexos").remove(anexos.map((a) => a.caminho));
         throw error;
       }
+      aviso.sucesso(
+        `Solicitação de ${tipo === "aumento" ? "aumento" : "transferência"} de ${formatarMoeda(registro.valor)} para ${destino} enviada. O robô simula no ERP e ela segue para aprovação.`,
+      );
       onEnviado?.();
       onFechar();
     } catch (e: any) {
@@ -564,17 +570,23 @@ export function CartaoSolicitacao({
   const aprovador = Boolean(usuario?.aprova_previsao);
   const ehSolicitante = usuario?.id === s.id_solicitante;
   const st = STATUS[s.status] || STATUS.simulando;
+  const aviso = useAviso();
+  const { confirmar } = useDialogos();
+  const resumo = `${s.tipo === "aumento" ? "Aumento" : "Transferência"} de ${formatarMoeda(s.valor)} para ${s.familia_destino} (obra ${s.codigo_obra})`;
 
-  const acao = async (fn: string, params: any) => {
+  const acao = async (fn: string, params: any, sucesso: string) => {
     setOcupado(true);
     setErro("");
     try {
       const { error } = await supabase.rpc(fn, params);
       if (error) throw error;
       setRecusando(false);
+      aviso.sucesso(sucesso);
       onAtualizar();
     } catch (e: any) {
-      setErro(e.message || "Não foi possível concluir a ação.");
+      const msg = e.message || "Não foi possível concluir a ação.";
+      setErro(msg);
+      aviso.erro(msg);
       onAtualizar();
     } finally {
       setOcupado(false);
@@ -710,7 +722,12 @@ export function CartaoSolicitacao({
             placeholder="Motivo da recusa"
             className="flex-1 border rounded-lg px-3 py-1.5 text-sm"
           />
-          {botao("Confirmar recusa", () => acao("recusar_solicitacao_previsao", { p_id: s.id, p_motivo: motivo }), "bg-red-600 text-white hover:bg-red-700", XCircle)}
+          {botao(
+            "Confirmar recusa",
+            () => acao("recusar_solicitacao_previsao", { p_id: s.id, p_motivo: motivo }, `Solicitação recusada: ${resumo}.`),
+            "bg-red-600 text-white hover:bg-red-700",
+            XCircle,
+          )}
         </div>
       )}
 
@@ -720,11 +737,20 @@ export function CartaoSolicitacao({
             {botao("Recusar", () => setRecusando((v) => !v), "border border-red-200 text-red-700 hover:bg-red-50", XCircle)}
             {botao(
               "Aprovar e gravar no ERP",
-              () => {
+              async () => {
                 // grava no ERP: confirma antes (no celular um toque sem querer e facil)
-                const resumo = `${s.tipo === "aumento" ? "Aumento" : "Transferência"} de ${formatarMoeda(s.valor)} para ${s.familia_destino} (obra ${s.codigo_obra})`;
-                if (!window.confirm(`Aprovar e gravar no ERP?\n\n${resumo}`)) return;
-                acao("aprovar_solicitacao_previsao", { p_id: s.id, p_codigo: s.codigo_plano });
+                const ok = await confirmar({
+                  titulo: "Aprovar e gravar no ERP?",
+                  texto: resumo,
+                  rotuloConfirmar: "Aprovar e gravar",
+                  rotuloCancelar: "Voltar",
+                });
+                if (!ok) return;
+                acao(
+                  "aprovar_solicitacao_previsao",
+                  { p_id: s.id, p_codigo: s.codigo_plano },
+                  `Solicitação aprovada: ${resumo}. O robô grava no ERP em instantes.`,
+                );
               },
               "bg-emerald-600 text-white hover:bg-emerald-700",
               CheckCircle2,
@@ -732,17 +758,57 @@ export function CartaoSolicitacao({
           </>
         )}
         {(ehSolicitante || aprovador) && ["simulando", "aguardando_aprovacao", "erro"].includes(s.status) &&
-          botao("Cancelar solicitação", () => acao("cancelar_solicitacao_previsao", { p_id: s.id }), "border text-slate-600 hover:bg-slate-50", X)}
+          botao(
+            "Cancelar solicitação",
+            async () => {
+              const ok = await confirmar({
+                titulo: "Cancelar esta solicitação?",
+                texto: `${resumo}\n\nA solicitação deixa de valer e não será gravada no ERP.`,
+                rotuloConfirmar: "Cancelar solicitação",
+                rotuloCancelar: "Manter solicitação",
+                perigo: true,
+              });
+              if (!ok) return;
+              acao("cancelar_solicitacao_previsao", { p_id: s.id }, `Solicitação cancelada: ${resumo}.`);
+            },
+            "border text-slate-600 hover:bg-slate-50",
+            X,
+          )}
         {(ehSolicitante || aprovador) && s.status === "erro" &&
-          botao("Simular de novo", () => acao("reenviar_solicitacao_previsao", { p_id: s.id }), "border text-[#2A6377] hover:bg-slate-50", RotateCcw)}
+          botao(
+            "Simular de novo",
+            () => acao("reenviar_solicitacao_previsao", { p_id: s.id }, "Solicitação enviada para simular de novo no ERP."),
+            "border text-[#2A6377] hover:bg-slate-50",
+            RotateCcw,
+          )}
         {aprovador && s.status === "executada" && (!s.desfazer_status || s.desfazer_status === "erro") &&
-          botao("Desfazer no ERP", () => acao("pedir_desfazer_previsao", { p_id: s.id }), "border border-amber-300 text-amber-800 hover:bg-amber-50", RotateCcw)}
+          botao(
+            "Desfazer no ERP",
+            () =>
+              acao(
+                "pedir_desfazer_previsao",
+                { p_id: s.id },
+                "Pedido de desfazer registrado. O robô simula no ERP e mostra o plano para você confirmar.",
+              ),
+            "border border-amber-300 text-amber-800 hover:bg-amber-50",
+            RotateCcw,
+          )}
         {aprovador && s.desfazer_status === "aguardando_confirmacao" && (
           <>
-            {botao("Manter", () => acao("cancelar_desfazer_previsao", { p_id: s.id }), "border text-slate-600 hover:bg-slate-50", X)}
+            {botao(
+              "Manter",
+              () => acao("cancelar_desfazer_previsao", { p_id: s.id }, "Desfazer cancelado: a gravação no ERP foi mantida."),
+              "border text-slate-600 hover:bg-slate-50",
+              X,
+            )}
             {botao(
               "Confirmar desfazer",
-              () => acao("confirmar_desfazer_previsao", { p_id: s.id, p_codigo: s.desfazer_codigo }),
+              () =>
+                acao(
+                  "confirmar_desfazer_previsao",
+                  { p_id: s.id, p_codigo: s.desfazer_codigo },
+                  `Desfazer confirmado: ${resumo}. O robô desfaz no ERP em instantes.`,
+                ),
               "bg-amber-600 text-white hover:bg-amber-700",
               RotateCcw,
             )}
@@ -783,6 +849,7 @@ export function PainelSolicitacoes({
 }) {
   const [lista, setLista] = useState<SolicitacaoPrevisao[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [erroCarga, setErroCarga] = useState("");
   const [filtro, setFiltro] = useState(usuario?.aprova_previsao && !idObra ? "pendentes" : "todas");
   const [busca, setBusca] = useState("");
 
@@ -790,7 +857,11 @@ export function PainelSolicitacoes({
     let q = supabase.from("solicitacoes_previsao").select("*").order("created_at", { ascending: false }).limit(300);
     if (idObra) q = q.eq("id_obra", idObra);
     const { data, error } = await q;
-    if (!error && data) setLista(data as SolicitacaoPrevisao[]);
+    if (error) setErroCarga(error.message || "Erro ao buscar as solicitações.");
+    else {
+      setErroCarga("");
+      setLista((data as SolicitacaoPrevisao[]) || []);
+    }
     setCarregando(false);
   }, [idObra]);
 
@@ -860,10 +931,19 @@ export function PainelSolicitacoes({
           </button>
         ))}
       </div>
+      {erroCarga && !carregando && lista.length > 0 && (
+        <div className="bg-white border border-red-200 rounded-xl">
+          <ErroCarga compacto mensagem="Não foi possível atualizar a lista (mostrando a última carregada)." detalhe={erroCarga} onTentar={buscar} />
+        </div>
+      )}
       {carregando ? (
         <p className="text-sm text-slate-400 flex items-center gap-2">
           <Loader2 size={14} className="animate-spin" /> Carregando…
         </p>
+      ) : erroCarga && lista.length === 0 ? (
+        <div className="bg-white border border-red-200 rounded-xl">
+          <ErroCarga detalhe={erroCarga} onTentar={buscar} />
+        </div>
       ) : visiveis.length === 0 ? (
         <p className="text-sm text-slate-400 bg-white border rounded-xl p-6 text-center">Nenhuma solicitação aqui.</p>
       ) : (
@@ -883,13 +963,18 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
   const [familias, setFamilias] = useState<FamiliaPrevisao[]>([]);
   const [modal, setModal] = useState<{ aberto: boolean; familia?: string }>({ aberto: false });
   const [recarregar, setRecarregar] = useState(0);
+  const [erroFamilias, setErroFamilias] = useState("");
 
   useEffect(() => {
     if (!obra?.id) return;
     // RPC so com o saldo de previsoes: a tabela de rentabilidade (custo/margem) e restrita
     supabase
       .rpc("previsoes_familias_obra", { p_id_obra: obra.id })
-      .then(({ data }) => setFamilias((data as FamiliaPrevisao[]) || []));
+      .then(({ data, error }) => {
+        if (error) return setErroFamilias(error.message || "Erro ao buscar as famílias.");
+        setErroFamilias("");
+        setFamilias((data as FamiliaPrevisao[]) || []);
+      });
   }, [obra?.id, recarregar]);
 
   const lista = familias
@@ -932,7 +1017,13 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
               </tr>
             </thead>
             <tbody>
-              {comSaldo.length === 0 ? (
+              {erroFamilias ? (
+                <tr>
+                  <td colSpan={4}>
+                    <ErroCarga detalhe={erroFamilias} onTentar={() => setRecarregar((n) => n + 1)} />
+                  </td>
+                </tr>
+              ) : comSaldo.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="p-6 text-center text-slate-400">
                     Nenhuma previsão em aberto nesta obra.
