@@ -197,6 +197,7 @@ grant execute on function public.eh_fiscal() to authenticated;
 grant execute on function public.eh_logistica() to authenticated;
 grant execute on function public.eh_usuario_ativo() to authenticated;
 -- function public.email_frete(f public.fretes, p_titulo text, p_aviso text, p_cor text, p_url text, p_saldo numeric): sem execute para anon, authenticated, PUBLIC
+-- function public.email_frete_sem_verba(p_obra public.obras, p_familia text, p_disponivel numeric, p_faltante numeric, p_ctes jsonb): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.email_nf_terceiros(n public.nfs_terceiros, p_titulo text, p_aviso text, p_cor text, p_url text) to anon, authenticated, public;
 grant execute on function public.email_solicitacao_faturamento(s public.solicitacoes_faturamento, p_titulo text, p_aviso text, p_cor text, p_botao text, p_url text) to anon, authenticated, public;
 -- function public.email_solicitacao_material(s public.solicitacoes_material, p_titulo text, p_aviso text, p_cor text, p_url text): sem execute para anon, authenticated, PUBLIC
@@ -218,6 +219,7 @@ grant execute on function public.finalizar_obra_pmis(p_id_obra uuid, p_data_fina
 -- function public.formatar_brl(p_valor numeric): sem execute para anon, authenticated, PUBLIC
 -- function public.frete_avaliar(p_id uuid): sem execute para anon, authenticated, PUBLIC
 -- function public.frete_avisar(p_id uuid, p_para uuid[], p_cc uuid[], p_assunto text, p_titulo text, p_aviso text, p_cor text, p_titulo_push text): sem execute para anon, authenticated, PUBLIC
+-- function public.frete_avisar_sem_verba(p_familia text, p_disponivel numeric, p_faltante numeric, p_ctes jsonb): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.frete_cancelar(p_id uuid, p_motivo text) to authenticated;
 grant execute on function public.frete_carga_normalizar(p_carga jsonb, OUT itens jsonb, OUT peso numeric, OUT volumes integer, OUT cubagem numeric) to authenticated;
 grant execute on function public.frete_distancia(p_origem integer, p_destino integer) to authenticated;
@@ -230,6 +232,7 @@ grant execute on function public.frete_marcar_transportadora(p_codigo integer, p
 -- function public.frete_registrar_cte(p_nr_ad bigint, p_projeto text, p_codigo_obra text, p_numero_cte text, p_data_entrada date, p_cod_fornecedor integer, p_valor numeric, p_status text, p_baixas jsonb, p_mensagem text): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.frete_saldo(p_id_obra uuid, p_excluir uuid) to authenticated;
 grant execute on function public.frete_salvar(p_id uuid, p_id_obra uuid, p_data date, p_operacao text, p_tipo_documento text, p_numero_documento text, p_origem_tipo text, p_origem_ibge integer, p_origem_nome text, p_destino_tipo text, p_destino_ibge integer, p_destino_nome text, p_cod_fornecedor integer, p_tipo_veiculo text, p_km numeric, p_valor_km numeric, p_valor_cotado numeric, p_transportadora_codigo integer, p_observacao text, p_carga jsonb, p_peso_kg numeric, p_volumes integer, p_altura_m numeric, p_largura_m numeric, p_comprimento_m numeric, p_cubagem_m3 numeric) to authenticated;
+grant execute on function public.frete_sem_verba_email_ligado() to authenticated, public;
 grant execute on function public.frete_sugestoes(p_origem integer, p_destino integer, p_tipo_veiculo text) to authenticated;
 grant execute on function public.html_esc(p text) to anon, authenticated, public;
 -- function public.limpeza_diaria(): sem execute para anon, authenticated, PUBLIC

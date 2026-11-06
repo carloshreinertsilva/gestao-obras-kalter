@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- 167 funcoes/procedures do schema public, ordenadas por nome + argumentos
+-- 170 funcoes/procedures do schema public, ordenadas por nome + argumentos
 
 -- public.after_insert_obras_criar_pmis_padrao()
 CREATE OR REPLACE FUNCTION public.after_insert_obras_criar_pmis_padrao()
@@ -586,6 +586,42 @@ begin
     || '</table>'
     || '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 4px 0;"><tr><td style="border-radius:8px; background:#2A6377;">'
     || '<a href="' || p_url || '" target="_blank" style="display:inline-block; padding:12px 22px; font-family:''Segoe UI'',Arial,sans-serif; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:8px;">Abrir o frete no app</a>'
+    || '</td></tr></table>';
+end $function$
+;
+
+-- public.email_frete_sem_verba(p_obra public.obras, p_familia text, p_disponivel numeric, p_faltante numeric, p_ctes jsonb)
+CREATE OR REPLACE FUNCTION public.email_frete_sem_verba(p_obra public.obras, p_familia text, p_disponivel numeric, p_faltante numeric, p_ctes jsonb)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_linha text := '<tr><td style="padding:6px 12px 6px 0; color:#64748b; font-size:13px; white-space:nowrap; vertical-align:top;">%s</td><td style="padding:6px 0; font-size:15px; color:#1e293b;">%s</td></tr>';
+  v_ctes text := '';
+  c jsonb;
+  v_url text := 'https://gestaoobraskalter.vercel.app/obras/' || p_obra.codigo_externo || '/previsoes';
+begin
+  for c in select * from jsonb_array_elements(coalesce(p_ctes, '[]'::jsonb)) loop
+    v_ctes := v_ctes || '<li style="margin:2px 0;">AD ' || html_esc(c->>'ad') || coalesce(' · ' || html_esc(nullif(c->>'transportadora', '')), '')
+              || ' · <strong>' || formatar_brl((c->>'valor')::numeric) || '</strong></li>';
+  end loop;
+  return '<p style="margin:0 0 4px 0; font-size:20px; font-weight:bold; color:#2A6377;">Falta verba para fretes na obra ' || html_esc(p_obra.codigo_externo) || '</p>'
+    || '<p style="margin:0 0 18px 0;"><span style="display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:bold; letter-spacing:0.4px; color:#b91c1c; background:#fee2e2;">FALTAM '
+    || formatar_brl(p_faltante) || ' NA ' || html_esc(p_familia) || '</span></p>'
+    || '<p style="margin:0 0 14px 0; font-size:15px; color:#1e293b;">Há fretes (CT-e) lançados no ERP para esta obra que não puderam baixar a previsão da família de fretes, porque a verba acabou. '
+    || 'Para regularizar, abra no app uma <strong>solicitação de aumento</strong> ou uma <strong>transferência</strong> de outra família para a <strong>' || html_esc(p_familia) || '</strong>. '
+    || 'Assim que a verba entrar, o robô baixa os CT-es sozinho.</p>'
+    || '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-top:1px solid #e5eaee; border-bottom:1px solid #e5eaee; padding:8px 0;">'
+    || format(v_linha, 'Obra', html_esc(p_obra.codigo_externo || ' - ' || p_obra.nome))
+    || format(v_linha, 'Família', html_esc(p_familia))
+    || format(v_linha, 'Verba disponível', formatar_brl(greatest(p_disponivel, 0)))
+    || format(v_linha, 'Valor que falta', '<strong style="color:#b91c1c;">' || formatar_brl(p_faltante) || '</strong>')
+    || format(v_linha, 'CT-es sem verba', '<ul style="margin:0; padding-left:18px;">' || v_ctes || '</ul>')
+    || '</table>'
+    || '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 4px 0;"><tr><td style="border-radius:8px; background:#2A6377;">'
+    || '<a href="' || v_url || '" target="_blank" style="display:inline-block; padding:12px 22px; font-family:''Segoe UI'',Arial,sans-serif; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:8px;">Abrir as previsões da obra</a>'
     || '</td></tr></table>';
 end $function$
 ;
@@ -1268,6 +1304,39 @@ begin
 end $function$
 ;
 
+-- public.frete_avisar_sem_verba(p_familia text, p_disponivel numeric, p_faltante numeric, p_ctes jsonb)
+CREATE OR REPLACE FUNCTION public.frete_avisar_sem_verba(p_familia text, p_disponivel numeric, p_faltante numeric, p_ctes jsonb)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  o public.obras;
+  v_para uuid[]; v_cc uuid[]; v_emails text[]; v_cc_emails text[];
+  v_assunto text := 'Falta verba para fretes · ' || p_familia || ' · faltam ' || formatar_brl(p_faltante);
+begin
+  if p_faltante is null or p_faltante <= 0 or not public.frete_sem_verba_email_ligado() then return false; end if;
+  select * into o from public.obras where codigo_externo = split_part(p_familia, '.', 1) order by created_at desc limit 1;
+  if o.id is null then return false; end if;
+  if exists (select 1 from public.solicitacoes_previsao s where s.familia_destino = p_familia
+              and s.status in ('simulando', 'aguardando_aprovacao', 'aprovada')) then return false; end if;
+  -- 1 e-mail por dia por familia
+  if exists (select 1 from public.fila_email f where f.origem = 'frete_sem_verba' and f.assunto like '%· ' || p_familia || ' ·%'
+              and (f.created_at at time zone 'America/Sao_Paulo')::date = (now() at time zone 'America/Sao_Paulo')::date) then
+    return false;
+  end if;
+  v_para := public.frete_gestores(o.id);
+  select coalesce(array_agg(id), '{}') into v_cc from public.usuarios where ativo and recebe_copia_previsao;
+  v_emails := public.sf_emails(v_para);
+  v_cc_emails := public.sf_emails(v_cc, v_emails);
+  if cardinality(v_emails) = 0 then return false; end if;
+  insert into public.fila_email (para, cc, assunto, html, origem)
+  values (v_emails, v_cc_emails, v_assunto, public.email_frete_sem_verba(o, p_familia, p_disponivel, p_faltante, p_ctes), 'frete_sem_verba');
+  return true;
+end $function$
+;
+
 -- public.frete_cancelar(p_id uuid, p_motivo text)
 CREATE OR REPLACE FUNCTION public.frete_cancelar(p_id uuid, p_motivo text)
  RETURNS void
@@ -1555,6 +1624,14 @@ begin
   perform public.frete_avaliar(v_id);
   return v_id;
 end $function$
+;
+
+-- public.frete_sem_verba_email_ligado()
+CREATE OR REPLACE FUNCTION public.frete_sem_verba_email_ligado()
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+AS $function$ select false $function$
 ;
 
 -- public.frete_sugestoes(p_origem integer, p_destino integer, p_tipo_veiculo text)
@@ -3844,7 +3921,6 @@ CREATE OR REPLACE FUNCTION public.trg_solicitacao_previsao_ins()
 AS $function$
 declare
   v_usuario uuid := public.usuario_atual_id();
-  v_robo boolean := false;
   v_nome text;
   v_soma numeric := 0;
   o jsonb;
@@ -3853,15 +3929,9 @@ declare
   v_restritas text[] := array['970', '980', '990', '1000'];
 begin
   if v_usuario is null then
-    v_robo := auth.uid() is null and session_user = 'postgres'
-              and coalesce(current_setting('app.solicitacao_robo', true), '') = 'on';
-    if not v_robo then
-      raise exception 'Usuario nao identificado.';
-    end if;
-    v_nome := 'Robô (CT-e sem verba)';
-  else
-    select left(trim(u.nome), 50) into v_nome from public.usuarios u where u.id = v_usuario;
+    raise exception 'Usuario nao identificado.';
   end if;
+  select left(trim(u.nome), 50) into v_nome from public.usuarios u where u.id = v_usuario;
   select o2.codigo_externo into new.codigo_obra from public.obras o2 where o2.id = new.id_obra;
   if new.codigo_obra is null then
     raise exception 'Obra nao encontrada.';
@@ -3881,9 +3951,6 @@ begin
   if new.tipo = 'aumento' then
     new.origens := '[]'::jsonb;
   else
-    if v_robo then
-      raise exception 'O robo so abre solicitacao de aumento.';
-    end if;
     if jsonb_typeof(new.origens) <> 'array' or jsonb_array_length(new.origens) = 0 then
       raise exception 'Informe ao menos uma familia de origem.';
     end if;
@@ -3912,7 +3979,7 @@ begin
 
   new.id_solicitante := v_usuario;
   new.nome_solicitante := coalesce(v_nome, 'Usuario');
-  new.solicitante_erp := case when v_robo then 'ROBO' else upper(split_part(coalesce(v_nome, 'Usuario'), ' ', 1)) end;
+  new.solicitante_erp := upper(split_part(coalesce(v_nome, 'Usuario'), ' ', 1));
   new.status := 'simulando';
   new.mensagem := null;
   new.plano := null; new.codigo_plano := null; new.vencimento := null; new.simulado_em := null;
