@@ -40,6 +40,7 @@ export interface Usuario {
   // solicitacao de material (04/11): revisa descricao/unidade/classe (Andre) e revisa NCM/tipo/IPI (Daniela)
   cadastra_materiais?: boolean;
   revisa_fiscal_material?: boolean;
+  recebe_copia_material?: boolean;
   created_at?: string;
 }
 
