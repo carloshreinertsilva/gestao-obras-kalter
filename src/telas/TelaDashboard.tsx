@@ -3,7 +3,7 @@ import { supabase } from "../supabase";
 import { fasesProjeto } from "../constants";
 import ValorAjustavel from "../ValorAjustavel";
 import { formatarDataSegura, formatarDataHora, formatarMoeda, dataHojeISO, labelFase, isAtrasada } from "../utils";
-import { Briefcase, CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2, FolderOpen, Activity, DollarSign, Check, X } from "lucide-react";
+import { Briefcase, CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2, FolderOpen, Activity, DollarSign } from "lucide-react";
 import { linhaClicavel } from "../teclado";
 import type { Usuario } from "../types";
 
@@ -72,25 +72,15 @@ export default function TelaDashboard({
     return mapa[status] || "bg-slate-300";
   };
 
-  // saude por area: icone + texto curto (nao so cor) - leitura por daltonicos e leitores de tela
+  // saude por area: so a bolinha colorida (e um resumo; o detalhe fica no painel da obra - pedido do Carlos 06/11).
+  // O texto continua no title (passar o mouse) e para leitor de tela.
   const SeloSaude = ({ status, area }: { status: string; area: string }) => {
-    const cfg: any = {
-      verde: { Icone: Check, texto: "OK", cls: "text-green-700" },
-      amarelo: { Icone: AlertTriangle, texto: "Atenção", cls: "text-amber-700" },
-      vermelho: { Icone: X, texto: "Crítico", cls: "text-red-700" },
-    };
-    const c = cfg[status] || { Icone: null, texto: status || "—", cls: "text-slate-500" };
+    const texto = ({ verde: "OK", amarelo: "Atenção", vermelho: "Crítico" } as Record<string, string>)[status] || status || "—";
     return (
-      <span
-        className={`inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap ${c.cls}`}
-        title={`${area}: ${c.texto}`}
-      >
-        <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-white ${bolinhaStatusPMIS(status)}`} aria-hidden="true">
-          {c.Icone && <c.Icone size={11} strokeWidth={3} />}
-        </span>
-        <span>
-          <span className="sr-only">{area}: </span>
-          {c.texto}
+      <span className="inline-flex items-center justify-center" title={`${area}: ${texto}`}>
+        <span className={`inline-block w-3 h-3 rounded-full ${bolinhaStatusPMIS(status)}`} aria-hidden="true" />
+        <span className="sr-only">
+          {area}: {texto}
         </span>
       </span>
     );
