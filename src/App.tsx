@@ -8,6 +8,7 @@ import { SolicitacoesFaturamentoObra, TelaFaturamento } from "./SolicitacoesFatu
 import { TelaNfsTerceiros } from "./NfsTerceiros";
 import { TelaFretes } from "./Fretes";
 import { TelaMateriais } from "./Materiais";
+import { MenuGrupos } from "./MenuGrupos";
 import { AtivarPush, ItemNotificacao } from "./Notificacoes";
 import { removerPushAoSair } from "./push";
 import { caminhoParaRota, rotaParaCaminho, type Rota } from "./rotas";
@@ -1816,21 +1817,6 @@ export default function App() {
     </button>
   );
 
-  const itemMenu = (tela: string, rotulo: string, Icone: any, ativo: boolean) => (
-    <button
-      key={tela}
-      title={menuRecolhido ? rotulo : undefined}
-      onClick={() => {
-        setTelaAtiva(tela);
-        setSolicitacaoDestaque(null);
-        setMenuMobileAberto(false);
-      }}
-      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${menuRecolhido ? "md:justify-center md:px-0" : ""} ${ativo ? "bg-white/20 text-white font-bold" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
-    >
-      <Icone size={20} className="shrink-0" />
-      <span className={menuRecolhido ? "md:hidden" : ""}>{rotulo}</span>
-    </button>
-  );
 
   const tarefasFiltradas =
     filtroObraKanban === "todas"
@@ -3480,53 +3466,78 @@ export default function App() {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto pb-4">
-            <div className={`px-4 ${menuRecolhido ? "md:px-2" : ""} mt-4`}>
-              <p className={`text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider ${menuRecolhido ? "md:hidden" : ""}`}>
-                Principal
-              </p>
-              <div className="space-y-1">
-                {itemMenu("dashboard", "Dashboard", LayoutDashboard, telaAtiva === "dashboard")}
-                {itemMenu("tarefas", "Tarefas", CheckSquare, telaAtiva === "tarefas")}
-              </div>
-            </div>
-
-            <div className={`px-4 ${menuRecolhido ? "md:px-2 md:mt-3" : ""} mt-5`}>
-              <p className={`text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider ${menuRecolhido ? "md:hidden" : ""}`}>
-                Operação
-              </p>
-              {menuRecolhido && <div className="hidden md:block h-px bg-white/10 mb-3" />}
-              <div className="space-y-1">
-                {itemMenu(
-                  "minhas_obras",
-                  "Minhas Obras",
-                  Briefcase,
-                  telaAtiva === "minhas_obras" || telaAtiva === "painel_obra",
-                )}
-                {itemMenu("reunioes", "Reuniões", ClipboardList, telaAtiva === "reunioes")}
-                {podeSolicitarPrevisao(usuarioAtual) &&
-                  itemMenu("solicitacoes_previsao", "Previsões", Wallet, telaAtiva === "solicitacoes_previsao")}
-                {podeVerCompras && itemMenu("compras", "Compras", ShoppingCart, telaAtiva === "compras")}
-                {itemMenu("faturamento", "Faturamento", Receipt, telaAtiva === "faturamento")}
-                {podeVerFretes && itemMenu("fretes", "Fretes", Truck, telaAtiva === "fretes")}
-                {podeVerNfsTerceiros && itemMenu("nfs_terceiros", "NFs de terceiros", FileInput, telaAtiva === "nfs_terceiros")}
-                {podeVerMateriais && itemMenu("materiais", "Materiais", Package, telaAtiva === "materiais")}
-              </div>
-            </div>
-
-            {(podeCadastrarObras || isAdmin) && (
-            <div className={`px-4 ${menuRecolhido ? "md:px-2 md:mt-3" : ""} mt-5`}>
-              <p className={`text-[10px] uppercase text-white/50 font-bold mb-2 tracking-wider flex items-center gap-1 ${menuRecolhido ? "md:hidden" : ""}`}>
-                <Settings size={12} /> Cadastros
-              </p>
-              {menuRecolhido && <div className="hidden md:block h-px bg-white/10 mb-3" />}
-              <div className="space-y-1">
-                {podeCadastrarObras && itemMenu("cadastros_obras", "Obras", HardHat, telaAtiva === "cadastros_obras")}
-                {isAdmin &&
-                  itemMenu("cadastros_equipe", "Equipe", Users, telaAtiva === "cadastros_equipe")}
-                {isAdmin && itemMenu("historico", "Histórico", History, telaAtiva === "historico")}
-              </div>
-            </div>
-            )}
+            {/* 06/11/2026: menu em grupos (recolhiveis; no menu recolhido, um icone por grupo com a lista ao lado) */}
+            <MenuGrupos
+              recolhido={menuRecolhido}
+              onIr={(tela) => {
+                setTelaAtiva(tela);
+                setSolicitacaoDestaque(null);
+                setMenuMobileAberto(false);
+              }}
+              grupos={[
+                {
+                  id: "principal",
+                  titulo: "Principal",
+                  icone: LayoutDashboard,
+                  itens: [
+                    { tela: "dashboard", rotulo: "Dashboard", icone: LayoutDashboard, ativo: telaAtiva === "dashboard" },
+                    { tela: "tarefas", rotulo: "Tarefas", icone: CheckSquare, ativo: telaAtiva === "tarefas" },
+                  ],
+                },
+                {
+                  id: "obras",
+                  titulo: "Obras",
+                  icone: Briefcase,
+                  itens: [
+                    {
+                      tela: "minhas_obras",
+                      rotulo: "Minhas Obras",
+                      icone: Briefcase,
+                      ativo: telaAtiva === "minhas_obras" || telaAtiva === "painel_obra",
+                    },
+                    { tela: "reunioes", rotulo: "Reuniões", icone: ClipboardList, ativo: telaAtiva === "reunioes" },
+                    ...(podeSolicitarPrevisao(usuarioAtual)
+                      ? [{ tela: "solicitacoes_previsao", rotulo: "Previsões", icone: Wallet, ativo: telaAtiva === "solicitacoes_previsao" }]
+                      : []),
+                  ],
+                },
+                {
+                  id: "suprimentos",
+                  titulo: "Suprimentos",
+                  icone: Boxes,
+                  itens: [
+                    ...(podeVerCompras ? [{ tela: "compras", rotulo: "Compras", icone: ShoppingCart, ativo: telaAtiva === "compras" }] : []),
+                    ...(podeVerFretes ? [{ tela: "fretes", rotulo: "Fretes", icone: Truck, ativo: telaAtiva === "fretes" }] : []),
+                    ...(podeVerNfsTerceiros
+                      ? [{ tela: "nfs_terceiros", rotulo: "NFs de terceiros", icone: FileInput, ativo: telaAtiva === "nfs_terceiros" }]
+                      : []),
+                  ],
+                },
+                {
+                  id: "faturamento",
+                  titulo: "Faturamento",
+                  icone: Receipt,
+                  itens: [{ tela: "faturamento", rotulo: "Faturamento", icone: Receipt, ativo: telaAtiva === "faturamento" }],
+                },
+                {
+                  id: "cadastros",
+                  titulo: "Cadastros",
+                  icone: Settings,
+                  itens: [
+                    ...(podeVerMateriais ? [{ tela: "materiais", rotulo: "Materiais", icone: Package, ativo: telaAtiva === "materiais" }] : []),
+                    ...(podeCadastrarObras
+                      ? [{ tela: "cadastros_obras", rotulo: "Obras", icone: HardHat, ativo: telaAtiva === "cadastros_obras" }]
+                      : []),
+                    ...(isAdmin
+                      ? [
+                          { tela: "cadastros_equipe", rotulo: "Equipe", icone: Users, ativo: telaAtiva === "cadastros_equipe" },
+                          { tela: "historico", rotulo: "Histórico", icone: History, ativo: telaAtiva === "historico" },
+                        ]
+                      : []),
+                  ],
+                },
+              ]}
+            />
           </div>
         </div>
 
