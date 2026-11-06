@@ -45,7 +45,7 @@ export default function AbaFinanceiro({
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Venda Total Prevista
           </p>
           <ValorAjustavel className="text-2xl font-bold text-slate-800">
@@ -53,7 +53,7 @@ export default function AbaFinanceiro({
           </ValorAjustavel>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Total Recebido
           </p>
           <ValorAjustavel className="text-2xl font-bold text-emerald-700">
@@ -61,7 +61,7 @@ export default function AbaFinanceiro({
           </ValorAjustavel>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Saldo a Receber
           </p>
           <ValorAjustavel className="text-2xl font-bold text-amber-700">
@@ -71,7 +71,7 @@ export default function AbaFinanceiro({
         <div
           className={`bg-white p-5 rounded-xl shadow-sm border ${valorDistribuidoExcedente > 0 ? "border-red-200 bg-red-50" : ""}`}
         >
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Falta Distribuir
           </p>
           <p
@@ -153,7 +153,7 @@ export default function AbaFinanceiro({
           </div>
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
             <div className="bg-slate-50 border rounded-lg p-3">
-              <span className="text-slate-400 font-bold uppercase text-xs block">
+              <span className="text-slate-500 font-bold uppercase text-xs block">
                 Venda total
               </span>
               <span className="font-bold text-slate-700">
@@ -161,7 +161,7 @@ export default function AbaFinanceiro({
               </span>
             </div>
             <div className="bg-slate-50 border rounded-lg p-3">
-              <span className="text-slate-400 font-bold uppercase text-xs block">
+              <span className="text-slate-500 font-bold uppercase text-xs block">
                 Já distribuído
               </span>
               <span className="font-bold text-slate-700">
@@ -171,7 +171,7 @@ export default function AbaFinanceiro({
             <div
               className={`${valorDistribuidoExcedente > 0 ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-100"} border rounded-lg p-3`}
             >
-              <span className="text-slate-400 font-bold uppercase text-xs block">
+              <span className="text-slate-500 font-bold uppercase text-xs block">
                 Falta distribuir
               </span>
               <span
@@ -198,7 +198,7 @@ export default function AbaFinanceiro({
             >
               Usar saldo restante
             </button>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               A data é digitada no formato dd/mm/aaaa para evitar o
               problema do seletor nativo de data no StackBlitz.
             </p>
@@ -242,7 +242,7 @@ export default function AbaFinanceiro({
                     <td className="p-3 font-medium">
                       <div>{parcela.descricao}</div>
                       {parcela.observacao && (
-                        <div className="text-xs text-slate-400 font-normal mt-1">
+                        <div className="text-xs text-slate-500 font-normal mt-1">
                           {parcela.observacao}
                         </div>
                       )}

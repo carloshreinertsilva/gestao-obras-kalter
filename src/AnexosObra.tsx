@@ -261,17 +261,17 @@ export default function AnexosObra({
                     {anexo.nome_arquivo}
                   </p>
                   {anexo.descricao && (
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-xs text-slate-500">
                       {anexo.descricao}
                     </p>
                   )}
                   {anexo.ocorrencias && (
-                    <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 w-fit flex items-center gap-1">
+                    <span className="text-[11px] bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 w-fit flex items-center gap-1">
                       <Link2 size={10} />{" "}
                       {labelOcorrencia(anexo.ocorrencias.tipo)}
                     </span>
                   )}
-                  <p className="text-[10px] text-slate-400 mt-auto">
+                  <p className="text-xs text-slate-500 mt-auto">
                     {formatarDataSegura(anexo.created_at)} ·{" "}
                     {formatarTamanhoArquivo(anexo.tamanho_bytes)}
                     {anexo.usuarios?.nome ? ` · ${anexo.usuarios.nome}` : ""}
@@ -281,7 +281,7 @@ export default function AnexosObra({
                       href={url}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex-1 text-center bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg py-1 text-[11px] font-bold flex items-center justify-center gap-1"
+                      className="flex-1 text-center bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg py-1 text-xs font-bold flex items-center justify-center gap-1"
                     >
                       <Download size={11} /> Abrir
                     </a>

@@ -48,13 +48,34 @@ export default function StatusSync({
     }
   }
 
+  // 06/11 (item 40): pendencias do robo (CT-e, romaneio, material... que ele nao conseguiu processar) para quem ve tudo
+  const avisos = mostrarDetalhes ? status?.avisos || [] : [];
+
   return (
-    <div
-      title={titulo}
-      className={`flex items-center gap-2 mb-3 px-2 text-[11px] ${atrasado ? "text-red-200 font-semibold" : "text-white/70"} ${recolhido ? "md:justify-center md:px-0" : ""}`}
-    >
-      <span className={`shrink-0 w-2 h-2 rounded-full ${cor} ${atrasado ? "animate-pulse" : ""}`} />
-      <span className={`leading-tight ${recolhido ? "md:hidden" : ""}`}>{texto}</span>
-    </div>
+    <>
+      <div
+        title={titulo}
+        className={`flex items-center gap-2 mb-2 px-2 text-xs ${atrasado ? "text-red-200 font-semibold" : "text-white/75"} ${recolhido ? "md:justify-center md:px-0" : ""}`}
+      >
+        <span className={`shrink-0 w-2 h-2 rounded-full ${cor} ${atrasado ? "animate-pulse" : ""}`} />
+        <span className={`leading-tight ${recolhido ? "md:hidden" : ""}`}>{texto}</span>
+      </div>
+      {avisos.length > 0 && (
+        <details className={`mb-3 px-2 text-xs text-amber-100 ${recolhido ? "md:hidden" : ""}`}>
+          <summary className="cursor-pointer font-semibold flex items-center gap-2">
+            <span className="shrink-0 w-2 h-2 rounded-full bg-amber-300" aria-hidden="true" />
+            {avisos.length} pendência{avisos.length > 1 ? "s" : ""} do robô
+          </summary>
+          <ul className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            {avisos.map((a, i) => (
+              <li key={i} className="bg-white/10 rounded px-2 py-1.5 leading-snug">
+                <span className="block font-semibold text-white/90">{a.etapa}</span>
+                {a.texto}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </>
   );
 }

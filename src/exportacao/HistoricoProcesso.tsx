@@ -59,7 +59,7 @@ export function HistoricoProcesso({ idObra, proc, aprovado, aprovacao }: { idObr
             Comparando com o que {ultimaAprovacao.nome_por || "alguém"} aprovou em {quando(ultimaAprovacao.em)}.
           </p>
           {copia?.id !== ultimaAprovacao.id ? (
-            <p className="text-xs text-slate-400">Carregando a cópia aprovada…</p>
+            <p className="text-xs text-slate-500">Carregando a cópia aprovada…</p>
           ) : !copia.dados ? (
             <p className="text-sm text-slate-600">Essa aprovação foi registrada antes do histórico existir e não guardou a cópia do conteúdo: não dá para comparar.</p>
           ) : !mudancas?.length ? (
@@ -69,7 +69,7 @@ export function HistoricoProcesso({ idObra, proc, aprovado, aprovacao }: { idObr
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px] text-sm border-collapse">
                   <thead>
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+                    <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
                       <th className="px-2 py-1.5 border-b font-semibold">Onde</th>
                       <th className="px-2 py-1.5 border-b font-semibold">Campo</th>
                       <th className="px-2 py-1.5 border-b font-semibold">Aprovado</th>

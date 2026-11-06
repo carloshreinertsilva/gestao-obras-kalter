@@ -77,7 +77,7 @@ export default function AbaDiarioTarefas({
             <h3 className="text-lg font-bold flex items-center gap-2">
               <CheckSquare size={20} className="text-[#2A6377]" /> Tarefas da Obra
             </h3>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Crie e acompanhe tarefas avulsas da obra. Tarefas de reunião também aparecem aqui.
             </p>
           </div>
@@ -113,7 +113,7 @@ export default function AbaDiarioTarefas({
           <div className="flex-1 min-w-[260px] bg-gray-50 rounded-xl p-3 border">
             <div className="flex justify-between items-center mb-3">
               <h4 className="font-bold text-sm">A Fazer</h4>
-              <span className="bg-gray-200 text-[10px] px-2 py-0.5 rounded-full font-bold">
+              <span className="bg-gray-200 text-[11px] px-2 py-0.5 rounded-full font-bold">
                 {
                   tarefasPainelObra.filter(
                     (t) => t?.status === "pendente",
@@ -134,20 +134,20 @@ export default function AbaDiarioTarefas({
                       {tarefa?.titulo}
                     </p>
                     <div className="flex flex-wrap gap-1 mb-2">
-                      <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                      <span className="text-[11px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
                         {tarefa?.origem === "reuniao" ? "Reunião" : "Avulsa"}
                       </span>
-                      <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${tarefa?.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefa?.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefa?.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
+                      <span className={`text-[11px] uppercase font-bold px-1.5 py-0.5 rounded ${tarefa?.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefa?.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefa?.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
                         {tarefa?.prioridade || "normal"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center border-t pt-2">
-                      <span className="text-[10px] uppercase font-bold text-slate-400">
+                      <span className="text-xs uppercase font-bold text-slate-500">
                         <User size={10} className="inline mr-1" />
                         {tarefa?.usuarios?.nome}
                       </span>
                       <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"}`}
+                        className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"}`}
                       >
                         <Clock size={10} />{" "}
                         {formatarDataSegura(tarefa?.data_vencimento)}
@@ -162,7 +162,7 @@ export default function AbaDiarioTarefas({
               <h4 className="font-bold text-sm text-[#2A6377]">
                 Em Andamento
               </h4>
-              <span className="bg-[#2A6377]/20 text-[#2A6377] text-[10px] px-2 py-0.5 rounded-full font-bold">
+              <span className="bg-[#2A6377]/20 text-[#2A6377] text-[11px] px-2 py-0.5 rounded-full font-bold">
                 {
                   tarefasPainelObra.filter(
                     (t) => t?.status === "em_andamento",
@@ -183,20 +183,20 @@ export default function AbaDiarioTarefas({
                       {tarefa?.titulo}
                     </p>
                     <div className="flex flex-wrap gap-1 mb-2">
-                      <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                      <span className="text-[11px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
                         {tarefa?.origem === "reuniao" ? "Reunião" : "Avulsa"}
                       </span>
-                      <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${tarefa?.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefa?.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefa?.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
+                      <span className={`text-[11px] uppercase font-bold px-1.5 py-0.5 rounded ${tarefa?.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefa?.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefa?.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
                         {tarefa?.prioridade || "normal"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center border-t pt-2">
-                      <span className="text-[10px] uppercase font-bold text-slate-400">
+                      <span className="text-xs uppercase font-bold text-slate-500">
                         <User size={10} className="inline mr-1" />
                         {tarefa?.usuarios?.nome}
                       </span>
                       <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"}`}
+                        className={`text-[11px] font-semibold px-1.5 py-0.5 rounded flex items-center gap-1 ${isAtrasada(tarefa?.data_vencimento, tarefa?.status) ? "bg-red-50 text-red-600" : "bg-gray-100 text-gray-500"}`}
                       >
                         <Clock size={10} />{" "}
                         {formatarDataSegura(tarefa?.data_vencimento)}
@@ -233,7 +233,7 @@ export default function AbaDiarioTarefas({
               <h4 className="font-bold text-sm text-red-700">
                 Canceladas
               </h4>
-              <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded-full font-bold">
+              <span className="bg-red-100 text-red-700 text-[11px] px-2 py-0.5 rounded-full font-bold">
                 {tarefasPainelObra.filter((t) => t?.status === "cancelada").length}
               </span>
             </div>
@@ -249,7 +249,7 @@ export default function AbaDiarioTarefas({
                     <p className="font-medium text-sm leading-tight mb-2 line-through text-slate-500">
                       {tarefa?.titulo}
                     </p>
-                    <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                    <span className="text-[11px] uppercase font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
                       Cancelada
                     </span>
                   </div>

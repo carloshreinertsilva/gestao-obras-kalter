@@ -22,6 +22,7 @@ import type { PropsPasso } from "./passos";
 import type { PassoId } from "./navegacao";
 import type { Material, Processo, TabelaEstimativas } from "./tipos";
 import { confirmar } from "../Dialogos";
+import { Modal } from "../Modal";
 import { Aviso, Botao, CampoNumero, Cartao, Rotulo, Titulo, classeCampo, classeEstimado, dataBR, fmtBR, lerNumero } from "./ui";
 
 type Filtro = "falta" | "conferir" | "todos";
@@ -140,7 +141,7 @@ function PainelMaterial({
             SMA {m.sma} · NCM {m.ncm || "—"} · solicitada {fmtBR(m.qtd_solic, 2)} {m.unidade}, atendida {fmtBR(m.qtd_atend, 2)}
           </p>
         </div>
-        <button type="button" onClick={onFechar} className="p-1 text-slate-400 hover:text-slate-700" aria-label="Fechar o material">
+        <button type="button" onClick={onFechar} className="p-1 text-slate-500 hover:text-slate-700" aria-label="Fechar o material">
           <X size={18} />
         </button>
       </div>
@@ -168,7 +169,7 @@ function PainelMaterial({
               </option>
             ))}
           </select>
-          {!ue && <p className="text-[11px] text-slate-500 mt-1">O NCM deste material não tem unidade no ERP.</p>}
+          {!ue && <p className="text-xs text-slate-500 mt-1">O NCM deste material não tem unidade no ERP.</p>}
         </div>
         <div>
           <Rotulo htmlFor={id("qtd_estat")} texto="Qtde na unidade aduaneira" />
@@ -180,7 +181,7 @@ function PainelMaterial({
             placeholder={auto && qe != null ? fmtBR(qe, 3) : "digite"}
             onChange={(v) => onEditar("qtd_estat", v === 0 ? "" : v)}
           />
-          <p className="text-[11px] text-slate-500 mt-1">Vazio = calculada (kg = peso líquido; un = peças).</p>
+          <p className="text-xs text-slate-500 mt-1">Vazio = calculada (kg = peso líquido; un = peças).</p>
         </div>
       </Grupo>
 
@@ -188,7 +189,7 @@ function PainelMaterial({
         {numero("peso_liq", "Líquido", { erro: num(m.peso_liq) <= 0 })}
         <div>
           {numero("peso_bruto", "Bruto", { erro: num(m.peso_bruto) <= 0 || num(m.peso_liq) > num(m.peso_bruto) })}
-          <p className="text-[11px] text-slate-500 mt-1">Sugestão: líquido + 1,5%{m.bruto_un_est ? " ou o bruto do fabricante" : ""}.</p>
+          <p className="text-xs text-slate-500 mt-1">Sugestão: líquido + 1,5%{m.bruto_un_est ? " ou o bruto do fabricante" : ""}.</p>
         </div>
       </Grupo>
 
@@ -362,7 +363,7 @@ export function PassoPacking({
       className={`h-9 px-3 rounded-lg border text-sm font-semibold transition ${filtro === f ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}`}
     >
       {texto}
-      <span className={`ml-1.5 tabular-nums ${filtro === f ? "text-white/80" : "text-slate-400"}`}>{n}</span>
+      <span className={`ml-1.5 tabular-nums ${filtro === f ? "text-white/80" : "text-slate-500"}`}>{n}</span>
     </button>
   );
 
@@ -520,40 +521,42 @@ export function PassoPacking({
       </div>
 
       {dialogo && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setDialogo(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b">
-              <h3 className="font-bold text-slate-800">{dialogo.modo === "familia" ? `Aplicar à família ${dialogo.descricao}` : "Peso bruto = líquido + %"}</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {dialogo.modo === "familia"
-                  ? "Preenche o tipo de volume e/ou o percentual do peso bruto de todos os materiais do conjunto."
-                  : "Vale para todos os materiais com peso líquido e sem peso bruto digitado (inclusive os estimados em azul, que passam a valer como informados)."}
-              </p>
-            </div>
-            <div className="p-4 space-y-3">
-              {dialogo.modo === "familia" && (
-                <div>
-                  <label htmlFor="dlg-tipo" className="block text-xs font-semibold text-slate-600 mb-1">
-                    Tipo de volume (vazio = não mudar)
-                  </label>
-                  <input id="dlg-tipo" list="dl-embalagens" value={textoTipo} onChange={(e) => setTextoTipo(e.target.value)} className={classeCampo} />
-                </div>
-              )}
-              <div>
-                <label htmlFor="dlg-pct" className="block text-xs font-semibold text-slate-600 mb-1">
-                  Peso bruto = peso líquido + quantos % {dialogo.modo === "familia" ? "(vazio = não mudar)" : ""}
-                </label>
-                <input id="dlg-pct" inputMode="decimal" value={textoPct} onChange={(e) => setTextoPct(e.target.value)} placeholder="1,5" className={classeCampo} />
-              </div>
-            </div>
-            <div className="p-4 border-t bg-slate-50 rounded-b-xl flex justify-end gap-2">
+        <Modal
+          titulo={dialogo.modo === "familia" ? `Aplicar à família ${dialogo.descricao}` : "Peso bruto = líquido + %"}
+          subtitulo={
+            dialogo.modo === "familia"
+              ? "Preenche o tipo de volume e/ou o percentual do peso bruto de todos os materiais do conjunto."
+              : "Vale para todos os materiais com peso líquido e sem peso bruto digitado (inclusive os estimados em azul, que passam a valer como informados)."
+          }
+          largura="md"
+          onFechar={() => setDialogo(null)}
+          sujo={textoTipo !== "Caixa de madeira" || textoPct !== (dialogo.modo === "todos" ? "1,5" : "")}
+          rodape={
+            <>
               <Botao onClick={() => setDialogo(null)}>Cancelar</Botao>
               <Botao tipo="primario" onClick={confirmarDialogo}>
                 Aplicar
               </Botao>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            {dialogo.modo === "familia" && (
+              <div>
+                <label htmlFor="dlg-tipo" className="block text-xs font-semibold text-slate-600 mb-1">
+                  Tipo de volume (vazio = não mudar)
+                </label>
+                <input id="dlg-tipo" list="dl-embalagens" value={textoTipo} onChange={(e) => setTextoTipo(e.target.value)} className={classeCampo} />
+              </div>
+            )}
+            <div>
+              <label htmlFor="dlg-pct" className="block text-xs font-semibold text-slate-600 mb-1">
+                Peso bruto = peso líquido + quantos % {dialogo.modo === "familia" ? "(vazio = não mudar)" : ""}
+              </label>
+              <input id="dlg-pct" inputMode="decimal" value={textoPct} onChange={(e) => setTextoPct(e.target.value)} placeholder="1,5" className={classeCampo} />
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

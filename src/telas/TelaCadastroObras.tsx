@@ -37,7 +37,7 @@ function Rotulo({ htmlFor, texto, obrigatorio, dica }: { htmlFor?: string; texto
         {texto}
         {obrigatorio && <span className="text-red-500 ml-0.5">*</span>}
       </span>
-      {dica && <span className="text-[10px] text-slate-400 truncate">{dica}</span>}
+      {dica && <span className="text-xs text-slate-500 truncate">{dica}</span>}
     </label>
   );
 }
@@ -73,7 +73,7 @@ function CampoMoeda({ id, valor, onChange, placeholder = "0,00" }: { id: string;
   const [texto, setTexto] = useState("");
   return (
     <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 pointer-events-none">R$</span>
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500 pointer-events-none">R$</span>
       <input
         id={id}
         inputMode="decimal"
@@ -614,7 +614,7 @@ export default function TelaCadastroObras({
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 max-w-full overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 md:px-6 py-4 border-b">
           <h3 className="text-lg font-bold text-slate-800">
-            Obras cadastradas <span className="text-sm font-semibold text-slate-400">({obrasCadastroLista.length})</span>
+            Obras cadastradas <span className="text-sm font-semibold text-slate-500">({obrasCadastroLista.length})</span>
           </h3>
           <div className="flex items-center gap-2">
             <label htmlFor="filtro-status-cadastro-obras" className="text-xs font-semibold text-slate-500 whitespace-nowrap">
@@ -643,7 +643,7 @@ export default function TelaCadastroObras({
           <div className="overflow-x-auto max-w-full">
             <table className="w-full text-left border-collapse min-w-[760px]">
               <thead>
-                <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide border-b">
+                <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide border-b">
                   <th className="px-4 py-2.5 font-semibold">Código</th>
                   <th className="px-4 py-2.5 font-semibold">Nome</th>
                   <th className="px-4 py-2.5 font-semibold">Fase</th>
@@ -667,14 +667,14 @@ export default function TelaCadastroObras({
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{labelFase(obra.fase_atual || "processo_inicial")}</td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{(obra as any).usuarios?.nome || "-"}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded border uppercase ${classeStatusObra(obra.status ?? "")}`}>
+                      <span className={`text-[11px] font-semibold px-2 py-1 rounded border uppercase ${classeStatusObra(obra.status ?? "")}`}>
                         {labelStatusObra(obra.status ?? "")}
                       </span>
                       {obra.status === "finalizada" && obra.data_finalizacao && (
-                        <p className="text-[10px] text-slate-400 mt-1">em {formatarDataSegura(obra.data_finalizacao)}</p>
+                        <p className="text-xs text-slate-500 mt-1">em {formatarDataSegura(obra.data_finalizacao)}</p>
                       )}
                       {obra.status === "cancelada" && obra.data_cancelamento && (
-                        <p className="text-[10px] text-slate-400 mt-1">em {formatarDataSegura(obra.data_cancelamento)}</p>
+                        <p className="text-xs text-slate-500 mt-1">em {formatarDataSegura(obra.data_cancelamento)}</p>
                       )}
                     </td>
                     <td className="px-4 py-3 text-slate-600 tabular-nums whitespace-nowrap">{formatarDataSegura(obra.data_previsao_fim)}</td>
@@ -745,8 +745,8 @@ function ValoresErpObra({
           <div key={chave}>
             <Rotulo htmlFor={`erp-${chave}`} texto={texto} />
             <CampoMoeda id={`erp-${chave}`} valor={valores[chave]} onChange={(v) => onChange({ ...valores, [chave]: v })} />
-            <p className="flex justify-between gap-2 text-[11px] mt-1">
-              <span className="text-slate-400 truncate">{origem}</span>
+            <p className="flex justify-between gap-2 text-xs mt-1">
+              <span className="text-slate-500 truncate">{origem}</span>
               <span className="text-slate-500 tabular-nums whitespace-nowrap">{nota ?? `${pct(Number(valores[chave] || 0))} do faturamento`}</span>
             </p>
           </div>
@@ -755,8 +755,8 @@ function ValoresErpObra({
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white border border-slate-200 px-4 py-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Margem prevista</p>
-          <p className="text-xs text-slate-400">contribuição + rentabilidade</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Margem prevista</p>
+          <p className="text-xs text-slate-500">contribuição + rentabilidade</p>
         </div>
         <div className="text-right">
           <p className="text-lg font-bold text-slate-800 tabular-nums">{formatarMoeda(margem)}</p>

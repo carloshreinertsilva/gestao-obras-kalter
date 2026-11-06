@@ -24,7 +24,7 @@ const BadgeSituacao = ({ situacao }: { situacao?: string }) => {
   const s = (situacao as SituacaoSma) || "A";
   return (
     <span
-      className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${estiloSituacao[s] || estiloSituacao.A}`}
+      className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${estiloSituacao[s] || estiloSituacao.A}`}
     >
       {rotuloSituacao[s] || situacao || "-"}
     </span>
@@ -128,8 +128,9 @@ function FiltroColuna({
       <button
         ref={gatilhoRef}
         onClick={() => (aberto ? setAberto(false) : abrir())}
-        className={`align-middle p-0.5 rounded transition ${ativo ? "text-[#2A6377]" : "text-slate-300 hover:text-slate-500"}`}
+        className={`align-middle p-0.5 rounded transition ${ativo ? "text-[#2A6377]" : "text-slate-500 hover:text-slate-600"}`}
         title="Filtrar"
+        aria-label="Filtrar coluna"
       >
         <Filter size={12} fill={ativo ? "currentColor" : "none"} />
       </button>
@@ -154,7 +155,7 @@ function FiltroColuna({
               className="w-full border rounded px-2 py-1 text-xs mb-2 outline-none focus:border-[#2A6377]"
               autoFocus
             />
-            <div className="flex justify-between text-[11px] text-violet-700 font-bold mb-1 px-0.5">
+            <div className="flex justify-between text-xs text-violet-700 font-bold mb-1 px-0.5">
               <button onClick={marcarVisiveis}>Marcar todos</button>
               <button onClick={desmarcarVisiveis}>Desmarcar todos</button>
             </div>
@@ -163,7 +164,7 @@ function FiltroColuna({
               style={{ maxHeight: Math.max(160, Math.min(448, window.innerHeight - pos.top - 130)) }}
             >
               {visiveis.length === 0 ? (
-                <p className="text-xs text-slate-400 p-1">Nenhum valor.</p>
+                <p className="text-xs text-slate-500 p-1">Nenhum valor.</p>
               ) : (
                 visiveis.map((o) => (
                   <label
@@ -182,7 +183,7 @@ function FiltroColuna({
                 ))
               )}
             </div>
-            <p className="text-[10px] text-slate-400 mt-1 px-0.5">
+            <p className="text-xs text-slate-500 mt-1 px-0.5">
               {visiveis.length === opcoes.length
                 ? `${opcoes.length} valores`
                 : `${visiveis.length} de ${opcoes.length} valores`}
@@ -480,9 +481,9 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-400 font-bold uppercase">SMAs</p>
+          <p className="text-xs text-slate-500 font-bold uppercase">SMAs</p>
           <p className="text-2xl font-bold text-slate-800">{resumo.totalSmas}</p>
-          <p className="text-[11px] text-slate-400">{resumo.totalItens} item(ns) de material</p>
+          <p className="text-xs text-slate-500">{resumo.totalItens} item(ns) de material</p>
         </div>
         <button
           onClick={() => setFiltroSituacao(filtroSituacao === "A" ? "todas" : "A")}
@@ -491,7 +492,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
         >
           <p className="text-xs text-amber-700 font-bold uppercase">Ativas</p>
           <p className="text-2xl font-bold text-amber-700">{resumo.smas.A}</p>
-          <p className="text-[11px] text-amber-700/70">{resumo.itens.A} item(ns) ativo(s)</p>
+          <p className="text-xs text-amber-700">{resumo.itens.A} item(ns) ativo(s)</p>
         </button>
         <button
           onClick={() => setFiltroSituacao(filtroSituacao === "E" ? "todas" : "E")}
@@ -500,7 +501,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
         >
           <p className="text-xs text-emerald-700 font-bold uppercase">Encerradas</p>
           <p className="text-2xl font-bold text-emerald-700">{resumo.smas.E}</p>
-          <p className="text-[11px] text-emerald-700/70">{resumo.itens.E} item(ns) encerrado(s)</p>
+          <p className="text-xs text-emerald-700">{resumo.itens.E} item(ns) encerrado(s)</p>
         </button>
         <button
           onClick={() => setFiltroSituacao(filtroSituacao === "C" ? "todas" : "C")}
@@ -509,7 +510,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
         >
           <p className="text-xs text-slate-500 font-bold uppercase">Canceladas</p>
           <p className="text-2xl font-bold text-slate-600">{resumo.smas.C}</p>
-          <p className="text-[11px] text-slate-500">{resumo.itens.C} item(ns) cancelado(s)</p>
+          <p className="text-xs text-slate-500">{resumo.itens.C} item(ns) cancelado(s)</p>
         </button>
       </div>
 
@@ -518,7 +519,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="font-bold text-lg">Lista de Materiais (SMA)</h3>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Materiais solicitados ao almoxarifado para a obra, importados do ERP. Somente
                 leitura - ajustes são feitos lá, não neste sistema. Use o funil no cabeçalho de
                 cada coluna para filtrar por valores específicos.
@@ -540,6 +541,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Buscar material, SMA, solicitante…"
+                aria-label="Buscar material, SMA ou solicitante"
                 className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377]"
               />
             </div>
@@ -566,12 +568,67 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                 Limpar filtros
               </button>
             )}
-            <span className="text-xs text-slate-400 ml-auto">
+            <span className="text-xs text-slate-500 ml-auto">
               {filtrados.length} de {materiais.length} item(ns)
             </span>
           </div>
         </div>
-        <div className="overflow-x-auto max-w-full">
+        {/* celular: cartoes (a tabela larga nao cabe); os filtros por coluna ficam no computador */}
+        <ul className="md:hidden divide-y">
+          {filtrados.length === 0 ? (
+            <li className="p-6 text-center text-sm text-slate-500">
+              {materiais.length === 0
+                ? "Nenhuma SMA importada do ERP para esta obra."
+                : "Nenhum item encontrado para o filtro atual."}
+            </li>
+          ) : (
+            filtrados.map((m) => (
+              <li key={m.id} className="p-3 text-sm space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-bold text-[#2A6377]">
+                    SMA {m.nr_sma}
+                    {m.urgente && (
+                      <span className="ml-1.5 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
+                        Urgente
+                      </span>
+                    )}
+                  </p>
+                  <BadgeSituacao situacao={m.situacao} />
+                </div>
+                <div>
+                  <div className="font-semibold text-slate-700">{m.codigo_material || "-"}</div>
+                  <div className="text-xs text-slate-500 break-words">{m.descricao_material || ""}</div>
+                </div>
+                {m.ordens_producao && (
+                  <p className="text-xs font-semibold text-violet-700">Produção · OP {m.ordens_producao}</p>
+                )}
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+                  <dt className="text-slate-500">Qtd. solicitada</dt>
+                  <dd className="text-right">{formatarQtd(m.quantidade_solicitada)}</dd>
+                  <dt className="text-slate-500">Saldo a atender</dt>
+                  <dd className={`text-right ${saldoAtender(m) ? "font-bold text-amber-700" : ""}`}>
+                    {saldoAtender(m) === null ? "-" : formatarQtd(saldoAtender(m))}
+                  </dd>
+                  <dt className="text-slate-500">Projeto</dt>
+                  <dd className="text-right">{m.projeto_sma || "-"}</dd>
+                  <dt className="text-slate-500">Tipo de movimento</dt>
+                  <dd className="text-right">{m.tipo_movimento_descricao || "-"}</dd>
+                  <dt className="text-slate-500">Solicitante</dt>
+                  <dd className="text-right truncate">{m.solicitante || "-"}</dd>
+                  <dt className="text-slate-500">Cadastro</dt>
+                  <dd className="text-right">{m.data_cadastro ? formatarDataSegura(m.data_cadastro) : "-"}</dd>
+                  <dt className="text-slate-500">Necessidade</dt>
+                  <dd className={`text-right ${necessidadeVencida(m) ? "text-red-600 font-semibold" : ""}`}>
+                    {m.data_necessidade ? formatarDataSegura(m.data_necessidade) : "-"}
+                    {necessidadeVencida(m) && " (vencida)"}
+                  </dd>
+                </dl>
+                {m.observacao && <p className="text-xs text-slate-600 break-words">Obs.: {m.observacao}</p>}
+              </li>
+            ))
+          )}
+        </ul>
+        <div className="hidden md:block overflow-x-auto max-w-full">
           <table className="w-full text-sm min-w-[1040px]">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
@@ -694,7 +751,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
             <tbody>
               {filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan={11}className="p-6 text-center text-slate-500">
+                  <td colSpan={11} className="p-6 text-center text-slate-500">
                     {materiais.length === 0
                       ? "Nenhuma SMA importada do ERP para esta obra."
                       : "Nenhum item encontrado para o filtro atual."}
@@ -706,7 +763,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                     <td className="p-3 font-bold text-[#2A6377] whitespace-nowrap">
                       {m.nr_sma}
                       {m.urgente && (
-                        <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
+                        <span className="ml-1.5 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
                           Urgente
                         </span>
                       )}
@@ -721,7 +778,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                       {formatarQtd(m.quantidade_solicitada)}
                     </td>
                     <td
-                      className={`p-3 text-center whitespace-nowrap ${saldoAtender(m) ? "font-bold text-amber-700" : "text-slate-400"}`}
+                      className={`p-3 text-center whitespace-nowrap ${saldoAtender(m) ? "font-bold text-amber-700" : "text-slate-500"}`}
                     >
                       {saldoAtender(m) === null ? "-" : formatarQtd(saldoAtender(m))}
                     </td>
@@ -734,7 +791,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                       <BadgeSituacao situacao={m.situacao} />
                       {m.ordens_producao && (
                         <span
-                          className="block mt-1 text-[10px] font-bold text-violet-700 whitespace-nowrap"
+                          className="block mt-1 text-xs font-semibold text-violet-700 whitespace-nowrap"
                           title="Item vai ser produzido (ordem de produção no ERP com o número da SMA): não entra em Compras"
                         >
                           Produção · OP {m.ordens_producao}

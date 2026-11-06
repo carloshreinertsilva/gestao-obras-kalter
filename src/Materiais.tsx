@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Copy, Loader2, Plus, RotateCcw, Search, Send, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Loader2, Plus, RotateCcw, Search, Send, XCircle } from "lucide-react";
 import { supabase } from "./supabase";
 import { linhaClicavel } from "./teclado";
 import { avisar, useAviso } from "./aviso";
-import { ErroCarga, useDialogos } from "./Dialogos";
+import { ErroCarga, confirmar, useDialogos } from "./Dialogos";
+import { Modal } from "./Modal";
+import { SeloDiasParados, useFiltroSalvo } from "./modulos_lista";
 import type { Usuario } from "./types";
 
 // Solicitacao de cadastro de material (04/11/2026, fase 1). Qualquer usuario pede um item novo; o app mostra os
@@ -63,6 +65,7 @@ interface SolicitacaoMaterial {
   codigo_edit_automatico: boolean | null;
   erp_erro: string | null;
   created_at: string;
+  updated_at?: string | null;
 }
 
 interface Similar {
@@ -149,7 +152,7 @@ const Badge = ({ status, urgente }: { status: StatusMat; urgente?: boolean }) =>
   <span className="inline-flex items-center gap-1 flex-wrap">
     <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${STATUS[status]?.classe}`}>{STATUS[status]?.rotulo || status}</span>
     {urgente && ["cadastro", "fiscal", "erp"].includes(status) && (
-      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white">URGENTE</span>
+      <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-red-600 text-white">URGENTE</span>
     )}
   </span>
 );
@@ -220,7 +223,7 @@ function ListaSimilares({
       <p className="px-3 py-2 text-[12px] font-bold text-slate-600 flex items-center gap-2 border-b">
         {buscando ? <Loader2 size={13} className="animate-spin" /> : forte ? <AlertTriangle size={13} className="text-amber-600" /> : <Search size={13} />}
         {titulo}
-        {!buscando && lista && <span className="font-normal text-slate-400">({lista.length === 0 ? "nenhum parecido" : lista.length})</span>}
+        {!buscando && lista && <span className="font-normal text-slate-500">({lista.length === 0 ? "nenhum parecido" : lista.length})</span>}
       </p>
       {forte && (
         <p className="px-3 pt-2 text-[12px] text-amber-800">Confira se um destes itens não serve antes de pedir um novo, para não duplicar o cadastro.</p>
@@ -234,15 +237,15 @@ function ListaSimilares({
               </span>
               <span className="flex-1">
                 <b className="text-slate-700">{s.descricao}</b>
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-500">
                   {[s.unidade, pcpTxt(s.tipo_pcp), s.classe, s.ncm ? `NCM ${formatarNcm(s.ncm)}` : "", s.origem === "solicitacao" ? `solicitação ${STATUS[s.situacao as StatusMat]?.rotulo.toLowerCase() || s.situacao}` : ""]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
               </span>
-              <span className="text-[11px] text-slate-400 whitespace-nowrap">{pct(s.semelhanca)}</span>
+              <span className="text-xs text-slate-500 whitespace-nowrap">{pct(s.semelhanca)}</span>
               {onUsar && s.origem === "erp" && (
-                <button onClick={() => onUsar(s)} className="text-[11px] font-bold text-[#2A6377] hover:underline whitespace-nowrap">
+                <button onClick={() => onUsar(s)} className="text-xs font-bold text-[#2A6377] hover:underline whitespace-nowrap">
                   Usar este
                 </button>
               )}
@@ -324,6 +327,8 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
   const [origem, setOrigem] = useState<string>(devolvida?.origem || "");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // alteracao feita pela pessoa (campos e botoes de origem); efeitos automaticos nao marcam
+  const [sujo, setSujo] = useState(false);
   const { lista, buscando } = useSimilares(descricao, devolvida?.id);
   const aviso = useAviso();
 
@@ -356,84 +361,109 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
     onFeito(data as string);
   };
 
+  // fechar pelo "Cancelar" do rodape tambem pergunta quando ha alteracao (o X / Esc / fundo o Modal ja trata)
+  const cancelar = async () => {
+    if (sujo) {
+      const ok = await confirmar({
+        titulo: "Descartar as alterações?",
+        texto: "O que você preencheu nesta janela será perdido.",
+        rotuloConfirmar: "Descartar",
+        rotuloCancelar: "Continuar editando",
+        perigo: true,
+      });
+      if (!ok) return;
+    }
+    onFechar();
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onFechar} className="absolute right-3 top-3 text-slate-400" aria-label="Fechar">
-          <X size={20} />
-        </button>
-        <div className="p-4 border-b pr-10">
-          <h3 className="font-bold text-lg">{devolvida ? `Corrigir solicitação nº ${devolvida.numero}` : "Solicitar cadastro de material"}</h3>
-          <p className="text-sm text-slate-500">O responsável pelo cadastro revisa, o fiscal completa as informações fiscais e o item é criado no ERP.</p>
-        </div>
-        <div className="overflow-y-auto p-4 space-y-3 text-sm">
-          {devolvida?.motivo && (
-            <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">
-              <b>Devolvida por {devolvida.nome_motivo}:</b> {devolvida.motivo}
-            </p>
-          )}
-          <div>
-            <Rotulo>Descrição do item *</Rotulo>
-            <input
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              maxLength={120}
-              placeholder="Ex.: VÁLVULA ESFERA INOX 316 1/2 POL ROSCA NPT"
-              className={entrada}
-              autoFocus
-            />
-            <p className="text-[11px] text-slate-400 mt-1">Nome técnico: tipo do item, material, medidas, norma/padrão e acabamento. {descricao.length}/120</p>
-          </div>
-          <ListaSimilares lista={lista} buscando={buscando} titulo="Itens parecidos já cadastrados ou pedidos" />
-          <div>
-            <Rotulo>O item é *</Rotulo>
-            <SelecaoOrigem valor={origem} onChange={setOrigem} />
-          </div>
-          <div className="grid md:grid-cols-3 gap-3">
-            <div className="md:col-span-2">
-              <Rotulo>Classe / tipo *</Rotulo>
-              <SelecaoClasse valor={classe} onChange={setClasse} classes={classes} />
-            </div>
-            <div>
-              <Rotulo>Unidade de medida *</Rotulo>
-              <SelecaoUnidade valor={unidade} onChange={setUnidade} unidades={unidades} />
-            </div>
-          </div>
-          <div>
-            <Rotulo>Aplicação (opcional)</Rotulo>
-            <textarea
-              value={aplicacao}
-              onChange={(e) => setAplicacao(e.target.value)}
-              rows={3}
-              placeholder="Para que serve e onde vai ser usado - ajuda o fiscal a classificar o item."
-              className={entrada}
-            />
-          </div>
-          <div className="grid md:grid-cols-3 gap-3 items-end">
-            <div>
-              <Rotulo>NCM (opcional)</Rotulo>
-              <input value={ncm} onChange={(e) => setNcm(e.target.value)} inputMode="numeric" placeholder="0000.00.00" className={entrada} />
-            </div>
-            <label className="md:col-span-2 flex items-start gap-2 cursor-pointer pb-2">
-              <input type="checkbox" checked={urgente} onChange={(e) => setUrgente(e.target.checked)} className="mt-0.5 accent-red-600" />
-              <span>
-                <b>Urgente</b>
-                <span className="block text-[11px] text-slate-400">Compra parada esperando o código - o cadastro e o fiscal veem destacado.</span>
-              </span>
-            </label>
-          </div>
-          {erro && <p className="text-red-600">{erro}</p>}
-        </div>
-        <div className="p-4 border-t flex justify-end gap-2 bg-slate-50/60 rounded-b-xl">
-          <button onClick={onFechar} className="px-3 py-2 rounded-lg border text-slate-600 font-semibold text-sm">
+    <Modal
+      titulo={devolvida ? `Corrigir solicitação nº ${devolvida.numero}` : "Solicitar cadastro de material"}
+      subtitulo="O responsável pelo cadastro revisa, o fiscal completa as informações fiscais e o item é criado no ERP."
+      onFechar={onFechar}
+      sujo={sujo && !enviando}
+      largura="2xl"
+      rodape={
+        <>
+          <button type="button" onClick={cancelar} className="px-3 py-2 rounded-lg border text-slate-600 font-semibold text-sm">
             Cancelar
           </button>
-          <button disabled={enviando} onClick={enviar} className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-1 text-sm disabled:opacity-60">
+          <button
+            type="button"
+            disabled={enviando}
+            onClick={enviar}
+            className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-1 text-sm disabled:opacity-60"
+          >
             {enviando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} {devolvida ? "Reenviar" : "Enviar para o cadastro"}
           </button>
+        </>
+      }
+    >
+      <div className="space-y-3 text-sm" onChange={() => setSujo(true)}>
+        {devolvida?.motivo && (
+          <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">
+            <b>Devolvida por {devolvida.nome_motivo}:</b> {devolvida.motivo}
+          </p>
+        )}
+        <div>
+          <Rotulo>Descrição do item *</Rotulo>
+          <input
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+            maxLength={120}
+            placeholder="Ex.: VÁLVULA ESFERA INOX 316 1/2 POL ROSCA NPT"
+            className={entrada}
+            autoFocus
+          />
+          <p className="text-xs text-slate-500 mt-1">Nome técnico: tipo do item, material, medidas, norma/padrão e acabamento. {descricao.length}/120</p>
         </div>
+        <ListaSimilares lista={lista} buscando={buscando} titulo="Itens parecidos já cadastrados ou pedidos" />
+        <div>
+          <Rotulo>O item é *</Rotulo>
+          <SelecaoOrigem
+              valor={origem}
+              onChange={(v) => {
+                setOrigem(v);
+                setSujo(true);
+              }}
+            />
+        </div>
+        <div className="grid md:grid-cols-3 gap-3">
+          <div className="md:col-span-2">
+            <Rotulo>Classe / tipo *</Rotulo>
+            <SelecaoClasse valor={classe} onChange={setClasse} classes={classes} />
+          </div>
+          <div>
+            <Rotulo>Unidade de medida *</Rotulo>
+            <SelecaoUnidade valor={unidade} onChange={setUnidade} unidades={unidades} />
+          </div>
+        </div>
+        <div>
+          <Rotulo>Aplicação (opcional)</Rotulo>
+          <textarea
+            value={aplicacao}
+            onChange={(e) => setAplicacao(e.target.value)}
+            rows={3}
+            placeholder="Para que serve e onde vai ser usado - ajuda o fiscal a classificar o item."
+            className={entrada}
+          />
+        </div>
+        <div className="grid md:grid-cols-3 gap-3 items-end">
+          <div>
+            <Rotulo>NCM (opcional)</Rotulo>
+            <input value={ncm} onChange={(e) => setNcm(e.target.value)} inputMode="numeric" placeholder="0000.00.00" className={entrada} />
+          </div>
+          <label className="md:col-span-2 flex items-start gap-2 cursor-pointer pb-2">
+            <input type="checkbox" checked={urgente} onChange={(e) => setUrgente(e.target.checked)} className="mt-0.5 accent-red-600" />
+            <span>
+              <b>Urgente</b>
+              <span className="block text-xs text-slate-500">Compra parada esperando o código - o cadastro e o fiscal veem destacado.</span>
+            </span>
+          </label>
+        </div>
+        {erro && <p className="text-red-600">{erro}</p>}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -442,7 +472,7 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
 // ------------------------------------------------------------------------------------------------
 const Info = ({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) => (
   <div>
-    <p className="text-[11px] text-slate-400">{rotulo}</p>
+    <p className="text-xs text-slate-500">{rotulo}</p>
     <div>{valor ?? "-"}</div>
   </div>
 );
@@ -482,6 +512,8 @@ function DetalheMaterial({
   const [codigoEdit, setCodigoEdit] = useState("");
   const [sugestao, setSugestao] = useState("");
   const [robo, setRobo] = useState(false);
+  // alteracao feita pela pessoa nos campos de revisao (efeitos automaticos, como o codigo sugerido, nao marcam)
+  const [sujo, setSujo] = useState(false);
 
   const admin = usuario?.perfil === "admin";
   const ehCadastro = admin || Boolean(usuario?.cadastra_materiais);
@@ -557,6 +589,8 @@ function DetalheMaterial({
       return false;
     }
     if (sucesso) aviso.sucesso(sucesso);
+    // gravou: os campos voltam a refletir o banco, nada pendente para descartar
+    setSujo(false);
     await carregar();
     onAlterada();
     return true;
@@ -608,362 +642,408 @@ function DetalheMaterial({
         `IPI: ${String(s.pct_ipi ?? "").replace(".", ",")}%`,
       ].join("\n")
     : "";
+  // sem nenhum botao (ex.: cadastrada, recusada) nao mostra a faixa do rodape
+  const temAcoes = Boolean(
+    s &&
+      ((["cadastro", "fiscal", "devolvida"].includes(s.status) && (ehSolicitante || admin)) ||
+        revisandoCadastro ||
+        revisandoFiscal ||
+        (s.status === "erp" && ehFiscal)),
+  );
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onFechar} className="absolute right-3 top-3 text-slate-400" aria-label="Fechar">
-          <X size={20} />
-        </button>
-        {!s ? (
-          <p className="p-6 text-sm text-slate-400">{erro || "Carregando…"}</p>
+    <Modal
+      titulo={
+        s ? (
+          <span className="flex items-center gap-2 flex-wrap">
+            Material nº {s.numero} <Badge status={s.status} urgente={s.urgente} />
+          </span>
         ) : (
+          "Material"
+        )
+      }
+      rotulo={s ? `Material nº ${s.numero}` : "Material"}
+      subtitulo={
+        s ? (
           <>
-            <div className="p-4 border-b pr-10">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-lg">Material nº {s.numero}</h3>
-                <Badge status={s.status} urgente={s.urgente} />
-              </div>
-              <p className="text-sm text-slate-700 font-semibold">{s.descricao}</p>
-              <p className="text-[12px] text-slate-500">
-                Solicitado por {s.nome_solicitante} em {fmtDataHora(s.created_at)}
-              </p>
-            </div>
-            <div className="overflow-y-auto p-4 space-y-4 text-sm">
-              {s.motivo && ["devolvida", "recusada", "cancelada", "cadastro", "fiscal"].includes(s.status) && (
-                <p className={`rounded-lg px-3 py-2 border ${s.status === "cancelada" ? "bg-slate-100 text-slate-600" : "bg-red-50 border-red-200 text-red-700"}`}>
-                  <b>
-                    {s.status === "recusada" ? "Recusada" : s.status === "cancelada" ? "Cancelada" : "Devolvida"} por {s.nome_motivo}:
-                  </b>{" "}
-                  {s.motivo}
-                </p>
-              )}
-              {s.status === "recusada" && s.codigo_existente && (
-                <p className="rounded-lg px-3 py-2 border bg-emerald-50 border-emerald-200 text-emerald-800">
-                  Use o item já cadastrado <b className="font-mono">{s.codigo_edit || s.codigo_existente}</b>.
-                </p>
-              )}
-              {s.status === "concluida" && (
-                <p className="rounded-lg px-3 py-2 border bg-emerald-50 border-emerald-200 text-emerald-800 flex items-center gap-2 flex-wrap">
-                  <CheckCircle2 size={16} /> Cadastrado no ERP com o código <b className="font-mono">{s.codigo_edit || s.codigo_erp}</b>
-                  <span className="text-[12px] text-emerald-700">
-                    ({s.nome_concluiu}, {fmtDataHora(s.concluida_em)})
-                  </span>
-                </p>
-              )}
-
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <Info rotulo="Origem" valor={origemTxt(s.origem) || "-"} />
-                <Info rotulo="Classe / tipo" valor={nomeClasse(s.classe_tipo)} />
-                <Info rotulo="Unidade" valor={nomeUnidade(s.unidade)} />
-                <Info rotulo="NCM sugerido" valor={s.ncm_sugerido ? formatarNcm(s.ncm_sugerido) : "-"} />
-                {s.descricao !== s.descricao_solicitada && <Info rotulo="Pedido como" valor={s.descricao_solicitada} />}
-                {s.nome_cadastro && <Info rotulo="Cadastro" valor={`${s.nome_cadastro} · ${fmtDataHora(s.cadastro_em)}`} />}
-                {s.nome_fiscal && <Info rotulo="Fiscal" valor={`${s.nome_fiscal} · ${fmtDataHora(s.fiscal_em)}`} />}
-              </div>
-              {s.aplicacao && (
-                <div>
-                  <p className="text-[11px] text-slate-400">Aplicação</p>
-                  <p className="whitespace-pre-wrap border rounded-lg p-3">{s.aplicacao}</p>
-                </div>
-              )}
-              {s.obs_cadastro && <Info rotulo="Observação do cadastro" valor={s.obs_cadastro} />}
-              {s.ncm && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 border rounded-lg p-3">
-                  <Info rotulo="NCM" valor={<b>{formatarNcm(s.ncm)}</b>} />
-                  <Info rotulo="Gênero" valor={s.genero} />
-                  <Info rotulo="Tipo do item" valor={tipoTxt(s.tipo_item)} />
-                  <Info rotulo="IPI" valor={`${String(s.pct_ipi ?? 0).replace(".", ",")}%`} />
-                  {s.obs_fiscal && (
-                    <div className="col-span-2 md:col-span-4">
-                      <Info rotulo="Observação fiscal" valor={s.obs_fiscal} />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ---------------- revisao do cadastro ---------------- */}
-              {revisandoCadastro && (
-                <div className="border-2 border-blue-200 rounded-xl p-3 space-y-3 bg-blue-50/30">
-                  <p className="font-bold text-blue-800">Revisão do cadastro</p>
-                  <div>
-                    <Rotulo>Descrição padronizada *</Rotulo>
-                    <input value={descricao} onChange={(e) => setDescricao(e.target.value)} maxLength={120} className={entrada} />
-                  </div>
-                  <div>
-                    <Rotulo>O item é *</Rotulo>
-                    <SelecaoOrigem valor={origem} onChange={setOrigem} />
-                  </div>
-                  <ListaSimilares
-                    lista={lista}
-                    buscando={buscando}
-                    titulo="Parecidos no ERP e pedidos em andamento"
-                    onUsar={(x) => recusar(x.codigo_edit || String(x.codigo))}
-                  />
-                  <div className="grid md:grid-cols-3 gap-3">
-                    <div className="md:col-span-2">
-                      <Rotulo>Classe / tipo *</Rotulo>
-                      <SelecaoClasse valor={classe} onChange={setClasse} classes={classes} />
-                    </div>
-                    <div>
-                      <Rotulo>Unidade *</Rotulo>
-                      <SelecaoUnidade valor={unidade} onChange={setUnidade} unidades={unidades} />
-                    </div>
-                  </div>
-                  <div>
-                    <Rotulo>Observação para o fiscal (opcional)</Rotulo>
-                    <input value={obs} onChange={(e) => setObs(e.target.value)} className={entrada} />
-                  </div>
-                </div>
-              )}
-
-              {/* ---------------- revisao fiscal ---------------- */}
-              {revisandoFiscal && (
-                <div className="border-2 border-amber-200 rounded-xl p-3 space-y-3 bg-amber-50/30">
-                  <p className="font-bold text-amber-800">Revisão fiscal</p>
-                  {(s.similares || []).length > 0 && <ListaSimilares lista={s.similares} titulo="Parecidos no ERP no momento do pedido (veja o NCM usado)" />}
-                  <div className="grid md:grid-cols-3 gap-3">
-                    <div>
-                      <Rotulo>NCM *</Rotulo>
-                      <input value={ncm} onChange={(e) => setNcm(e.target.value)} inputMode="numeric" placeholder="0000.00.00" className={entrada} />
-                      {ncmDesc !== null && (
-                        <p className={`text-[11px] mt-1 ${ncmDesc ? "text-slate-500" : "text-red-600"}`}>{ncmDesc || "NCM não está na tabela do ERP"}</p>
-                      )}
-                    </div>
-                    <div>
-                      <Rotulo>Tipo do item (SPED) *</Rotulo>
-                      <select value={tipoItem} onChange={(e) => setTipoItem(e.target.value)} className={`${entrada} bg-white`}>
-                        <option value="">Escolha…</option>
-                        {TIPOS_ITEM.map(([k, t]) => (
-                          <option key={k} value={k}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <Rotulo>% IPI *</Rotulo>
-                      <input value={ipi} onChange={(e) => setIpi(e.target.value)} inputMode="decimal" placeholder="0" className={entrada} />
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-slate-500">
-                    O gênero é o capítulo do NCM (2 primeiros dígitos) e é preenchido sozinho. Item de serviço usa sempre o tipo 09 (e o tipo 09 só serve
-                    para serviço) - é ele que faz o pedido aparecer na seção de serviços do app.
-                  </p>
-                  <div className="grid md:grid-cols-3 gap-3">
-                    <div>
-                      <Rotulo>Código no ERP *</Rotulo>
-                      <input value={codigoEdit} onChange={(e) => setCodigoEdit(e.target.value)} placeholder={sugestao} className={`${entrada} font-mono`} />
-                    </div>
-                    <p className="md:col-span-2 text-[11px] text-slate-500 self-end">
-                      Sugerido: <b className="font-mono">{sugestao || "…"}</b> (próximo da sequência da classe/tipo). Pode trocar; tem que começar com a
-                      classe/tipo e não pode existir no ERP.
-                    </p>
-                  </div>
-                  <div>
-                    <Rotulo>Observação fiscal (opcional)</Rotulo>
-                    <input value={obsFiscal} onChange={(e) => setObsFiscal(e.target.value)} placeholder="Ex.: CEST, origem, benefício…" className={entrada} />
-                  </div>
-                </div>
-              )}
-
-              {/* ---------------- criar no ERP ---------------- */}
-              {s.status === "erp" && (
-                <div className="border-2 border-violet-200 rounded-xl p-3 space-y-3 bg-violet-50/30">
-                  <p className="font-bold text-violet-800">
-                    {robo ? "Aprovado - o robô está criando o item no ERP" : "Aprovado - falta criar o item no ERP"}
-                  </p>
-                  {robo && (
-                    <p className="text-[12px] text-slate-600">
-                      O robô cria o item no ERP com o código <b className="font-mono">{s.codigo_edit_proposto}</b> em até 5 minutos e avisa o solicitante, o
-                      cadastro e a coordenação.
-                    </p>
-                  )}
-                  {s.erp_erro && (
-                    <p className="rounded-lg px-3 py-2 border bg-red-50 border-red-200 text-red-700 text-[12px]">
-                      <b>O robô não conseguiu criar:</b> {s.erp_erro}
-                    </p>
-                  )}
-                  {ehFiscal && (
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <Rotulo>Código no ERP</Rotulo>
-                        <input value={codigoEdit} onChange={(e) => setCodigoEdit(e.target.value)} placeholder={sugestao} className={`${entrada} font-mono`} />
-                      </div>
-                      <button
-                        disabled={ocupado || !codigoEdit.trim() || codigoEdit.trim().toUpperCase() === s.codigo_edit_proposto}
-                        onClick={() =>
-                          rpc(
-                            "mat_alterar_codigo_proposto",
-                            { p_codigo_edit: codigoEdit.trim().toUpperCase() === sugestao ? null : codigoEdit.trim() },
-                            `Código proposto da solicitação ${nSol} trocado para ${codigoEdit.trim().toUpperCase()}.`,
-                          )
-                        }
-                        className="px-3 py-2 rounded-lg border border-violet-300 text-violet-800 font-bold text-sm disabled:opacity-50"
-                      >
-                        Trocar código
-                      </button>
-                    </div>
-                  )}
-                  <pre className="text-[12px] bg-white border rounded-lg p-2 whitespace-pre-wrap">{resumoErp}</pre>
-                  <button
-                    onClick={() => navigator.clipboard?.writeText(resumoErp)}
-                    className="text-[12px] font-semibold text-violet-700 flex items-center gap-1 hover:underline"
-                  >
-                    <Copy size={12} /> Copiar os dados
-                  </button>
-                  {!robo && (
-                    <p className="text-[12px] text-slate-600">
-                      Crie o item na tela de materiais do ERP com <b>exatamente esta descrição</b> e o código acima: o robô liga o código sozinho em até 5
-                      minutos. Se a descrição ficou diferente, informe o código abaixo.
-                    </p>
-                  )}
-                  {(ehFiscal || ehCadastro) && !robo && (
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <Rotulo>Código criado no ERP</Rotulo>
-                        <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="10.230.0001" className={entrada} />
-                      </div>
-                      <button
-                        disabled={ocupado || !codigo.trim()}
-                        onClick={() => rpc("mat_informar_codigo", { p_codigo: codigo.trim() }, `Código ${codigo.trim()} ligado à solicitação de material ${nSol}.`)}
-                        className="px-3 py-2 rounded-lg bg-violet-700 text-white font-bold text-sm disabled:opacity-50"
-                      >
-                        Informar código
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Histórico</p>
-                <ul className="space-y-1">
-                  {eventos.map((e) => (
-                    <li key={e.id} className="text-[12px] text-slate-600">
-                      <span className="text-slate-400">{fmtDataHora(e.created_at)}</span> · <b>{EVENTO[e.evento] || e.evento}</b>
-                      {e.nome_usuario && e.nome_usuario !== "Sistema" ? ` (${e.nome_usuario})` : ""}
-                      {e.detalhe ? ` — ${e.detalhe}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              {erro && <p className="text-red-600">{erro}</p>}
-            </div>
-
-            <div className="p-4 border-t flex flex-wrap justify-end gap-2 bg-slate-50/60 rounded-b-xl">
-              {["cadastro", "fiscal", "devolvida"].includes(s.status) && (ehSolicitante || admin) && (
+            <span className="block text-slate-700 font-semibold">{s.descricao}</span>
+            <span className="block text-xs">
+              Solicitado por {s.nome_solicitante} em {fmtDataHora(s.created_at)}
+            </span>
+          </>
+        ) : undefined
+      }
+      onFechar={onFechar}
+      sujo={sujo && !ocupado}
+      largura="3xl"
+      rodape={
+        s && temAcoes ? (
+          <div className="flex flex-col-reverse md:flex-row md:flex-wrap md:justify-end gap-2 w-full">
+            {["cadastro", "fiscal", "devolvida"].includes(s.status) && (ehSolicitante || admin) && (
+              <button
+                disabled={ocupado}
+                onClick={() =>
+                  comMotivo("mat_cancelar", "Motivo do cancelamento", `Solicitação de material ${nSol} cancelada.`, {
+                    rotuloConfirmar: "Cancelar pedido",
+                    perigo: true,
+                  })
+                }
+                className="px-3 py-2 rounded-lg border text-slate-600 font-semibold flex items-center gap-1 text-sm"
+              >
+                <XCircle size={14} /> Cancelar pedido
+              </button>
+            )}
+            {s.status === "devolvida" && (ehSolicitante || admin) && (
+              <button onClick={() => onCorrigir(s)} className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-1 text-sm">
+                <Send size={14} /> Corrigir e reenviar
+              </button>
+            )}
+            {(revisandoCadastro || revisandoFiscal) && (
+              <>
+                <button
+                  disabled={ocupado}
+                  onClick={() => recusar()}
+                  className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 font-semibold flex items-center gap-1 text-sm"
+                >
+                  <XCircle size={14} /> Recusar
+                </button>
                 <button
                   disabled={ocupado}
                   onClick={() =>
-                    comMotivo("mat_cancelar", "Motivo do cancelamento", `Solicitação de material ${nSol} cancelada.`, {
-                      rotuloConfirmar: "Cancelar pedido",
-                      perigo: true,
-                    })
+                    comMotivo(
+                      "mat_devolver",
+                      revisandoCadastro ? "O que o solicitante precisa corrigir?" : "Motivo da devolução ao cadastro",
+                      revisandoCadastro
+                        ? `Solicitação de material ${nSol} devolvida ao solicitante para correção.`
+                        : `Solicitação de material ${nSol} devolvida ao cadastro.`,
+                      { rotuloConfirmar: "Devolver" },
+                    )
                   }
-                  className="px-3 py-2 rounded-lg border text-slate-600 font-semibold flex items-center gap-1 text-sm"
+                  className="px-3 py-2 rounded-lg border border-red-200 text-red-700 font-semibold flex items-center gap-1 text-sm"
                 >
-                  <XCircle size={14} /> Cancelar pedido
+                  <RotateCcw size={14} /> {revisandoCadastro ? "Devolver ao solicitante" : "Devolver ao cadastro"}
                 </button>
+              </>
+            )}
+            {s.status === "erp" && ehFiscal && (
+              <button
+                disabled={ocupado}
+                onClick={() =>
+                  comMotivo("mat_devolver", "Por que voltar para a revisão fiscal?", `Solicitação de material ${nSol} voltou para a revisão fiscal.`, {
+                    rotuloConfirmar: "Voltar para revisão fiscal",
+                  })
+                }
+                className="px-3 py-2 rounded-lg border text-slate-600 font-semibold flex items-center gap-1 text-sm"
+              >
+                <RotateCcw size={14} /> Voltar para revisão fiscal
+              </button>
+            )}
+            {revisandoCadastro && (
+              <button
+                disabled={ocupado}
+                onClick={() =>
+                  rpc(
+                    "mat_aprovar_cadastro",
+                    { p_descricao: descricao, p_classe_tipo: Number(classe), p_unidade: unidade, p_obs: obs || null, p_origem: origem || null },
+                    `Solicitação de material ${nSol} aprovada e enviada ao fiscal.`,
+                  )
+                }
+                className="px-4 py-2 rounded-lg bg-blue-700 text-white font-bold flex items-center gap-1 text-sm disabled:opacity-60"
+              >
+                <CheckCircle2 size={14} /> Aprovar e enviar ao fiscal
+              </button>
+            )}
+            {revisandoFiscal && (
+              <button
+                disabled={ocupado}
+                onClick={() =>
+                  rpc(
+                    "mat_aprovar_fiscal",
+                    {
+                      p_ncm: ncm,
+                      p_tipo_item: tipoItem === "" ? null : Number(tipoItem),
+                      p_pct_ipi: ipi.trim() === "" ? null : Number(ipi.replace(",", ".")),
+                      p_obs: obsFiscal || null,
+                      p_codigo_edit: codigoEdit.trim() && codigoEdit.trim().toUpperCase() !== sugestao ? codigoEdit.trim() : null,
+                    },
+                    robo
+                      ? `Solicitação de material ${nSol} aprovada pelo fiscal: o robô cria o item no ERP em até 5 minutos.`
+                      : `Solicitação de material ${nSol} aprovada pelo fiscal: crie o item no ERP com os dados mostrados.`,
+                  )
+                }
+                className="px-4 py-2 rounded-lg bg-amber-600 text-white font-bold flex items-center gap-1 text-sm disabled:opacity-60"
+              >
+                <CheckCircle2 size={14} /> Aprovar (criar no ERP)
+              </button>
+            )}
+          </div>
+        ) : undefined
+      }
+    >
+      {!s ? (
+        <p className="text-sm text-slate-500">{erro || "Carregando…"}</p>
+      ) : (
+        // onChange no envoltorio: qualquer campo alterado pela pessoa marca a janela como "com alteracoes"
+        <div className="space-y-4 text-sm" onChange={() => setSujo(true)}>
+          {s.motivo && ["devolvida", "recusada", "cancelada", "cadastro", "fiscal"].includes(s.status) && (
+            <p className={`rounded-lg px-3 py-2 border ${s.status === "cancelada" ? "bg-slate-100 text-slate-600" : "bg-red-50 border-red-200 text-red-700"}`}>
+              <b>
+                {s.status === "recusada" ? "Recusada" : s.status === "cancelada" ? "Cancelada" : "Devolvida"} por {s.nome_motivo}:
+              </b>{" "}
+              {s.motivo}
+            </p>
+          )}
+          {s.status === "recusada" && s.codigo_existente && (
+            <p className="rounded-lg px-3 py-2 border bg-emerald-50 border-emerald-200 text-emerald-800">
+              Use o item já cadastrado <b className="font-mono">{s.codigo_edit || s.codigo_existente}</b>.
+            </p>
+          )}
+          {s.status === "concluida" && (
+            <p className="rounded-lg px-3 py-2 border bg-emerald-50 border-emerald-200 text-emerald-800 flex items-center gap-2 flex-wrap">
+              <CheckCircle2 size={16} /> Cadastrado no ERP com o código <b className="font-mono">{s.codigo_edit || s.codigo_erp}</b>
+              <span className="text-[12px] text-emerald-700">
+                ({s.nome_concluiu}, {fmtDataHora(s.concluida_em)})
+              </span>
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <Info rotulo="Origem" valor={origemTxt(s.origem) || "-"} />
+            <Info rotulo="Classe / tipo" valor={nomeClasse(s.classe_tipo)} />
+            <Info rotulo="Unidade" valor={nomeUnidade(s.unidade)} />
+            <Info rotulo="NCM sugerido" valor={s.ncm_sugerido ? formatarNcm(s.ncm_sugerido) : "-"} />
+            {s.descricao !== s.descricao_solicitada && <Info rotulo="Pedido como" valor={s.descricao_solicitada} />}
+            {s.nome_cadastro && <Info rotulo="Cadastro" valor={`${s.nome_cadastro} · ${fmtDataHora(s.cadastro_em)}`} />}
+            {s.nome_fiscal && <Info rotulo="Fiscal" valor={`${s.nome_fiscal} · ${fmtDataHora(s.fiscal_em)}`} />}
+          </div>
+          {s.aplicacao && (
+            <div>
+              <p className="text-xs text-slate-500">Aplicação</p>
+              <p className="whitespace-pre-wrap border rounded-lg p-3">{s.aplicacao}</p>
+            </div>
+          )}
+          {s.obs_cadastro && <Info rotulo="Observação do cadastro" valor={s.obs_cadastro} />}
+          {s.ncm && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 border rounded-lg p-3">
+              <Info rotulo="NCM" valor={<b>{formatarNcm(s.ncm)}</b>} />
+              <Info rotulo="Gênero" valor={s.genero} />
+              <Info rotulo="Tipo do item" valor={tipoTxt(s.tipo_item)} />
+              <Info rotulo="IPI" valor={`${String(s.pct_ipi ?? 0).replace(".", ",")}%`} />
+              {s.obs_fiscal && (
+                <div className="col-span-2 md:col-span-4">
+                  <Info rotulo="Observação fiscal" valor={s.obs_fiscal} />
+                </div>
               )}
-              {s.status === "devolvida" && (ehSolicitante || admin) && (
-                <button onClick={() => onCorrigir(s)} className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-1 text-sm">
-                  <Send size={14} /> Corrigir e reenviar
-                </button>
+            </div>
+          )}
+
+          {/* ---------------- revisao do cadastro ---------------- */}
+          {revisandoCadastro && (
+            <div className="border-2 border-blue-200 rounded-xl p-3 space-y-3 bg-blue-50/30">
+              <p className="font-bold text-blue-800">Revisão do cadastro</p>
+              <div>
+                <Rotulo>Descrição padronizada *</Rotulo>
+                <input value={descricao} onChange={(e) => setDescricao(e.target.value)} maxLength={120} className={entrada} />
+              </div>
+              <div>
+                <Rotulo>O item é *</Rotulo>
+                <SelecaoOrigem
+                  valor={origem}
+                  onChange={(v) => {
+                    setOrigem(v);
+                    setSujo(true);
+                  }}
+                />
+              </div>
+              <ListaSimilares
+                lista={lista}
+                buscando={buscando}
+                titulo="Parecidos no ERP e pedidos em andamento"
+                onUsar={(x) => recusar(x.codigo_edit || String(x.codigo))}
+              />
+              <div className="grid md:grid-cols-3 gap-3">
+                <div className="md:col-span-2">
+                  <Rotulo>Classe / tipo *</Rotulo>
+                  <SelecaoClasse valor={classe} onChange={setClasse} classes={classes} />
+                </div>
+                <div>
+                  <Rotulo>Unidade *</Rotulo>
+                  <SelecaoUnidade valor={unidade} onChange={setUnidade} unidades={unidades} />
+                </div>
+              </div>
+              <div>
+                <Rotulo>Observação para o fiscal (opcional)</Rotulo>
+                <input value={obs} onChange={(e) => setObs(e.target.value)} className={entrada} />
+              </div>
+            </div>
+          )}
+
+          {/* ---------------- revisao fiscal ---------------- */}
+          {revisandoFiscal && (
+            <div className="border-2 border-amber-200 rounded-xl p-3 space-y-3 bg-amber-50/30">
+              <p className="font-bold text-amber-800">Revisão fiscal</p>
+              {(s.similares || []).length > 0 && <ListaSimilares lista={s.similares} titulo="Parecidos no ERP no momento do pedido (veja o NCM usado)" />}
+              <div className="grid md:grid-cols-3 gap-3">
+                <div>
+                  <Rotulo>NCM *</Rotulo>
+                  <input value={ncm} onChange={(e) => setNcm(e.target.value)} inputMode="numeric" placeholder="0000.00.00" className={entrada} />
+                  {ncmDesc !== null && (
+                    <p className={`text-xs mt-1 ${ncmDesc ? "text-slate-500" : "text-red-600"}`}>{ncmDesc || "NCM não está na tabela do ERP"}</p>
+                  )}
+                </div>
+                <div>
+                  <Rotulo>Tipo do item (SPED) *</Rotulo>
+                  <select value={tipoItem} onChange={(e) => setTipoItem(e.target.value)} className={`${entrada} bg-white`}>
+                    <option value="">Escolha…</option>
+                    {TIPOS_ITEM.map(([k, t]) => (
+                      <option key={k} value={k}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Rotulo>% IPI *</Rotulo>
+                  <input value={ipi} onChange={(e) => setIpi(e.target.value)} inputMode="decimal" placeholder="0" className={entrada} />
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">
+                O gênero é o capítulo do NCM (2 primeiros dígitos) e é preenchido sozinho. Item de serviço usa sempre o tipo 09 (e o tipo 09 só serve
+                para serviço) - é ele que faz o pedido aparecer na seção de serviços do app.
+              </p>
+              <div className="grid md:grid-cols-3 gap-3">
+                <div>
+                  <Rotulo>Código no ERP *</Rotulo>
+                  <input value={codigoEdit} onChange={(e) => setCodigoEdit(e.target.value)} placeholder={sugestao} className={`${entrada} font-mono`} />
+                </div>
+                <p className="md:col-span-2 text-xs text-slate-500 self-end">
+                  Sugerido: <b className="font-mono">{sugestao || "…"}</b> (próximo da sequência da classe/tipo). Pode trocar; tem que começar com a
+                  classe/tipo e não pode existir no ERP.
+                </p>
+              </div>
+              <div>
+                <Rotulo>Observação fiscal (opcional)</Rotulo>
+                <input value={obsFiscal} onChange={(e) => setObsFiscal(e.target.value)} placeholder="Ex.: CEST, origem, benefício…" className={entrada} />
+              </div>
+            </div>
+          )}
+
+          {/* ---------------- criar no ERP ---------------- */}
+          {s.status === "erp" && (
+            <div className="border-2 border-violet-200 rounded-xl p-3 space-y-3 bg-violet-50/30">
+              <p className="font-bold text-violet-800">
+                {robo ? "Aprovado - o robô está criando o item no ERP" : "Aprovado - falta criar o item no ERP"}
+              </p>
+              {robo && (
+                <p className="text-[12px] text-slate-600">
+                  O robô cria o item no ERP com o código <b className="font-mono">{s.codigo_edit_proposto}</b> em até 5 minutos e avisa o solicitante, o
+                  cadastro e a coordenação.
+                </p>
               )}
-              {(revisandoCadastro || revisandoFiscal) && (
-                <>
+              {s.erp_erro && (
+                <p className="rounded-lg px-3 py-2 border bg-red-50 border-red-200 text-red-700 text-[12px]">
+                  <b>O robô não conseguiu criar:</b> {s.erp_erro}
+                </p>
+              )}
+              {ehFiscal && (
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <Rotulo>Código no ERP</Rotulo>
+                    <input value={codigoEdit} onChange={(e) => setCodigoEdit(e.target.value)} placeholder={sugestao} className={`${entrada} font-mono`} />
+                  </div>
                   <button
-                    disabled={ocupado}
-                    onClick={() => recusar()}
-                    className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 font-semibold flex items-center gap-1 text-sm"
-                  >
-                    <XCircle size={14} /> Recusar
-                  </button>
-                  <button
-                    disabled={ocupado}
+                    disabled={ocupado || !codigoEdit.trim() || codigoEdit.trim().toUpperCase() === s.codigo_edit_proposto}
                     onClick={() =>
-                      comMotivo(
-                        "mat_devolver",
-                        revisandoCadastro ? "O que o solicitante precisa corrigir?" : "Motivo da devolução ao cadastro",
-                        revisandoCadastro
-                          ? `Solicitação de material ${nSol} devolvida ao solicitante para correção.`
-                          : `Solicitação de material ${nSol} devolvida ao cadastro.`,
-                        { rotuloConfirmar: "Devolver" },
+                      rpc(
+                        "mat_alterar_codigo_proposto",
+                        { p_codigo_edit: codigoEdit.trim().toUpperCase() === sugestao ? null : codigoEdit.trim() },
+                        `Código proposto da solicitação ${nSol} trocado para ${codigoEdit.trim().toUpperCase()}.`,
                       )
                     }
-                    className="px-3 py-2 rounded-lg border border-red-200 text-red-700 font-semibold flex items-center gap-1 text-sm"
+                    className="px-3 py-2 rounded-lg border border-violet-300 text-violet-800 font-bold text-sm disabled:opacity-50"
                   >
-                    <RotateCcw size={14} /> {revisandoCadastro ? "Devolver ao solicitante" : "Devolver ao cadastro"}
+                    Trocar código
                   </button>
-                </>
+                </div>
               )}
-              {s.status === "erp" && ehFiscal && (
-                <button
-                  disabled={ocupado}
-                  onClick={() =>
-                    comMotivo("mat_devolver", "Por que voltar para a revisão fiscal?", `Solicitação de material ${nSol} voltou para a revisão fiscal.`, {
-                      rotuloConfirmar: "Voltar para revisão fiscal",
-                    })
-                  }
-                  className="px-3 py-2 rounded-lg border text-slate-600 font-semibold flex items-center gap-1 text-sm"
-                >
-                  <RotateCcw size={14} /> Voltar para revisão fiscal
-                </button>
+              <pre className="text-[12px] bg-white border rounded-lg p-2 whitespace-pre-wrap">{resumoErp}</pre>
+              <button
+                onClick={() => navigator.clipboard?.writeText(resumoErp)}
+                className="text-[12px] font-semibold text-violet-700 flex items-center gap-1 hover:underline"
+              >
+                <Copy size={12} /> Copiar os dados
+              </button>
+              {!robo && (
+                <p className="text-[12px] text-slate-600">
+                  Crie o item na tela de materiais do ERP com <b>exatamente esta descrição</b> e o código acima: o robô liga o código sozinho em até 5
+                  minutos. Se a descrição ficou diferente, informe o código abaixo.
+                </p>
               )}
-              {revisandoCadastro && (
-                <button
-                  disabled={ocupado}
-                  onClick={() =>
-                    rpc(
-                      "mat_aprovar_cadastro",
-                      { p_descricao: descricao, p_classe_tipo: Number(classe), p_unidade: unidade, p_obs: obs || null, p_origem: origem || null },
-                      `Solicitação de material ${nSol} aprovada e enviada ao fiscal.`,
-                    )
-                  }
-                  className="px-4 py-2 rounded-lg bg-blue-700 text-white font-bold flex items-center gap-1 text-sm disabled:opacity-60"
-                >
-                  <CheckCircle2 size={14} /> Aprovar e enviar ao fiscal
-                </button>
-              )}
-              {revisandoFiscal && (
-                <button
-                  disabled={ocupado}
-                  onClick={() =>
-                    rpc(
-                      "mat_aprovar_fiscal",
-                      {
-                        p_ncm: ncm,
-                        p_tipo_item: tipoItem === "" ? null : Number(tipoItem),
-                        p_pct_ipi: ipi.trim() === "" ? null : Number(ipi.replace(",", ".")),
-                        p_obs: obsFiscal || null,
-                        p_codigo_edit: codigoEdit.trim() && codigoEdit.trim().toUpperCase() !== sugestao ? codigoEdit.trim() : null,
-                      },
-                      robo
-                        ? `Solicitação de material ${nSol} aprovada pelo fiscal: o robô cria o item no ERP em até 5 minutos.`
-                        : `Solicitação de material ${nSol} aprovada pelo fiscal: crie o item no ERP com os dados mostrados.`,
-                    )
-                  }
-                  className="px-4 py-2 rounded-lg bg-amber-600 text-white font-bold flex items-center gap-1 text-sm disabled:opacity-60"
-                >
-                  <CheckCircle2 size={14} /> Aprovar (criar no ERP)
-                </button>
+              {(ehFiscal || ehCadastro) && !robo && (
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <Rotulo>Código criado no ERP</Rotulo>
+                    <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="10.230.0001" className={entrada} />
+                  </div>
+                  <button
+                    disabled={ocupado || !codigo.trim()}
+                    onClick={() => rpc("mat_informar_codigo", { p_codigo: codigo.trim() }, `Código ${codigo.trim()} ligado à solicitação de material ${nSol}.`)}
+                    className="px-3 py-2 rounded-lg bg-violet-700 text-white font-bold text-sm disabled:opacity-50"
+                  >
+                    Informar código
+                  </button>
+                </div>
               )}
             </div>
-          </>
-        )}
-      </div>
-    </div>
+          )}
+
+          <div>
+            <p className="text-xs font-bold uppercase text-slate-500 mb-1">Histórico</p>
+            <ul className="space-y-1">
+              {eventos.map((e) => (
+                <li key={e.id} className="text-[12px] text-slate-600">
+                  <span className="text-slate-500">{fmtDataHora(e.created_at)}</span> · <b>{EVENTO[e.evento] || e.evento}</b>
+                  {e.nome_usuario && e.nome_usuario !== "Sistema" ? ` (${e.nome_usuario})` : ""}
+                  {e.detalhe ? ` — ${e.detalhe}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+          {erro && <p className="text-red-600">{erro}</p>}
+        </div>
+      )}
+    </Modal>
   );
 }
 
 // ------------------------------------------------------------------------------------------------
 // Tela "Materiais": solicitacoes de cadastro (todos veem; cada um ve destacado o que e com ele)
 // ------------------------------------------------------------------------------------------------
+const FILTROS = ["comigo", "minhas", "andamento", "concluida", "encerradas", "todas"];
+
+// desde quando o item esta na etapa atual (para o selo de dias parados). updated_at so muda em troca de etapa
+// enquanto esta com o cadastro, com o fiscal ou devolvida (mat_solicitar / mat_aprovar_cadastro / mat_devolver);
+// em "erp" ele muda tambem com erro do robo e troca de codigo, entao ali vale fiscal_em (regravado ao reaprovar).
+function desdeEtapa(s: SolicitacaoMaterial): string | null {
+  switch (s.status) {
+    case "cadastro":
+    case "devolvida":
+      return s.updated_at || s.created_at;
+    case "fiscal":
+      return s.updated_at || s.cadastro_em || s.created_at;
+    case "erp":
+      return s.fiscal_em || s.updated_at || s.created_at;
+    default:
+      return null;
+  }
+}
+const ABERTAS: StatusMat[] = ["cadastro", "fiscal", "erp", "devolvida"];
+
 export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario | null; idAberto: string | null; onAbrir: (id: string | null) => void }) {
   const { classes } = useListas();
   const [lista, setLista] = useState<SolicitacaoMaterial[] | null>(null);
-  const [filtro, setFiltro] = useState("comigo");
+  // filtro lembrado entre visitas (valor antigo que nao existe mais volta para "comigo")
+  const [filtro, setFiltro] = useFiltroSalvo<string>("materiais.filtro", "comigo", (v) => typeof v === "string" && FILTROS.includes(v));
   const [busca, setBusca] = useState("");
   const [nova, setNova] = useState(false);
   const [corrigir, setCorrigir] = useState<SolicitacaoMaterial | null>(null);
@@ -977,7 +1057,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
     const { data, error } = await supabase
       .from("solicitacoes_material")
       .select(
-        "id, numero, status, urgente, id_solicitante, nome_solicitante, descricao, descricao_solicitada, classe_tipo, unidade, origem, codigo_erp, codigo_edit, codigo_existente, created_at",
+        "id, numero, status, urgente, id_solicitante, nome_solicitante, descricao, descricao_solicitada, classe_tipo, unidade, origem, codigo_erp, codigo_edit, codigo_existente, cadastro_em, fiscal_em, created_at, updated_at",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -999,7 +1079,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
 
   const nomeClasse = useMemo(() => (c: number) => rotuloClasse(c, classes), [classes]);
 
-  // quem nao tem nada pendente comeca vendo as proprias solicitacoes
+  // quem nao tem nada pendente comeca vendo as proprias solicitacoes (so quando o filtro ainda e "comigo")
   useEffect(() => {
     if (lista && filtro === "comigo" && !lista.some(comigo)) setFiltro("minhas");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1013,13 +1093,16 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
     );
   if (lista === null)
     return (
-      <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
+      <p className="text-sm text-slate-500 flex items-center gap-2 p-6">
         <Loader2 className="animate-spin" size={16} /> Carregando as solicitações de material…
       </p>
     );
 
   const termo = busca.trim().toLowerCase();
-  const andamento: StatusMat[] = ["cadastro", "fiscal", "erp", "devolvida"];
+  const andamento = ABERTAS;
+  const vazio = filtro === "comigo" ? "Nada esperando por você." : "Nenhuma solicitação com esse filtro.";
+  const codigoTxt = (s: SolicitacaoMaterial) =>
+    s.status === "concluida" ? s.codigo_edit || s.codigo_erp : s.status === "recusada" && s.codigo_existente ? `usar ${s.codigo_edit || s.codigo_existente}` : "";
   const filtradas = lista
     .filter((s) => {
       if (filtro === "comigo" && !comigo(s)) return false;
@@ -1054,7 +1137,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {indicadores.map(([rotulo, n, cor]) => (
           <div key={rotulo} className="bg-white p-4 rounded-xl shadow-sm border">
-            <p className="text-[11px] text-slate-400 font-bold uppercase">{rotulo}</p>
+            <p className="text-xs text-slate-500 font-bold uppercase">{rotulo}</p>
             <p className={`text-2xl font-bold mt-1 ${cor}`}>{n}</p>
           </div>
         ))}
@@ -1070,12 +1153,44 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
             <option value="todas">Todas</option>
           </select>
           <div className="relative">
-            <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={14} aria-hidden="true" className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Item, nº, solicitante, código…" className="border rounded-lg pl-7 pr-2 py-1.5 w-56" />
           </div>
         </div>
         {erroCarga && <ErroCarga compacto mensagem="Não foi possível atualizar a lista (mostrando a última carregada)." detalhe={erroCarga} onTentar={carregar} />}
-        <div className="overflow-x-auto">
+        {/* celular: cartoes */}
+        <ul className="md:hidden divide-y">
+          {filtradas.length === 0 && <li className="p-6 text-center text-sm text-slate-500">{vazio}</li>}
+          {filtradas.map((s) => {
+            const meu = comigo(s);
+            const cod = codigoTxt(s);
+            return (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  onClick={() => onAbrir(s.id)}
+                  className={`w-full text-left px-4 py-3 space-y-1.5 hover:bg-slate-50 ${meu ? "bg-blue-50/30" : ""}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-500">Nº {s.numero}</span>
+                    <Badge status={s.status} urgente={s.urgente} />
+                  </div>
+                  <p className="text-sm font-bold text-slate-800 leading-snug">{s.descricao}</p>
+                  <p className="text-xs text-slate-500">
+                    {[s.unidade, origemTxt(s.origem), s.nome_solicitante].filter(Boolean).join(" · ")}
+                    {cod ? <span className="font-mono"> · {cod}</span> : null}
+                  </p>
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
+                    <SeloDiasParados desde={desdeEtapa(s)} aberto={ABERTAS.includes(s.status)} />
+                    <span className={`ml-auto text-sm font-bold ${meu ? "text-[#2A6377]" : "text-slate-600"}`}>{meu ? "Revisar ›" : "Ver detalhes ›"}</span>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {/* computador: tabela */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px] min-w-[760px]">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
@@ -1090,8 +1205,8 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
             <tbody>
               {filtradas.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-6 text-center text-slate-400">
-                    {filtro === "comigo" ? "Nada esperando por você." : "Nenhuma solicitação com esse filtro."}
+                  <td colSpan={6} className="p-6 text-center text-slate-500">
+                    {vazio}
                   </td>
                 </tr>
               )}
@@ -1100,23 +1215,22 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
                   <td className="px-3 py-2 text-slate-500">{s.numero}</td>
                   <td className="px-3 py-2">
                     <b>{s.descricao}</b>
-                    <span className="block text-[11px] text-slate-500">{[origemTxt(s.origem), nomeClasse(s.classe_tipo)].filter(Boolean).join(" · ")}</span>
+                    <span className="block text-xs text-slate-500">{[origemTxt(s.origem), nomeClasse(s.classe_tipo)].filter(Boolean).join(" · ")}</span>
                   </td>
                   <td className="px-3 py-2 text-center">{s.unidade}</td>
                   <td className="px-3 py-2 text-[12px] text-slate-500">
                     {s.nome_solicitante}
-                    <span className="block text-[11px] text-slate-400">{fmtDataHora(s.created_at)}</span>
+                    <span className="block text-xs text-slate-500">{fmtDataHora(s.created_at)}</span>
                   </td>
                   <td className="px-3 py-2 text-center">
                     <Badge status={s.status} urgente={s.urgente} />
+                    {ABERTAS.includes(s.status) && (
+                      <div className="mt-1 flex justify-center">
+                        <SeloDiasParados desde={desdeEtapa(s)} />
+                      </div>
+                    )}
                   </td>
-                  <td className="px-3 py-2 font-mono text-[12px]">
-                    {s.status === "concluida"
-                      ? s.codigo_edit || s.codigo_erp
-                      : s.status === "recusada" && s.codigo_existente
-                        ? `usar ${s.codigo_edit || s.codigo_existente}`
-                        : ""}
-                  </td>
+                  <td className="px-3 py-2 font-mono text-[12px]">{codigoTxt(s)}</td>
                 </tr>
               ))}
             </tbody>

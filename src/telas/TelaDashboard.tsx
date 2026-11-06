@@ -3,13 +3,15 @@ import { supabase } from "../supabase";
 import { fasesProjeto } from "../constants";
 import ValorAjustavel from "../ValorAjustavel";
 import { formatarDataSegura, formatarDataHora, formatarMoeda, dataHojeISO, labelFase, isAtrasada } from "../utils";
-import { Briefcase, CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2, FolderOpen, Activity, DollarSign } from "lucide-react";
+import { Briefcase, CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2, FolderOpen, Activity, DollarSign, Check, X } from "lucide-react";
+import { linhaClicavel } from "../teclado";
 import type { Usuario } from "../types";
 
 const GraficoObrasPorFase = lazy(() => import("./GraficoObrasPorFase"));
 
-// Dashboard: visao geral das obras do usuario (admin ve todas), status PMIS,
+// Painel: visao geral das obras do usuario (admin ve todas), saude de cada obra,
 // projetos criticos, minhas tarefas e ultimas anotacoes do diario.
+// Quem nao e admin/coordenador ve "Minhas Tarefas Criticas" antes dos numeros financeiros.
 interface Props {
   usuarioAtual: Usuario | null;
   isAdmin: boolean;
@@ -68,6 +70,30 @@ export default function TelaDashboard({
       vermelho: "bg-red-500",
     };
     return mapa[status] || "bg-slate-300";
+  };
+
+  // saude por area: icone + texto curto (nao so cor) - leitura por daltonicos e leitores de tela
+  const SeloSaude = ({ status, area }: { status: string; area: string }) => {
+    const cfg: any = {
+      verde: { Icone: Check, texto: "OK", cls: "text-green-700" },
+      amarelo: { Icone: AlertTriangle, texto: "Atenção", cls: "text-amber-700" },
+      vermelho: { Icone: X, texto: "Crítico", cls: "text-red-700" },
+    };
+    const c = cfg[status] || { Icone: null, texto: status || "—", cls: "text-slate-500" };
+    return (
+      <span
+        className={`inline-flex items-center gap-1 text-xs font-semibold whitespace-nowrap ${c.cls}`}
+        title={`${area}: ${c.texto}`}
+      >
+        <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-white ${bolinhaStatusPMIS(status)}`} aria-hidden="true">
+          {c.Icone && <c.Icone size={11} strokeWidth={3} />}
+        </span>
+        <span>
+          <span className="sr-only">{area}: </span>
+          {c.texto}
+        </span>
+      </span>
+    );
   };
 
   const abrirProjetoDashboard = (projeto: any) => {
@@ -433,21 +459,74 @@ export default function TelaDashboard({
           console.log("Tabela diario_obra ausente para o Feed");
         }
       } catch (error) {
-        falhaAoCarregar("o dashboard", error);
+        falhaAoCarregar("o painel", error);
       }
     }
 
     buscarDadosDashboard();
   }, [usuarioAtual?.id]);
 
+  const blocoTarefas = (
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
+            <CheckSquare size={20} className="text-[#2A6377]" /> Minhas
+            Tarefas Críticas
+          </h3>
+          {tarefasDashboard.length === 0 ? (
+            <div className="text-center p-8 text-slate-500 flex flex-col items-center">
+              <CheckCircle2 size={40} className="mb-2 text-green-200" />{" "}
+              Tudo em dia! Nenhuma tarefa pendente.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {tarefasDashboard.map((tarefa) => (
+                <button
+                  type="button"
+                  key={tarefa.id}
+                  onClick={() => onAbrirTarefa(tarefa)}
+                  className="w-full text-left flex justify-between items-center bg-slate-50 p-3 rounded-lg border hover:border-[#2A6377] transition cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]"
+                >
+                  <div className="flex items-center gap-3 truncate">
+                    <div className="w-2 h-2 rounded-full bg-[#2A6377] shrink-0"></div>
+                    <div className="truncate">
+                      <p className="text-xs font-bold text-[#2A6377] uppercase">
+                        {tarefa.obras?.codigo_externo}
+                      </p>
+                      <p className="font-semibold text-slate-700 truncate">
+                        {tarefa.titulo}
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    className={`text-xs font-bold px-2 py-1 rounded shrink-0 flex items-center gap-1 ${isAtrasada(tarefa.data_vencimento, tarefa.status) ? "bg-red-100 text-red-700" : "bg-white border text-slate-500"}`}
+                  >
+                    <Clock size={12} />{" "}
+                    {formatarDataSegura(tarefa.data_vencimento)}
+                  </div>
+                </button>
+              ))}
+              <button
+                onClick={() => onIrPara("tarefas")}
+                className="w-full mt-2 text-xs font-bold text-center text-slate-500 hover:text-[#2A6377] p-2 transition"
+              >
+                Ver Kanban Completo &rarr;
+              </button>
+            </div>
+          )}
+        </div>
+  );
+
   return (
     <div className="animate-in fade-in h-full flex flex-col gap-6">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
-            Dashboard PMIS {isAdmin ? "Global" : "Pessoal"}
+            Painel
           </h2>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-500 mt-1">
+            <span className="font-semibold text-slate-600">
+              Visão geral das obras{isAdmin ? "" : " sob sua responsabilidade"}.
+            </span>{" "}
             Resumo executivo da saúde dos projetos, com foco em
             financeiro, documentação, cronograma e tarefas.
           </p>
@@ -460,10 +539,12 @@ export default function TelaDashboard({
         </button>
       </div>
 
+      {!isAdmin && blocoTarefas}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-blue-500">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Obras Ativas
             </p>
             <Briefcase className="text-blue-500" size={22} />
@@ -474,7 +555,7 @@ export default function TelaDashboard({
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-slate-500">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Carteira Total
             </p>
             <DollarSign className="text-slate-500" size={22} />
@@ -485,7 +566,7 @@ export default function TelaDashboard({
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-green-500">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Recebido
             </p>
             <CheckCircle2 className="text-green-500" size={22} />
@@ -496,7 +577,7 @@ export default function TelaDashboard({
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-orange-500">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Saldo a Receber
             </p>
             <Clock className="text-orange-500" size={22} />
@@ -507,7 +588,7 @@ export default function TelaDashboard({
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-red-500">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Valor Vencido
             </p>
             <AlertCircle className="text-red-500" size={22} />
@@ -518,7 +599,7 @@ export default function TelaDashboard({
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-amber-500">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Alertas
             </p>
             <AlertTriangle className="text-amber-500" size={22} />
@@ -528,7 +609,7 @@ export default function TelaDashboard({
               resumoPMIS.fasesAtrasadas +
               resumoPMIS.tarefasAtrasadas}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Docs, fases e tarefas
           </p>
         </div>
@@ -546,8 +627,8 @@ export default function TelaDashboard({
               <Activity size={20} className="text-[#2A6377]" /> Status
               Geral dos Projetos
             </h3>
-            <p className="text-xs text-slate-400">
-              Clique em uma obra para abrir o painel PMIS.
+            <p className="text-xs text-slate-500">
+              Clique (ou Enter) em uma obra para abrir o painel da obra.
             </p>
           </div>
           <div className="overflow-x-auto max-w-full">
@@ -574,7 +655,7 @@ export default function TelaDashboard({
                   <tr>
                     <td
                       colSpan={9}
-                      className="px-4 py-10 text-center text-slate-400"
+                      className="px-4 py-10 text-center text-slate-500"
                     >
                       Nenhuma obra ativa encontrada.
                     </td>
@@ -583,31 +664,31 @@ export default function TelaDashboard({
                   statusProjetosPMIS.map((projeto) => (
                     <tr
                       key={projeto.id}
-                      onClick={() => abrirProjetoDashboard(projeto)}
-                      className="hover:bg-slate-50 cursor-pointer transition"
+                      {...linhaClicavel(() => abrirProjetoDashboard(projeto))}
+                      aria-label={`Abrir obra ${projeto.codigo} - ${projeto.nome}`}
+                      className="hover:bg-slate-50 cursor-pointer transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2A6377]"
                     >
                       <td className="px-4 py-3">
                         <p className="font-bold text-[#2A6377]">
                           {projeto.codigo} - {projeto.nome}
                         </p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-slate-500">
                           Resp.: {projeto.responsavel}
                         </p>
                       </td>
                       <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
                         {labelFase(projeto.fase)}
                       </td>
-                      {[
-                        "financeiroStatus",
-                        "documentosStatus",
-                        "cronogramaStatus",
-                        "tarefasStatus",
-                      ].map((campo) => (
+                      {(
+                        [
+                          ["financeiroStatus", "Financeiro"],
+                          ["documentosStatus", "Documentos"],
+                          ["cronogramaStatus", "Cronograma"],
+                          ["tarefasStatus", "Tarefas"],
+                        ] as const
+                      ).map(([campo, area]) => (
                         <td key={campo} className="px-4 py-3 text-center">
-                          <span
-                            className={`inline-flex w-3 h-3 rounded-full ${bolinhaStatusPMIS(projeto[campo])}`}
-                            title={labelStatusPMIS(projeto[campo])}
-                          ></span>
+                          <SeloSaude status={projeto[campo]} area={area} />
                         </td>
                       ))}
                       <td className="px-4 py-3 text-center">
@@ -619,7 +700,7 @@ export default function TelaDashboard({
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap">
                         {projeto.saldoFaturar === null ? (
-                          <span className="font-normal text-slate-400" title="Escopo de faturamento não cadastrado">
+                          <span className="font-normal text-slate-500" title="Escopo de faturamento não cadastrado">
                             —
                           </span>
                         ) : (
@@ -650,7 +731,7 @@ export default function TelaDashboard({
           </div>
           <div className="p-5 grid gap-4 content-start md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-1 max-h-[480px] min-[1700px]:max-h-none min-[1700px]:flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
             {projetosCriticosPMIS.length === 0 ? (
-              <div className="col-span-full text-center p-8 text-slate-400">
+              <div className="col-span-full text-center p-8 text-slate-500">
                 <CheckCircle2
                   size={42}
                   className="mx-auto mb-2 text-green-200"
@@ -659,22 +740,23 @@ export default function TelaDashboard({
               </div>
             ) : (
               projetosCriticosPMIS.map((projeto) => (
-                <div
+                <button
+                  type="button"
                   key={projeto.id}
                   onClick={() => abrirProjetoDashboard(projeto)}
-                  className="border rounded-xl p-4 hover:border-[#2A6377] hover:bg-slate-50 cursor-pointer transition"
+                  className="text-left w-full border rounded-xl p-4 hover:border-[#2A6377] hover:bg-slate-50 cursor-pointer transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0">
                       <p className="font-bold text-[#2A6377] text-sm break-words">
                         {projeto.codigo} - {projeto.nome}
                       </p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-500">
                         {labelFase(projeto.fase)}
                       </p>
                     </div>
                     <span
-                      className={`shrink-0 px-2 py-1 rounded-full border text-[10px] font-bold ${estiloStatusPMIS(projeto.statusGeral)}`}
+                      className={`shrink-0 px-2 py-1 rounded-full border text-[11px] font-semibold ${estiloStatusPMIS(projeto.statusGeral)}`}
                     >
                       {labelStatusPMIS(projeto.statusGeral)}
                     </span>
@@ -689,7 +771,7 @@ export default function TelaDashboard({
                         </li>
                       ))}
                   </ul>
-                </div>
+                </button>
               ))
             )}
           </div>
@@ -697,7 +779,7 @@ export default function TelaDashboard({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+      <div className={`grid grid-cols-1 ${isAdmin ? "xl:grid-cols-3" : "xl:grid-cols-2"} gap-6 items-start`}>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
             <Activity size={20} className="text-[#2A6377]" /> Obras por
@@ -705,7 +787,7 @@ export default function TelaDashboard({
           </h3>
           <div className="h-72 w-full">
             {dadosGrafico.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-gray-400">
+              <div className="h-full flex items-center justify-center text-slate-500">
                 Sem dados.
               </div>
             ) : (
@@ -716,52 +798,7 @@ export default function TelaDashboard({
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
-            <CheckSquare size={20} className="text-[#2A6377]" /> Minhas
-            Tarefas Críticas
-          </h3>
-          {tarefasDashboard.length === 0 ? (
-            <div className="text-center p-8 text-slate-400 flex flex-col items-center">
-              <CheckCircle2 size={40} className="mb-2 text-green-200" />{" "}
-              Tudo em dia! Nenhuma tarefa pendente.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {tarefasDashboard.map((tarefa) => (
-                <div
-                  key={tarefa.id}
-                  onClick={() => onAbrirTarefa(tarefa)}
-                  className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border hover:border-[#2A6377] transition cursor-pointer group"
-                >
-                  <div className="flex items-center gap-3 truncate">
-                    <div className="w-2 h-2 rounded-full bg-[#2A6377] shrink-0"></div>
-                    <div className="truncate">
-                      <p className="text-xs font-bold text-[#2A6377] uppercase">
-                        {tarefa.obras?.codigo_externo}
-                      </p>
-                      <p className="font-semibold text-slate-700 truncate">
-                        {tarefa.titulo}
-                      </p>
-                    </div>
-                  </div>
-                  <div
-                    className={`text-[10px] font-bold px-2 py-1 rounded shrink-0 flex items-center gap-1 ${isAtrasada(tarefa.data_vencimento, tarefa.status) ? "bg-red-100 text-red-700" : "bg-white border text-slate-500"}`}
-                  >
-                    <Clock size={12} />{" "}
-                    {formatarDataSegura(tarefa.data_vencimento)}
-                  </div>
-                </div>
-              ))}
-              <button
-                onClick={() => onIrPara("tarefas")}
-                className="w-full mt-2 text-xs font-bold text-center text-slate-400 hover:text-[#2A6377] p-2 transition"
-              >
-                Ver Kanban Completo &rarr;
-              </button>
-            </div>
-          )}
-        </div>
+        {isAdmin && blocoTarefas}
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col h-[410px]">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
@@ -770,7 +807,7 @@ export default function TelaDashboard({
           </h3>
           <div className="flex-1 overflow-y-auto pr-2 space-y-4">
             {feedGlobal.length === 0 ? (
-              <div className="text-center p-8 text-slate-400 italic">
+              <div className="text-center p-8 text-slate-500 italic">
                 O feed está silencioso.
               </div>
             ) : (
@@ -780,7 +817,7 @@ export default function TelaDashboard({
                   className="relative pl-4 border-l border-slate-200"
                 >
                   <div className="absolute w-2 h-2 bg-blue-400 rounded-full -left-[4.5px] top-1.5"></div>
-                  <p className="text-[10px] font-bold text-slate-400 mb-0.5">
+                  <p className="text-xs font-bold text-slate-500 mb-0.5">
                     {formatarDataHora(item.created_at)}
                   </p>
                   <p className="text-xs font-bold text-[#2A6377] uppercase mb-1">

@@ -54,7 +54,7 @@ export function PassoDocumentos({ docs, aprovado, bloqueado, ocupado, mensagem, 
       <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
         <table className="w-full text-sm min-w-[620px] border-collapse">
           <thead>
-            <tr className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+            <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <th className="text-left font-semibold px-3 py-2">Documento</th>
               <th className="text-left font-semibold px-3 py-2">Pedido por</th>
               <th className="text-left font-semibold px-3 py-2">Situação</th>
@@ -66,7 +66,7 @@ export function PassoDocumentos({ docs, aprovado, bloqueado, ocupado, mensagem, 
               <tr key={d.id} className="border-t border-slate-100 align-top">
                 <td className="px-3 py-2">
                   <b>{d.tipo === "final" ? "Final" : "Rascunho"}</b>
-                  <div className="text-[11px] text-slate-400">{dataHora(d.created_at)}</div>
+                  <div className="text-xs text-slate-500">{dataHora(d.created_at)}</div>
                 </td>
                 <td className="px-3 py-2 text-slate-600">{d.nome_pedido_por}</td>
                 <td className="px-3 py-2">
@@ -92,7 +92,7 @@ export function PassoDocumentos({ docs, aprovado, bloqueado, ocupado, mensagem, 
             ))}
             {!docs.length && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-slate-400">
+                <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
                   Nenhum documento pedido ainda.
                 </td>
               </tr>

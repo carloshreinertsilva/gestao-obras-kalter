@@ -8,10 +8,12 @@ import {
   Search,
   BookOpen,
   Trash2,
+  Download,
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { confirmar } from "./Dialogos";
-import { formatarDataSegura, labelOcorrencia } from "./utils";
+import { exportarCsv, formatarDataSegura, labelOcorrencia } from "./utils";
+import { useFiltroSalvo } from "./telas/filtroSalvo";
 
 interface Props {
   recarregar: number;
@@ -72,12 +74,21 @@ export default function ReunioesHistorico({
   const [notasBitrix, setNotasBitrix] = useState<any[]>([]);
   const [selecionada, setSelecionada] = useState<string | null>(selecao || null);
 
-  useEffect(() => {
-    if (selecao) setSelecionada(selecao);
-  }, [selecao]);
   const [aba, setAba] = useState<"resumos" | "gravacao" | "tarefas">("resumos");
-  const [de, setDe] = useState("");
-  const [ate, setAte] = useState("");
+  // periodo lembrado no navegador
+  const [de, setDe] = useFiltroSalvo("reunioes.de", "");
+  const [ate, setAte] = useFiltroSalvo("reunioes.ate", "");
+
+  useEffect(() => {
+    if (!selecao) return;
+    setSelecionada(selecao);
+    // reuniao pedida pelo endereco fora do periodo lembrado: limpa o periodo para ela aparecer
+    if ((de && selecao < de) || (ate && selecao > ate)) {
+      setDe("");
+      setAte("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selecao]);
   const [busca, setBusca] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
@@ -233,6 +244,42 @@ export default function ReunioesHistorico({
     );
 
   const hoje = new Date().toISOString().slice(0, 10);
+
+  // planilha (abre no Excel) das reunioes filtradas: uma linha por resumo de obra, ocorrencia e tarefa
+  const exportar = () => {
+    const linhas: (string | number)[][] = [];
+    for (const m of filtradas) {
+      const data = m.data ? formatarDataSegura(m.data) : "Antigas (Bitrix)";
+      for (const r of m.reunioes) {
+        const obra = r.obras ? `${r.obras.codigo_externo} - ${r.obras.nome}` : "";
+        const gestor = r.obras?.usuarios?.nome || "";
+        linhas.push([data, obra, gestor, "Resumo", r.resumo_geral || "", "", "", "", ""]);
+        for (const oc of r.ocorrencias || [])
+          linhas.push([data, obra, gestor, "Ocorrência", oc.descricao || "", labelOcorrencia(oc.tipo), "", "", ""]);
+        for (const t of r.tarefas || [])
+          linhas.push([
+            data,
+            obra,
+            gestor,
+            "Tarefa",
+            t.titulo || "",
+            t.prioridade || "",
+            t.usuarios?.nome || "",
+            t.data_vencimento ? formatarDataSegura(t.data_vencimento) : "",
+            statusTarefa[t.status] || t.status || "",
+          ]);
+      }
+      for (const n of m.bitrix) {
+        const obra = n.obras ? `${n.obras.codigo_externo} - ${n.obras.nome}` : "";
+        linhas.push([data, obra, n.obras?.usuarios?.nome || "", "Anotação Bitrix", limparBitrix(n.texto || ""), "", "", "", ""]);
+      }
+    }
+    exportarCsv(
+      "reunioes",
+      ["Data", "Obra", "Gestor", "Tipo", "Texto", "Tipo da ocorrência / prioridade", "Responsável", "Prazo", "Situação da tarefa"],
+      linhas,
+    );
+  };
   const titulo = (m: Reuniao) =>
     m.data
       ? `${formatarDataSegura(m.data)} · ${diaSemana(m.data)}`
@@ -313,13 +360,14 @@ export default function ReunioesHistorico({
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar obra, gestor ou palavra…"
+              aria-label="Buscar reunião"
               className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377]"
             />
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="border rounded-lg px-2 py-1 flex-1 min-w-0" title="De" />
+            <input type="date" value={de} onChange={(e) => setDe(e.target.value)} className="border rounded-lg px-2 py-1 flex-1 min-w-0" title="De" aria-label="De" />
             <span>até</span>
-            <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="border rounded-lg px-2 py-1 flex-1 min-w-0" title="Até" />
+            <input type="date" value={ate} onChange={(e) => setAte(e.target.value)} className="border rounded-lg px-2 py-1 flex-1 min-w-0" title="Até" aria-label="Até" />
             {(de || ate || busca) && (
               <button
                 onClick={() => {
@@ -333,17 +381,26 @@ export default function ReunioesHistorico({
               </button>
             )}
           </div>
-          <p className="text-[11px] text-slate-400">
-            {filtradas.length} reunião(ões)
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-slate-500">{filtradas.length} reunião(ões)</p>
+            <button
+              type="button"
+              onClick={exportar}
+              disabled={carregando || filtradas.length === 0}
+              className="flex items-center gap-1 text-xs font-semibold text-[#2A6377] border border-[#2A6377]/40 rounded-lg px-2 py-1 hover:bg-[#2A6377]/5 disabled:opacity-50"
+              title="Baixar reuniões, ocorrências e tarefas das reuniões filtradas em planilha (abre no Excel)"
+            >
+              <Download size={13} /> Exportar Excel
+            </button>
+          </div>
         </div>
         <div className="overflow-y-auto flex-1 min-h-0">
           {carregando ? (
-            <p className="p-4 text-sm text-slate-400 flex items-center gap-2">
+            <p className="p-4 text-sm text-slate-500 flex items-center gap-2">
               <Loader2 className="animate-spin" size={14} /> Carregando reuniões…
             </p>
           ) : filtradas.length === 0 ? (
-            <p className="p-4 text-sm text-slate-400">Nenhuma reunião encontrada.</p>
+            <p className="p-4 text-sm text-slate-500">Nenhuma reunião encontrada.</p>
           ) : (
             filtradas.map((m) => {
               const ocorrencias = m.reunioes.reduce((a, r) => a + (r.ocorrencias || []).length, 0);
@@ -368,9 +425,9 @@ export default function ReunioesHistorico({
                     {m.reunioes.length > 0 && ` · ${ocorrencias} ocorrência(s) · ${tarefas} tarefa(s)`}
                   </p>
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    {m.reunioes.length > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Ata</span>}
-                    {m.sessao?.resumo_gravacao && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">Gravação</span>}
-                    {m.bitrix.length > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">Bitrix</span>}
+                    {m.reunioes.length > 0 && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Ata</span>}
+                    {m.sessao?.resumo_gravacao && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">Gravação</span>}
+                    {m.bitrix.length > 0 && <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">Bitrix</span>}
                   </div>
                 </button>
               );
@@ -381,14 +438,14 @@ export default function ReunioesHistorico({
 
       <div className="bg-white rounded-xl shadow-sm border flex flex-col min-w-0 xl:min-h-0">
         {!atual ? (
-          <p className="p-8 text-sm text-slate-400 text-center">Selecione uma reunião para ver os detalhes.</p>
+          <p className="p-8 text-sm text-slate-500 text-center">Selecione uma reunião para ver os detalhes.</p>
         ) : (
           <>
             <div className="p-4 border-b flex flex-wrap items-center justify-between gap-3 shrink-0">
               <div>
                 <h3 className="font-bold text-lg text-slate-800">{titulo(atual)}</h3>
                 {atual.data === null && (
-                  <p className="text-xs text-slate-400">Anotações antigas do Bitrix, sem data, tratadas como a primeira reunião.</p>
+                  <p className="text-xs text-slate-500">Anotações antigas do Bitrix, sem data, tratadas como a primeira reunião.</p>
                 )}
               </div>
               {atual.reunioes.length > 0 && (
@@ -506,12 +563,12 @@ export default function ReunioesHistorico({
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{atual.sessao.resumo_gravacao}</p>
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-400">Nenhuma gravação vinculada a esta reunião.</p>
+                  <p className="text-sm text-slate-500">Nenhuma gravação vinculada a esta reunião.</p>
                 ))}
 
               {aba === "tarefas" &&
                 (tarefasDaReuniao(atual).length === 0 ? (
-                  <p className="text-sm text-slate-400">Nenhuma tarefa foi criada nesta reunião.</p>
+                  <p className="text-sm text-slate-500">Nenhuma tarefa foi criada nesta reunião.</p>
                 ) : (
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-slate-600">

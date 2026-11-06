@@ -15,11 +15,13 @@ import {
   XCircle,
 } from "lucide-react";
 import { supabase } from "./supabase";
-import { formatarMoeda, normalizarNomeArquivo } from "./utils";
+import { exportarCsv, formatarMoeda, normalizarNomeArquivo } from "./utils";
 import type { SolicitacaoPrevisao, Usuario } from "./types";
 import { SeloAlertaFamilia } from "./AlertaFamilia";
 import { useAviso } from "./aviso";
 import { ErroCarga, useDialogos } from "./Dialogos";
+import { Modal } from "./Modal";
+import { BotaoExportar, SeloDiasParados, diasUteisDesde, maisRecente, numCsv, useFiltroSalvo } from "./modulos_lista";
 
 // Familia da obra como vem de obra_rentabilidade_familias (saldo de previsoes em aberto sincronizado do ERP)
 export interface FamiliaPrevisao {
@@ -86,6 +88,19 @@ const STATUS: Record<string, { rotulo: string; classe: string }> = {
   desfeita: { rotulo: "Desfeita", classe: "bg-slate-100 text-slate-600 border-slate-200" },
 };
 
+// Desde quando a solicitacao esta na etapa atual (so itens abertos: ainda dependem de alguem ou do robo).
+// simulando: criada ou reenviada (a simulacao anterior marca o reenvio); aguardando aprovacao: simulada;
+// aprovada (gravando no ERP): decidida; erro: ultima simulacao (espera o solicitante simular de novo ou cancelar).
+// Nao usa updated_at: muda por qualquer gravacao na linha (mensagens do robo, desfazer...).
+const solicitacaoAberta = (s: SolicitacaoPrevisao) =>
+  ["simulando", "aguardando_aprovacao", "aprovada", "erro"].includes(s.status);
+
+const desdeEtapa = (s: SolicitacaoPrevisao): string | null => {
+  if (s.status === "aprovada") return s.decidido_em || maisRecente(s.simulado_em, s.created_at);
+  if (solicitacaoAberta(s)) return maisRecente(s.simulado_em, s.created_at);
+  return null;
+};
+
 // ---------------------------------------------------------------- modal de solicitacao
 
 export function ModalSolicitarPrevisao({
@@ -126,6 +141,8 @@ export function ModalSolicitarPrevisao({
   const [justificativa, setJustificativa] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // alterado pela pessoa (onChange no formulario e botoes que mudam dados); o calculo automatico nao marca
+  const [sujo, setSujo] = useState(false);
   const aviso = useAviso();
   // cotacao/orcamento anexados (bucket previsao-anexos, caminho obras/<id_obra>/previsoes/...)
   const [arquivos, setArquivos] = useState<File[]>([]);
@@ -246,18 +263,38 @@ export function ModalSolicitarPrevisao({
   );
 
   return (
-    <div className="fixed inset-0 z-[80] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
-        <div className="p-5 border-b flex items-center justify-between">
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <Wallet className="text-[#2A6377]" size={20} /> Solicitar previsão · Obra {obra.codigo_externo}
-          </h2>
-          <button onClick={onFechar} className="text-slate-400 hover:text-slate-700">
-            <X size={22} />
+    <Modal
+      titulo={
+        <span className="flex items-center gap-2">
+          <Wallet className="text-[#2A6377] shrink-0" size={20} aria-hidden="true" /> Solicitar previsão · Obra{" "}
+          {obra.codigo_externo}
+        </span>
+      }
+      onFechar={onFechar}
+      sujo={sujo && !enviando}
+      largura="2xl"
+      rodape={
+        <>
+          <button
+            type="button"
+            onClick={onFechar}
+            className="px-4 py-2.5 md:py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100"
+          >
+            Cancelar
           </button>
-        </div>
-
-        <div className="p-5 space-y-4 overflow-y-auto">
+          <button
+            type="button"
+            onClick={enviar}
+            disabled={enviando || origemBloqueada}
+            title={origemBloqueada ? "Corrija as origens sem saldo suficiente para enviar" : undefined}
+            className="px-4 py-2.5 md:py-2 rounded-lg text-sm font-bold bg-[#2A6377] text-white hover:bg-[#1e4857] flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {enviando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Enviar solicitação
+          </button>
+        </>
+      }
+    >
+        <div className="space-y-4" onChange={() => setSujo(true)}>
           <div className="inline-flex rounded-lg border overflow-hidden text-sm">
             {(
               [
@@ -267,7 +304,9 @@ export function ModalSolicitarPrevisao({
             ).map(([valor, rotulo]) => (
               <button
                 key={valor}
+                type="button"
                 onClick={() => {
+                  if (valor !== tipo) setSujo(true);
                   setTipo(valor);
                   setErro("");
                 }}
@@ -321,7 +360,7 @@ export function ModalSolicitarPrevisao({
                   className="w-full border rounded-lg px-3 py-2 text-sm font-semibold"
                 />
               </div>
-              <p className="sm:col-span-3 text-[11px] text-slate-400 -mt-1">
+              <p className="sm:col-span-3 text-xs text-slate-500 -mt-1">
                 Preenchendo disponível e necessário, o aumento é calculado (necessário − disponível).
               </p>
             </div>
@@ -359,7 +398,11 @@ export function ModalSolicitarPrevisao({
                       />
                       {origens.length > 1 && (
                         <button
-                          onClick={() => setOrigens((prev) => prev.filter((_, k) => k !== i))}
+                          type="button"
+                          onClick={() => {
+                            setSujo(true);
+                            setOrigens((prev) => prev.filter((_, k) => k !== i));
+                          }}
                           className="p-2 text-slate-400 hover:text-red-600"
                           title="Remover origem"
                         >
@@ -382,7 +425,11 @@ export function ModalSolicitarPrevisao({
               })}
               <div className="flex items-center justify-between">
                 <button
-                  onClick={() => setOrigens((prev) => [...prev, { familia: "", valor: "" }])}
+                  type="button"
+                  onClick={() => {
+                    setSujo(true);
+                    setOrigens((prev) => [...prev, { familia: "", valor: "" }]);
+                  }}
                   className="text-xs font-semibold text-[#2A6377] flex items-center gap-1"
                 >
                   <Plus size={14} /> Adicionar origem
@@ -420,15 +467,19 @@ export function ModalSolicitarPrevisao({
                 }}
               />
             </label>
-            <span className="ml-2 text-[11px] text-slate-400">PDF ou imagem, até 3 arquivos de 10 MB</span>
+            <span className="block sm:inline sm:ml-2 mt-1 sm:mt-0 text-xs text-slate-500">PDF ou imagem, até 3 arquivos de 10 MB</span>
             {arquivos.length > 0 && (
               <ul className="mt-2 space-y-1">
                 {arquivos.map((a, i) => (
-                  <li key={i} className="text-xs text-slate-600 flex items-center gap-2">
+                  <li key={i} className="text-xs text-slate-600 flex items-center gap-2 break-all">
                     <Paperclip size={12} /> {a.name}
-                    <span className="text-slate-400">({(a.size / 1024 / 1024).toFixed(1)} MB)</span>
+                    <span className="text-slate-500">({(a.size / 1024 / 1024).toFixed(1)} MB)</span>
                     <button
-                      onClick={() => setArquivos((prev) => prev.filter((_, k) => k !== i))}
+                      type="button"
+                      onClick={() => {
+                        setSujo(true);
+                        setArquivos((prev) => prev.filter((_, k) => k !== i));
+                      }}
                       className="text-red-500 hover:text-red-700"
                       title="Remover anexo"
                     >
@@ -459,22 +510,7 @@ export function ModalSolicitarPrevisao({
             </div>
           )}
         </div>
-
-        <div className="p-4 border-t flex justify-end gap-2">
-          <button onClick={onFechar} className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100">
-            Cancelar
-          </button>
-          <button
-            onClick={enviar}
-            disabled={enviando || origemBloqueada}
-            title={origemBloqueada ? "Corrija as origens sem saldo suficiente para enviar" : undefined}
-            className="px-4 py-2 rounded-lg text-sm font-bold bg-[#2A6377] text-white hover:bg-[#1e4857] flex items-center gap-2 disabled:opacity-60"
-          >
-            {enviando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Enviar solicitação
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -626,9 +662,10 @@ export function CartaoSolicitacao({
                 : "Suplemento de previsão"}
           </p>
         </div>
-        <span className={`shrink-0 px-2.5 py-1 rounded-full border text-[11px] font-bold ${st.classe}`}>
-          {st.rotulo}
-        </span>
+        <div className="shrink-0 flex flex-col items-end gap-1">
+          <span className={`px-2.5 py-1 rounded-full border text-[11px] font-bold ${st.classe}`}>{st.rotulo}</span>
+          <SeloDiasParados desde={desdeEtapa(s)} aberto={solicitacaoAberta(s)} />
+        </div>
       </div>
 
       <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{s.justificativa}</p>
@@ -696,14 +733,14 @@ export function CartaoSolicitacao({
         </div>
       )}
 
-      <div className="text-[11px] text-slate-400 space-y-0.5 border-t pt-2">
+      <div className="text-xs text-slate-500 space-y-0.5 border-t pt-2">
         <p>
-          Solicitado por <b className="text-slate-500">{s.nome_solicitante}</b> em {dataHora(s.created_at)}
+          Solicitado por <b className="text-slate-600">{s.nome_solicitante}</b> em {dataHora(s.created_at)}
         </p>
         {s.simulado_em && <p>Simulado no ERP em {dataHora(s.simulado_em)}</p>}
         {s.decidido_em && (
           <p>
-            {s.status === "recusada" ? "Recusado" : "Aprovado"} por <b className="text-slate-500">{s.nome_aprovador}</b>{" "}
+            {s.status === "recusada" ? "Recusado" : "Aprovado"} por <b className="text-slate-600">{s.nome_aprovador}</b>{" "}
             em {dataHora(s.decidido_em)}
             {s.motivo_recusa ? ` · motivo: ${s.motivo_recusa}` : ""}
           </p>
@@ -715,12 +752,12 @@ export function CartaoSolicitacao({
       {erro && <p className="text-xs text-red-600">{erro}</p>}
 
       {recusando && (
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
             placeholder="Motivo da recusa"
-            className="flex-1 border rounded-lg px-3 py-1.5 text-sm"
+            className="flex-1 min-w-0 border rounded-lg px-3 py-2 sm:py-1.5 text-sm"
           />
           {botao(
             "Confirmar recusa",
@@ -850,8 +887,14 @@ export function PainelSolicitacoes({
   const [lista, setLista] = useState<SolicitacaoPrevisao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erroCarga, setErroCarga] = useState("");
-  const [filtro, setFiltro] = useState(usuario?.aprova_previsao && !idObra ? "pendentes" : "todas");
-  const [busca, setBusca] = useState("");
+  // filtros lembrados (tela geral e dentro da obra separados); filtro antigo que nao existe mais volta ao padrao
+  const chaveFiltro = idObra ? "previsoes.obra" : "previsoes";
+  const [filtro, setFiltro] = useFiltroSalvo<string>(
+    `${chaveFiltro}.filtro`,
+    usuario?.aprova_previsao && !idObra ? "pendentes" : "todas",
+    (v) => typeof v === "string" && FILTROS.some((f) => f[0] === v),
+  );
+  const [busca, setBusca] = useFiltroSalvo<string>(`${chaveFiltro}.busca`, "", (v) => typeof v === "string" && v.length <= 200);
 
   const buscar = useCallback(async () => {
     let q = supabase.from("solicitacoes_previsao").select("*").order("created_at", { ascending: false }).limit(300);
@@ -887,6 +930,57 @@ export function PainelSolicitacoes({
       .includes(termo);
   });
 
+  const exportar = () => {
+    const rotuloFiltro = FILTROS.find((f) => f[0] === filtro)?.[1] || "";
+    exportarCsv(
+      `previsoes_${filtro}${idObra && visiveis[0]?.codigo_obra ? `_obra_${visiveis[0].codigo_obra}` : ""}`,
+      [
+        "Id",
+        "Obra",
+        "Tipo",
+        "Família destino",
+        "Origens",
+        "Valor",
+        "Situação",
+        "Solicitante",
+        "Solicitado em",
+        "Simulado em",
+        "Decidido em",
+        "Aprovador",
+        "Gravado no ERP em",
+        "Previsão ERP",
+        "Dias úteis na etapa",
+        "Justificativa",
+        "Motivo da recusa / mensagem",
+        "Filtro da tela",
+      ],
+      visiveis.map((s) => {
+        const nova = s.resultado?.nova_parcela;
+        const dias = solicitacaoAberta(s) ? diasUteisDesde(desdeEtapa(s)) : null;
+        return [
+          s.id,
+          s.codigo_obra,
+          s.tipo === "aumento" ? "Aumento" : "Transferência",
+          s.familia_destino,
+          (s.origens || []).map((o) => `${o.familia} (${formatarMoeda(o.valor)})`).join("; "),
+          numCsv(s.valor),
+          (STATUS[s.status] || STATUS.simulando).rotulo,
+          s.nome_solicitante || "",
+          dataHora(s.created_at),
+          dataHora(s.simulado_em),
+          dataHora(s.decidido_em),
+          s.nome_aprovador || "",
+          dataHora(s.executado_em),
+          nova ? `${nova.docto} / parcela ${nova.parcela}` : "",
+          dias ?? "",
+          s.justificativa || "",
+          [s.motivo_recusa, s.mensagem].filter(Boolean).join(" · "),
+          rotuloFiltro,
+        ];
+      }),
+    );
+  };
+
   return (
     <div className="space-y-3">
       {destaque && !carregando && (
@@ -910,14 +1004,17 @@ export function PainelSolicitacoes({
       )}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         {titulo && <h3 className="font-bold text-lg">{titulo}</h3>}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto md:ml-auto">
+        <BotaoExportar onClick={exportar} disabled={carregando || visiveis.length === 0} />
         <div className="relative w-full md:w-64">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar obra, família, solicitante…"
-            className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377] bg-white"
+            className="w-full border rounded-lg pl-8 pr-3 py-2 md:py-1.5 text-sm outline-none focus:border-[#2A6377] bg-white"
           />
+        </div>
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -937,7 +1034,7 @@ export function PainelSolicitacoes({
         </div>
       )}
       {carregando ? (
-        <p className="text-sm text-slate-400 flex items-center gap-2">
+        <p className="text-sm text-slate-500 flex items-center gap-2">
           <Loader2 size={14} className="animate-spin" /> Carregando…
         </p>
       ) : erroCarga && lista.length === 0 ? (
@@ -945,7 +1042,7 @@ export function PainelSolicitacoes({
           <ErroCarga detalhe={erroCarga} onTentar={buscar} />
         </div>
       ) : visiveis.length === 0 ? (
-        <p className="text-sm text-slate-400 bg-white border rounded-xl p-6 text-center">Nenhuma solicitação aqui.</p>
+        <p className="text-sm text-slate-500 bg-white border rounded-xl p-6 text-center">Nenhuma solicitação aqui.</p>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
           {visiveis.map((s) => (
@@ -993,7 +1090,7 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
         <div className="p-4 border-b flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
             <h3 className="font-bold text-lg">Previsões em aberto por família</h3>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Saldo das previsões de contas a pagar do ERP. Total em aberto: <b>{formatarMoeda(total)}</b>.
             </p>
           </div>
@@ -1025,7 +1122,7 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
                 </tr>
               ) : comSaldo.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-6 text-center text-slate-400">
+                  <td colSpan={4} className="p-6 text-center text-slate-500">
                     Nenhuma previsão em aberto nesta obra.
                   </td>
                 </tr>
@@ -1044,7 +1141,7 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
                       <td className="px-3 py-2.5 text-right">
                         {familiaRestrita(f.codigo_projeto) ? (
                           <span
-                            className="text-[11px] text-slate-400 whitespace-nowrap"
+                            className="text-xs text-slate-500 whitespace-nowrap"
                             title="Impostos, despesas comerciais, seguros e garantia não são movimentados por solicitação"
                           >
                             Não movimentável

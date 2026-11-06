@@ -23,7 +23,7 @@ function Grupo({ titulo, tom, lista, aoIrPara }: { titulo: string; tom: "erro" |
             <li key={i} className={`rounded-lg border px-3 py-2 text-sm flex flex-wrap sm:flex-nowrap items-start gap-x-3 gap-y-1.5 ${cor}`}>
               <span className="flex-1 min-w-[12rem]">{a.texto}</span>
               {a.onde === "erp" ? (
-                <span className="text-[11px] font-bold rounded-full bg-white/70 px-2 py-0.5 whitespace-nowrap">Carlos Silva</span>
+                <span className="text-[11px] font-semibold rounded-full bg-white/70 px-2 py-0.5 whitespace-nowrap">Carlos Silva</span>
               ) : (
                 alvo && (
                   <Botao

@@ -33,13 +33,13 @@ interface Mensagem {
 /** Situacao do passo na navegacao: nº de erros (vermelho), nº de avisos (ambar), ✓, "opcional" ou nada. */
 function MarcaPasso({ s, ativo }: { s: SituacaoPasso; ativo: boolean }) {
   if (s.tipo === "erro")
-    return <span className={`min-w-5 h-5 px-1 rounded-full text-[11px] font-bold flex items-center justify-center ${ativo ? "bg-white text-red-600" : "bg-red-50 text-red-600"}`} title={`${s.n} erro(s) a corrigir`}>{s.n}</span>;
+    return <span className={`min-w-5 h-5 px-1 rounded-full text-[11px] font-semibold flex items-center justify-center ${ativo ? "bg-white text-red-600" : "bg-red-50 text-red-600"}`} title={`${s.n} erro(s) a corrigir`}>{s.n}</span>;
   if (s.tipo === "aviso")
-    return <span className={`text-[11px] font-semibold ${ativo ? "text-amber-200" : "text-amber-600"}`} title={`${s.n} aviso(s); não impedem o final`}>{s.n} aviso{s.n === 1 ? "" : "s"}</span>;
-  if (s.tipo === "opcional") return <span className={`text-[11px] ${ativo ? "text-white/70" : "text-slate-400"}`}>opcional</span>;
+    return <span className={`text-xs font-semibold ${ativo ? "text-amber-200" : "text-amber-600"}`} title={`${s.n} aviso(s); não impedem o final`}>{s.n} aviso{s.n === 1 ? "" : "s"}</span>;
+  if (s.tipo === "opcional") return <span className={`text-xs ${ativo ? "text-white/70" : "text-slate-500"}`}>opcional</span>;
   if (s.tipo === "ok")
     return s.texto ? (
-      <span className={`text-[11px] font-semibold ${ativo ? "text-emerald-200" : "text-emerald-600"}`}>{s.texto}</span>
+      <span className={`text-xs font-semibold ${ativo ? "text-emerald-200" : "text-emerald-600"}`}>{s.texto}</span>
     ) : (
       <Check size={15} className={ativo ? "text-emerald-200" : "text-emerald-600"} aria-label="sem pendência" />
     );
@@ -455,7 +455,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
           <div ref={listaPassos} className="relative flex lg:flex-col gap-1 overflow-x-auto">
             {ETAPAS.map((etapa, e) => (
               <div key={etapa.nome} className="contents lg:block">
-                <p className={`hidden lg:block px-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-400 ${e ? "mt-3" : ""} mb-1`}>{etapa.nome}</p>
+                <p className={`hidden lg:block px-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 ${e ? "mt-3" : ""} mb-1`}>{etapa.nome}</p>
                 {etapa.passos.map((id) => {
                   const ativo = id === passo;
                   const n = PASSOS.findIndex((p) => p.id === id) + 1;
@@ -467,7 +467,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
                       aria-current={ativo ? "step" : undefined}
                       className={`lg:w-full shrink-0 flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm whitespace-nowrap text-left transition ${ativo ? "bg-[#2A6377] text-white font-semibold" : "text-slate-600 hover:bg-slate-100"}`}
                     >
-                      <span className={`h-5 w-5 shrink-0 rounded-full text-[11px] font-bold flex items-center justify-center ${ativo ? "bg-white text-[#2A6377]" : "bg-slate-100 text-slate-600"}`}>{n}</span>
+                      <span className={`h-5 w-5 shrink-0 rounded-full text-xs font-bold flex items-center justify-center ${ativo ? "bg-white text-[#2A6377]" : "bg-slate-100 text-slate-600"}`}>{n}</span>
                       <span className="flex-1">{PASSOS[n - 1].nome}</span>
                       <MarcaPasso s={situacoes[id]} ativo={ativo} />
                     </button>

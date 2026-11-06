@@ -112,7 +112,7 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
 
   if (compras === null)
     return (
-      <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
+      <p className="text-sm text-slate-500 flex items-center gap-2 p-6">
         <Loader2 className="animate-spin" size={16} /> Carregando as compras da obra…
       </p>
     );
@@ -149,9 +149,9 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {indicadores.map(([rotulo, valor, sub, cor]) => (
           <div key={rotulo} className="bg-white p-4 rounded-xl shadow-sm border">
-            <p className="text-[11px] text-slate-400 font-bold uppercase">{rotulo}</p>
+            <p className="text-xs text-slate-500 font-bold uppercase">{rotulo}</p>
             <p className={`text-2xl font-bold mt-1 ${cor}`}>{valor}</p>
-            <p className="text-[11px] text-slate-400">{sub}</p>
+            <p className="text-xs text-slate-500">{sub}</p>
           </div>
         ))}
       </div>
@@ -160,7 +160,7 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
         <div className="p-4 border-b flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
           <div>
             <h3 className="font-bold text-lg">Compras em aberto</h3>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-xs text-slate-500">
               Solicitações de compra ativas no ERP sem pedido encerrado — são elas que mantêm a fase Compras do cronograma em andamento.
             </p>
           </div>
@@ -188,6 +188,7 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Material, fornecedor, pedido…"
+                aria-label="Buscar material, fornecedor ou pedido"
                 className="border rounded-lg pl-7 pr-2 py-1.5 w-52"
               />
             </div>
@@ -214,7 +215,60 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
         </div>
 
         {erro && <p className="px-4 py-3 text-sm text-red-600">{erro}</p>}
-        <div className="overflow-x-auto max-h-[65vh]">
+        {/* celular: cartoes (a tabela larga nao cabe) */}
+        <ul className="md:hidden divide-y max-h-[70vh] overflow-y-auto">
+          {filtradas.length === 0 ? (
+            <li className="p-6 text-center text-sm text-slate-500">
+              {compras.length === 0 ? "Nenhuma compra em aberto para esta obra no ERP." : "Nenhuma compra com esses filtros."}
+            </li>
+          ) : (
+            filtradas.map((c) => (
+              <li key={c.nr_solicitacao} className="p-3 text-sm space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0">
+                    <span className="font-semibold">Solicitação {c.nr_solicitacao}</span>
+                    {c.data_solicitacao && <span className="text-xs text-slate-500"> · {formatarDataSegura(c.data_solicitacao)}</span>}
+                  </p>
+                  <span title={SITUACAO[c.situacao].dica} className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${SITUACAO[c.situacao].classe}`}>
+                    {SITUACAO[c.situacao].rotulo}
+                  </span>
+                </div>
+                <p className="text-slate-800">
+                  <span className="text-slate-500 text-xs">{c.codigo_material}</span> {c.descricao_material}
+                  {c.nr_sma && <span className="block text-xs text-slate-500">SMA {c.nr_sma}</span>}
+                </p>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+                  <dt className="text-slate-500">Família</dt>
+                  <dd className="text-right">{c.codigo_projeto || "-"}</dd>
+                  <dt className="text-slate-500">Qtd.</dt>
+                  <dd className="text-right">
+                    {num(c.quantidade_recebida) > 0 && c.situacao !== "recebido"
+                      ? `${fmtQtd(c.quantidade_recebida)} recebida de ${fmtQtd(c.quantidade)}`
+                      : fmtQtd(c.quantidade)}
+                  </dd>
+                  <dt className="text-slate-500">Valor</dt>
+                  <dd className="text-right font-semibold">{c.valor != null ? formatarMoeda(c.valor) : "a cotar"}</dd>
+                  <dt className="text-slate-500">Pedido</dt>
+                  <dd className="text-right">
+                    {c.nr_pedido ? `${c.nr_pedido}${c.data_pedido ? ` · ${formatarDataSegura(c.data_pedido)}` : ""}` : "—"}
+                  </dd>
+                  {c.fornecedor && (
+                    <>
+                      <dt className="text-slate-500">Fornecedor</dt>
+                      <dd className="text-right truncate">{c.fornecedor}</dd>
+                    </>
+                  )}
+                  <dt className="text-slate-500">Entrega prevista</dt>
+                  <dd className={`text-right ${atrasada(c) ? "text-red-600 font-semibold" : ""}`}>
+                    {c.data_entrega ? formatarDataSegura(c.data_entrega) : "-"}
+                    {atrasada(c) && " (atrasada)"}
+                  </dd>
+                </dl>
+              </li>
+            ))
+          )}
+        </ul>
+        <div className="hidden md:block overflow-x-auto max-h-[65vh]">
           <table className="w-full text-[13px] min-w-[1000px]">
             <thead className="bg-slate-50 text-slate-600 sticky top-0">
               <tr>
@@ -231,7 +285,7 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
             <tbody>
               {filtradas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-slate-400">
+                  <td colSpan={8} className="p-6 text-center text-slate-500">
                     {compras.length === 0 ? "Nenhuma compra em aberto para esta obra no ERP." : "Nenhuma compra com esses filtros."}
                   </td>
                 </tr>
@@ -240,11 +294,11 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
                   <tr key={c.nr_solicitacao} className="border-t hover:bg-slate-50 align-top">
                     <td className="px-3 py-2 whitespace-nowrap">
                       <span className="font-semibold">{c.nr_solicitacao}</span>
-                      <span className="block text-[11px] text-slate-400">{c.data_solicitacao ? formatarDataSegura(c.data_solicitacao) : ""}</span>
+                      <span className="block text-xs text-slate-500">{c.data_solicitacao ? formatarDataSegura(c.data_solicitacao) : ""}</span>
                     </td>
                     <td className="px-3 py-2">
-                      <span className="text-slate-400 text-[11px]">{c.codigo_material}</span> {c.descricao_material}
-                      {c.nr_sma && <span className="block text-[11px] text-slate-400">SMA {c.nr_sma}</span>}
+                      <span className="text-slate-500 text-xs">{c.codigo_material}</span> {c.descricao_material}
+                      {c.nr_sma && <span className="block text-xs text-slate-500">SMA {c.nr_sma}</span>}
                     </td>
                     <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{c.codigo_projeto || "-"}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -257,25 +311,25 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
                       )}
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">
-                      {c.valor != null ? formatarMoeda(c.valor) : <span className="text-slate-400 font-normal">a cotar</span>}
+                      {c.valor != null ? formatarMoeda(c.valor) : <span className="text-slate-500 font-normal">a cotar</span>}
                     </td>
                     <td className="px-3 py-2">
                       {c.nr_pedido ? (
                         <span className="font-semibold">
                           Pedido {c.nr_pedido}
-                          <span className="font-normal text-[11px] text-slate-400"> {c.data_pedido ? formatarDataSegura(c.data_pedido) : ""}</span>
+                          <span className="font-normal text-xs text-slate-500"> {c.data_pedido ? formatarDataSegura(c.data_pedido) : ""}</span>
                         </span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-slate-500">—</span>
                       )}
-                      {c.fornecedor && <span className="block text-[11px] text-slate-500">{c.fornecedor}</span>}
+                      {c.fornecedor && <span className="block text-xs text-slate-500">{c.fornecedor}</span>}
                     </td>
                     <td className={`px-3 py-2 text-center whitespace-nowrap ${atrasada(c) ? "text-red-600 font-semibold" : ""}`}>
                       {c.data_entrega ? formatarDataSegura(c.data_entrega) : "-"}
                       {atrasada(c) && <AlertTriangle size={12} className="inline ml-1 -mt-0.5" />}
                     </td>
                     <td className="px-3 py-2 text-center">
-                      <span title={SITUACAO[c.situacao].dica} className={`text-[11px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${SITUACAO[c.situacao].classe}`}>
+                      <span title={SITUACAO[c.situacao].dica} className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${SITUACAO[c.situacao].classe}`}>
                         {SITUACAO[c.situacao].rotulo}
                       </span>
                     </td>
@@ -285,7 +339,7 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
             </tbody>
           </table>
         </div>
-        <p className="px-4 py-2 text-[11px] text-slate-400 border-t">
+        <p className="px-4 py-2 text-xs text-slate-500 border-t">
           {filtradas.length} de {compras.length} solicitação(ões) · pendentes somam {formatarMoeda(soma(pendentes))} (itens com preço) · atualizado pelo ERP a cada 5 minutos.
         </p>
       </div>

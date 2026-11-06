@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Obra, Tarefa } from "../types";
-import { formatarDataSegura, isAtrasada } from "../utils";
-import { Clock, CheckCircle2, User, Play, Check, Search, Flag } from "lucide-react";
+import { exportarCsv, formatarDataSegura, isAtrasada } from "../utils";
+import { Clock, CheckCircle2, User, Play, Check, Search, Flag, Download } from "lucide-react";
 
 // Tarefas: quadro A Fazer / Em Andamento / Concluidas, com filtro por obra.
 // O filtro de obra e compartilhado com o painel da obra (abrir uma obra filtra por ela).
@@ -180,6 +180,25 @@ export default function TelaTarefas({
     .filter((t) => t.status === "concluida")
     .sort((a, b) => (((a as any).data_conclusao || "") < ((b as any).data_conclusao || "") ? 1 : -1));
 
+  // planilha (abre no Excel) com as tarefas visiveis no quadro (mesmos filtros da tela)
+  const STATUS_TAREFA: Record<string, string> = { pendente: "A fazer", em_andamento: "Em andamento", concluida: "Concluída" };
+  const exportar = () =>
+    exportarCsv(
+      "tarefas",
+      ["Situação", "Obra", "Tarefa", "Responsável", "Prazo", "Atrasada", "Prioridade", "Origem", "Concluída em"],
+      [...aFazer, ...andamento, ...concluidas].map((t) => [
+        STATUS_TAREFA[t.status || ""] || t.status || "",
+        t.obras ? `${t.obras.codigo_externo || ""} - ${t.obras.nome || ""}` : "Geral",
+        t.titulo || "",
+        t.usuarios?.nome || "",
+        t.data_vencimento ? formatarDataSegura(t.data_vencimento) : "",
+        isAtrasada(t.data_vencimento, t.status) ? "Sim" : "",
+        (t as any).prioridade || "",
+        (t as any).origem || "",
+        (t as any).data_conclusao ? formatarDataSegura((t as any).data_conclusao) : "",
+      ]),
+    );
+
   return (
     <div className="animate-in fade-in h-full flex flex-col dash-main-wrapper max-w-full">
       <header className="mb-6 flex flex-col lg:flex-row lg:justify-between lg:items-end gap-4 max-w-full">
@@ -228,6 +247,15 @@ export default function TelaTarefas({
               ))}
             </select>
           </label>
+          <button
+            type="button"
+            onClick={exportar}
+            disabled={visiveis.length === 0}
+            className="flex items-center justify-center gap-1.5 border rounded-lg px-3 py-2 text-sm font-semibold bg-white shadow-sm text-[#2A6377] border-[#2A6377]/40 hover:bg-[#2A6377]/5 disabled:opacity-50"
+            title="Baixar as tarefas visíveis no quadro em planilha (abre no Excel)"
+          >
+            <Download size={16} /> Exportar Excel
+          </button>
         </div>
       </header>
       <div className="flex gap-6 overflow-x-auto pb-4 items-start flex-1 max-w-full">

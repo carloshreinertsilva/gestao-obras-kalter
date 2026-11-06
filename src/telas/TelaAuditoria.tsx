@@ -1,8 +1,9 @@
 import { linhaClicavel } from "../teclado";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Loader2, Search } from "lucide-react";
 import { supabase } from "../supabase";
-import { formatarDataHora } from "../utils";
+import { exportarCsv, formatarDataHora } from "../utils";
+import { useFiltroSalvo } from "./filtroSalvo";
 
 // Historico de alteracoes (so admin): tudo o que os usuarios incluiram, alteraram ou
 // excluiram pelo app. Gravado no banco pelo gatilho public.auditar() (tabela auditoria);
@@ -59,14 +60,14 @@ const valorTexto = (v: unknown) => {
 };
 
 export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (oque: string, error: unknown) => void }) {
-  const [dias, setDias] = useState(30);
+  const [dias, setDias] = useFiltroSalvo("auditoria.dias", 30);
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [obras, setObras] = useState<Record<string, string>>({});
   const [carregando, setCarregando] = useState(true);
   const [aberto, setAberto] = useState<number | null>(null);
-  const [filtroObra, setFiltroObra] = useState("todas");
-  const [filtroUsuario, setFiltroUsuario] = useState("todos");
-  const [filtroTabela, setFiltroTabela] = useState("todas");
+  const [filtroObra, setFiltroObra] = useFiltroSalvo("auditoria.obra", "todas");
+  const [filtroUsuario, setFiltroUsuario] = useFiltroSalvo("auditoria.usuario", "todos");
+  const [filtroTabela, setFiltroTabela] = useFiltroSalvo("auditoria.tabela", "todas");
   const [busca, setBusca] = useState("");
 
   useEffect(() => {
@@ -126,11 +127,30 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
   const resumo = (r: Registro) =>
     r.operacao === "alteracao" ? `Campos: ${Object.keys(r.depois || {}).join(", ")}` : nomeDoRegistro(r);
 
+  // planilha (abre no Excel): uma linha por registro visivel, com antes/depois de cada campo
+  const exportar = () =>
+    exportarCsv(
+      "historico_alteracoes",
+      ["Quando", "Quem", "E-mail", "Operação", "O quê", "Obra", "Registro", "Campos", "Antes", "Depois"],
+      visiveis.map((r) => [
+        formatarDataHora(r.em),
+        r.nome_usuario || "",
+        r.email || "",
+        OPERACAO[r.operacao]?.rotulo || r.operacao,
+        TABELAS[r.tabela] || r.tabela,
+        r.id_obra ? obras[r.id_obra] || "" : "",
+        nomeDoRegistro(r),
+        Array.from(new Set([...Object.keys(r.antes || {}), ...Object.keys(r.depois || {})])).join(", "),
+        r.antes ? JSON.stringify(r.antes) : "",
+        r.depois ? JSON.stringify(r.depois) : "",
+      ]),
+    );
+
   return (
     <div className="animate-in fade-in space-y-6 max-w-full">
       <div>
         <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Histórico de alterações</h2>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-slate-500 mt-1">
           Tudo o que os usuários incluíram, alteraram ou excluíram pelo app. Atualizações automáticas do ERP não aparecem aqui.
         </p>
       </div>
@@ -155,6 +175,10 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
           </select>
           <select value={filtroUsuario} onChange={(e) => setFiltroUsuario(e.target.value)} className="border rounded-lg px-2 py-1.5 bg-white">
             <option value="todos">Todas as pessoas</option>
+            {/* filtro lembrado de outra visita: a pessoa pode nao estar na lista do periodo */}
+            {filtroUsuario !== "todos" && !pessoas.some(([email]) => email === filtroUsuario) && (
+              <option value={filtroUsuario}>{filtroUsuario}</option>
+            )}
             {pessoas.map(([email, nome]) => (
               <option key={email} value={email}>
                 {nome}
@@ -173,12 +197,27 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
           </select>
           <div className="relative">
             <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…" className="border rounded-lg pl-7 pr-2 py-1.5 w-40" />
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar…"
+              aria-label="Buscar no histórico"
+              className="border rounded-lg pl-7 pr-2 py-1.5 w-40"
+            />
           </div>
+          <button
+            type="button"
+            onClick={exportar}
+            disabled={carregando || visiveis.length === 0}
+            className="ml-auto flex items-center gap-1.5 border rounded-lg px-3 py-1.5 font-semibold text-[#2A6377] border-[#2A6377]/40 hover:bg-[#2A6377]/5 disabled:opacity-50"
+            title="Baixar os registros visíveis em planilha (abre no Excel)"
+          >
+            <Download size={14} /> Exportar Excel
+          </button>
         </div>
 
         {carregando ? (
-          <p className="p-6 text-sm text-slate-400 flex items-center gap-2">
+          <p className="p-6 text-sm text-slate-500 flex items-center gap-2">
             <Loader2 className="animate-spin" size={16} /> Carregando…
           </p>
         ) : (
@@ -197,7 +236,7 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
               <tbody>
                 {visiveis.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-6 text-center text-slate-400">
+                    <td colSpan={6} className="p-6 text-center text-slate-500">
                       Nenhuma alteração no período.
                     </td>
                   </tr>
@@ -208,11 +247,11 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
                     return (
                       <Fragment key={r.id}>
                         <tr className="border-t hover:bg-slate-50 cursor-pointer" {...linhaClicavel(() => setAberto(aberto === r.id ? null : r.id))}>
-                          <td className="px-3 py-2 text-slate-400">{aberto === r.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
+                          <td className="px-3 py-2 text-slate-500">{aberto === r.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{formatarDataHora(r.em)}</td>
                           <td className="px-3 py-2">{r.nome_usuario || r.email}</td>
                           <td className="px-3 py-2 whitespace-nowrap">
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border mr-1.5 ${op.classe}`}>{op.rotulo}</span>
+                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border mr-1.5 ${op.classe}`}>{op.rotulo}</span>
                             {TABELAS[r.tabela] || r.tabela}
                           </td>
                           <td className="px-3 py-2 text-slate-500">{r.id_obra ? obras[r.id_obra] || "—" : "—"}</td>
@@ -255,7 +294,7 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
             </table>
           </div>
         )}
-        <p className="px-4 py-2 text-[11px] text-slate-400 border-t">
+        <p className="px-4 py-2 text-xs text-slate-500 border-t">
           {visiveis.length} registro(s){registros.length === LIMITE ? ` — mostrando os ${LIMITE} mais recentes; use os filtros para ver mais antigos` : ""}.
         </p>
       </div>

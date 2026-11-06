@@ -78,7 +78,7 @@ export default function AbaDocumentos({
               <Save size={16} /> Salvar
             </button>
           </div>
-          <p className="text-xs text-slate-400 mt-3">
+          <p className="text-xs text-slate-500 mt-3">
             Novos documentos entram como “Não Elaborado” e indicador
             vermelho. Use os botões da lista para iniciar ou concluir.
           </p>
@@ -146,7 +146,7 @@ export default function AbaDocumentos({
                       <div className="space-y-2">
                         {(arquivosDocumentos[doc.id] || []).length ===
                         0 ? (
-                          <p className="text-xs text-slate-400 italic">
+                          <p className="text-xs text-slate-500 italic">
                             Nenhum anexo.
                           </p>
                         ) : (
@@ -165,7 +165,7 @@ export default function AbaDocumentos({
                                   <p className="font-medium text-xs truncate">
                                     {arquivo.nome_arquivo}
                                   </p>
-                                  <p className="text-[10px] text-slate-400">
+                                  <p className="text-xs text-slate-500">
                                     {formatarTamanhoArquivo(
                                       arquivo.tamanho_bytes,
                                     )}{" "}

@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { supabase } from "../supabase";
 import TimelineObra from "../TimelineObra";
 import ReunioesHistorico from "../ReunioesHistorico";
 import { formatarDataSegura, formatarMoeda, dataHojeISO, labelFase, labelOcorrencia } from "../utils";
-import { Save, Clock, User, Loader2, Trash2, Edit2, X, Mail, CheckCheck, Send, FileText, Mic } from "lucide-react";
+import { Save, Clock, User, Loader2, Trash2, Edit2, Mail, CheckCheck, Send, FileText, Mic } from "lucide-react";
 import type { Usuario, Obra } from "../types";
 import { useDialogos } from "../Dialogos";
+import { Modal } from "../Modal";
 
 // Reunioes: historico (ReunioesHistorico), nova reuniao (formulario por obra com
 // ocorrencias e tarefas, sessao do dia, contexto da obra, gravacao Plaud) e a ata
@@ -420,11 +420,28 @@ export default function TelaReunioes({
         );
         if (errOcorrencias) falhasParciais.push(`ocorrências (${errOcorrencias.message})`);
       }
-      if (listaTarefas.length > 0) {
+      // tarefas que ja existem (vieram da ata reaberta) voltam a ser ligadas a esta reuniao, sem duplicar;
+      // so as novas sao criadas (e so elas geram e-mail de atribuicao)
+      const tarefasExistentes = listaTarefas.filter((t) => t.id);
+      const tarefasNovas = listaTarefas.filter((t) => !t.id);
+      let tarefasGravadas: any[] = [];
+      if (tarefasExistentes.length > 0) {
+        const { data: religadas, error: errReligar } = await supabase.rpc("religar_tarefas_ata", {
+          p_id_reuniao: reuniaoSalva.id,
+          p_ids_tarefas: tarefasExistentes.map((t) => t.id),
+        });
+        if (errReligar) falhasParciais.push(`vínculo das tarefas já criadas (${errReligar.message})`);
+        else if (Number(religadas) < tarefasExistentes.length)
+          falhasParciais.push(
+            `vínculo de ${tarefasExistentes.length - Number(religadas)} tarefa(s) já criada(s) (elas continuam no quadro de tarefas)`,
+          );
+        tarefasGravadas = [...tarefasExistentes];
+      }
+      if (tarefasNovas.length > 0) {
         const { data: tarefasCriadas, error: errTarefas } = await supabase
           .from("tarefas")
           .insert(
-            listaTarefas.map((t) => ({
+            tarefasNovas.map((t) => ({
               id_obra: reuniaoForm.id_obra,
               id_reuniao_origem: reuniaoSalva.id,
               titulo: t.titulo,
@@ -450,6 +467,14 @@ export default function TelaReunioes({
               : undefined,
           });
         });
+        // guarda o id: se a obra for reaberta de novo, a tarefa e reaproveitada
+        tarefasGravadas = [
+          ...tarefasGravadas,
+          ...(tarefasCriadas || []).map((tc: any) => ({
+            ...tc,
+            nome_responsavel: listaUsuarios.find((u) => u.id === tc.id_responsavel)?.nome || "Geral",
+          })),
+        ];
       }
 
       const registroObraAta = {
@@ -463,7 +488,7 @@ export default function TelaReunioes({
           : "Obra Não Identificada",
         resumo: reuniaoForm.resumo_geral,
         ocorrencias: [...listaOcorrencias],
-        tarefas: [...listaTarefas],
+        tarefas: tarefasGravadas,
       };
       setObrasNaAtaAtual((prev: any) => [...prev, registroObraAta]);
 
@@ -497,27 +522,18 @@ export default function TelaReunioes({
     if (
       !(await confirmar({
         titulo: `Reabrir ${registro.nome_obra} para edição?`,
-        texto: "O registro atual (resumo, ocorrências e tarefas) será removido até que você salve a obra novamente.",
+        texto:
+          "O resumo e as ocorrências saem da ata até você salvar a obra de novo.\nAs tarefas criadas por esta ata NÃO são excluídas: continuam no quadro (status, comentários e histórico) e voltam a ficar ligadas à ata quando você salvar.",
         rotuloConfirmar: "Reabrir para edição",
         rotuloCancelar: "Manter como está",
-        perigo: true,
       }))
     )
       return;
     setCarregando(true);
     try {
-      const { error: errOc } = await supabase
-        .from("ocorrencias")
-        .delete()
-        .eq("id_reuniao", registro.id_reuniao);
-      if (errOc) throw errOc;
-      const { error: errTar } = await supabase
-        .from("tarefas")
-        .delete()
-        .eq("id_reuniao_origem", registro.id_reuniao);
-      if (errTar) throw errTar;
-      const { error: errReu } = await supabase.from("reunioes").delete().eq("id", registro.id_reuniao);
-      if (errReu) throw errReu;
+      // uma transacao no banco: desvincula as tarefas (sem excluir), remove ocorrencias e a reuniao
+      const { error: errReabrir } = await supabase.rpc("reabrir_ata", { p_id_reuniao: registro.id_reuniao });
+      if (errReabrir) throw errReabrir;
 
       setObrasNaAtaAtual((prev: any) =>
         prev.filter((_: any, i: number) => i !== index),
@@ -840,7 +856,7 @@ export default function TelaReunioes({
                   {obrasNaAtaAtual.some(
                     (ob: any) => ob.id_obra === reuniaoForm.id_obra,
                   ) && (
-                    <p className="text-amber-600 text-[10px] sm:text-xs mt-1 font-bold w-full">
+                    <p className="text-amber-600 text-xs mt-1 font-bold w-full">
                       ⚠️ Esta obra já foi registrada. Para alterar, clique
                       no botão de edição na tag abaixo.
                     </p>
@@ -913,7 +929,7 @@ export default function TelaReunioes({
                   <Mic size={16} className="text-violet-600" />
                   Resumo da gravação da reunião (Plaud)
                   {gravacaoAta.duracaoSeg ? (
-                    <span className="text-xs font-normal text-slate-400">
+                    <span className="text-xs font-normal text-slate-500">
                       · {Math.floor(gravacaoAta.duracaoSeg / 3600)}h
                       {String(
                         Math.floor((gravacaoAta.duracaoSeg % 3600) / 60),
@@ -961,7 +977,7 @@ export default function TelaReunioes({
                 {reuniaoForm.id_obra && (
                   <div className="w-full mb-3 bg-slate-50 border rounded-lg p-2.5">
                     {carregandoContextoAta ? (
-                      <p className="text-xs text-slate-400 flex items-center gap-2">
+                      <p className="text-xs text-slate-500 flex items-center gap-2">
                         <Loader2 className="animate-spin" size={14} />{" "}
                         Carregando contexto da obra…
                       </p>
@@ -1194,6 +1210,14 @@ export default function TelaReunioes({
                           <span className="flex items-center gap-1 truncate uppercase">
                             Origem: reunião
                           </span>
+                          {tar.id && (
+                            <span
+                              className="bg-[#2A6377]/10 text-[#2A6377] rounded px-1.5 text-[11px] font-semibold"
+                              title="Tarefa já criada: ao salvar ela volta a ficar ligada a esta ata (não é duplicada)"
+                            >
+                              Já criada
+                            </span>
+                          )}
                           <span className="flex items-center gap-1 truncate uppercase">
                             Prioridade: {tar.prioridade || "normal"}
                           </span>
@@ -1211,7 +1235,9 @@ export default function TelaReunioes({
                             listaTarefas.filter((_, i) => i !== idx),
                           )
                         }
-                        className="text-red-400 hover:text-red-600 bg-white p-2 rounded shadow-sm border self-end sm:self-auto shrink-0 ml-auto sm:ml-0"
+                        className="text-red-600 hover:text-red-700 bg-white p-2 rounded shadow-sm border self-end sm:self-auto shrink-0 ml-auto sm:ml-0"
+                        aria-label={tar.id ? "Tirar da ata (a tarefa continua no quadro)" : "Remover tarefa"}
+                        title={tar.id ? "Tirar da ata (a tarefa continua no quadro)" : "Remover tarefa"}
                       >
                         <Trash2 size={16} className="shrink-0" />
                       </button>
@@ -1247,7 +1273,7 @@ export default function TelaReunioes({
                   </div>
                 </>
               ) : (
-                <div className="text-sm text-slate-400 flex flex-col items-center justify-center gap-2 py-16 text-center xl:flex-1">
+                <div className="text-sm text-slate-500 flex flex-col items-center justify-center gap-2 py-16 text-center xl:flex-1">
                   <Clock size={28} />
                   Selecione uma obra para ver o histórico (últimas reuniões,
                   pendências e diário).
@@ -1259,67 +1285,61 @@ export default function TelaReunioes({
           )}
         </div>
       )}
-      {modalAtaAberto &&
-        createPortal(
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]">
-              <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center">
-                <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-                  <Mail className="text-[#2A6377]" /> Enviar Ata de Reunião
-                </h2>
-                <button onClick={fecharModalAta}>
-                  <X size={24} />
-                </button>
-              </div>
-              <div className="p-4 md:p-6 flex-1 overflow-y-auto bg-slate-50">
-                {enviandoEmailAta ? (
-                  <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 mb-4 text-sm flex items-center gap-2">
-                    <Loader2 className="animate-spin" size={16} /> Enviando
-                    e-mail automaticamente…
-                  </div>
-                ) : statusEnvioEmailAta?.ok ? (
-                  <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 mb-4 text-sm">
-                    ✅ E-mail enviado para: {statusEnvioEmailAta.destinatarios?.join(", ")}
-                  </div>
-                ) : statusEnvioEmailAta && !statusEnvioEmailAta.ok ? (
-                  <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm flex flex-col gap-2">
-                    <span>❌ Falha ao enviar e-mail: {statusEnvioEmailAta.erro}</span>
-                    <button
-                      onClick={reenviarAtaPorEmail}
-                      className="self-start bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
-                    >
-                      <Send size={12} /> Tentar novamente
-                    </button>
-                  </div>
-                ) : null}
-                <pre className="text-sm font-mono whitespace-pre-wrap">
-                  {ataGerada}
-                </pre>
-              </div>
-              <div className="p-4 md:p-6 border-t border-gray-100 flex flex-wrap justify-end gap-3">
-                <button
-                  onClick={fecharModalAta}
-                  className="px-6 py-2 rounded-lg font-medium bg-slate-100 flex-1 md:flex-none hover:bg-slate-200"
-                >
-                  Fechar
-                </button>
-                <button
-                  onClick={() =>
-                    gerarVisualPDF(
-                      obrasNaAtaAtual,
-                      formatarDataSegura(new Date().toISOString()),
-                      gravacaoAta?.resumo,
-                    )
-                  }
-                  className="bg-white border border-[#2A6377] text-[#2A6377] hover:bg-[#2A6377] hover:text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 flex-1 md:flex-none transition"
-                >
-                  <FileText size={18} /> Baixar PDF
-                </button>
-              </div>
+      {modalAtaAberto && (
+        <Modal
+          titulo={
+            <span className="flex items-center gap-2">
+              <Mail className="text-[#2A6377]" aria-hidden="true" /> Enviar Ata de Reunião
+            </span>
+          }
+          rotulo="Enviar Ata de Reunião"
+          onFechar={fecharModalAta}
+          largura="2xl"
+          rodape={
+            <>
+              <button
+                onClick={fecharModalAta}
+                className="px-6 py-2 rounded-lg font-medium bg-slate-100 hover:bg-slate-200"
+              >
+                Fechar
+              </button>
+              <button
+                onClick={() =>
+                  gerarVisualPDF(
+                    obrasNaAtaAtual,
+                    formatarDataSegura(new Date().toISOString()),
+                    gravacaoAta?.resumo,
+                  )
+                }
+                className="bg-white border border-[#2A6377] text-[#2A6377] hover:bg-[#2A6377] hover:text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition"
+              >
+                <FileText size={18} /> Baixar PDF
+              </button>
+            </>
+          }
+        >
+          {enviandoEmailAta ? (
+            <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-3 mb-4 text-sm flex items-center gap-2">
+              <Loader2 className="animate-spin" size={16} /> Enviando e-mail automaticamente…
             </div>
-          </div>,
-          document.body,
-        )}
+          ) : statusEnvioEmailAta?.ok ? (
+            <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 mb-4 text-sm">
+              ✅ E-mail enviado para: {statusEnvioEmailAta.destinatarios?.join(", ")}
+            </div>
+          ) : statusEnvioEmailAta && !statusEnvioEmailAta.ok ? (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm flex flex-col gap-2">
+              <span>❌ Falha ao enviar e-mail: {statusEnvioEmailAta.erro}</span>
+              <button
+                onClick={reenviarAtaPorEmail}
+                className="self-start bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
+              >
+                <Send size={12} /> Tentar novamente
+              </button>
+            </div>
+          ) : null}
+          <pre className="text-sm font-mono whitespace-pre-wrap bg-slate-50 border rounded-lg p-3">{ataGerada}</pre>
+        </Modal>
+      )}
     </>
   );
 }

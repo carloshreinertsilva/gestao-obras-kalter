@@ -2,7 +2,9 @@ import { linhaClicavel } from "./teclado";
 import { avisar, useAviso } from "./aviso";
 import { ErroCarga, useDialogos } from "./Dialogos";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Download, FileText, Loader2, Paperclip, RotateCcw, Search, Send, Trash2, X, XCircle } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Download, FileText, Loader2, Paperclip, RotateCcw, Search, Send, Trash2, XCircle } from "lucide-react";
+import { Modal } from "./Modal";
+import { BotaoExportar, SeloDiasParados, diasUteisDesde, numCsv, useFiltroSalvo } from "./modulos_lista";
 import { supabase } from "./supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda, normalizarNomeArquivo } from "./utils";
 import type { Usuario } from "./types";
@@ -74,6 +76,7 @@ export interface NfTerceiros {
   nome_encaminhou: string | null;
   encaminhado_em: string;
   motivo_devolucao: string | null;
+  devolvido_em?: string | null;
   nome_devolveu: string | null;
   motivo_cancelamento: string | null;
   nr_ad: number | null;
@@ -122,6 +125,13 @@ export const BadgeStatusNf = ({ status }: { status: StatusNf }) => (
     {STATUS_NF[status]?.rotulo || status}
   </span>
 );
+
+// NF aberta = ainda tem etapa a cumprir (lancar, corrigir ou pagar)
+const NF_ABERTA: StatusNf[] = ["encaminhada", "devolvida", "lancada"];
+// desde quando a NF esta na etapa atual: encaminhada (ou reenviada) -> encaminhado_em; devolvida -> devolvido_em;
+// lancada (a pagar) -> data do lancamento no ERP
+const desdeEtapaNf = (n: NfTerceiros) =>
+  n.status === "devolvida" ? n.devolvido_em || n.encaminhado_em : n.status === "lancada" ? n.data_lancamento || n.encaminhado_em : n.encaminhado_em;
 
 export interface AnexoNf {
   caminho: string;
@@ -224,7 +234,7 @@ export function ServicosTerceirosObra({
   const pedidos = useMemo(() => agruparPedidos(parcelas || []), [parcelas]);
   if (parcelas === null)
     return (
-      <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
+      <p className="text-sm text-slate-500 flex items-center gap-2 p-6">
         <Loader2 className="animate-spin" size={16} /> Carregando os pedidos de serviço…
       </p>
     );
@@ -259,9 +269,9 @@ export function ServicosTerceirosObra({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {indicadores.map(([rotulo, valor, sub, cor]) => (
           <div key={rotulo} className="bg-white p-4 rounded-xl shadow-sm border">
-            <p className="text-[11px] text-slate-400 font-bold uppercase">{rotulo}</p>
+            <p className="text-xs text-slate-500 font-bold uppercase">{rotulo}</p>
             <p className={`text-2xl font-bold mt-1 ${cor}`}>{valor}</p>
-            <p className="text-[11px] text-slate-400">{sub}</p>
+            <p className="text-xs text-slate-500">{sub}</p>
           </div>
         ))}
       </div>
@@ -270,7 +280,7 @@ export function ServicosTerceirosObra({
         <div className="p-4 border-b flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
           <div>
             <h3 className="font-bold text-lg">Serviços de terceiros</h3>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-xs text-slate-500">
               Pedidos de compra de serviço da obra no ERP, com as NFs recebidas, vencimento e pagamento. Use "Encaminhar NF" para mandar a NF do prestador ao fiscal e ao financeiro.
             </p>
           </div>
@@ -282,7 +292,7 @@ export function ServicosTerceirosObra({
             </select>
             <div className="relative">
               <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Pedido, fornecedor, NF…" className="border rounded-lg pl-7 pr-2 py-1.5 w-52" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Pedido, fornecedor, NF…" aria-label="Buscar pedidos" className="border rounded-lg pl-7 pr-2 py-1.5 w-full sm:w-52" />
             </div>
             <button
               onClick={() =>
@@ -312,7 +322,73 @@ export function ServicosTerceirosObra({
             onTentar={carregar}
           />
         )}
-        <div className="overflow-x-auto">
+        {/* celular: cartoes (toque abre as parcelas) */}
+        <ul className="md:hidden divide-y">
+          {filtrados.length === 0 && !(erro && pedidos.length === 0) && (
+            <li className="p-6 text-center text-sm text-slate-500">
+              {pedidos.length === 0 ? "Nenhum pedido de serviço para esta obra no ERP." : "Nenhum pedido com esses filtros."}
+            </li>
+          )}
+          {filtrados.map((p) => {
+            const doApp = nfsDoPedido(p.nr_pedido);
+            const pend = doApp.filter((n) => n.status === "encaminhada" || n.status === "devolvida").length;
+            const exp = abertos.has(p.nr_pedido);
+            return (
+              <li key={p.nr_pedido} className="px-3 py-3">
+                <button type="button" onClick={() => alternar(p.nr_pedido)} aria-expanded={exp} className="w-full text-left">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-slate-800 flex items-center gap-1 min-w-0">
+                      {exp ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />} Pedido {p.nr_pedido}
+                    </p>
+                    <span className="font-bold tabular-nums whitespace-nowrap">{formatarMoeda(p.valor)}</span>
+                  </div>
+                  <p className="text-sm text-slate-600 mt-0.5">{p.fornecedor || "-"}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Lançado {formatarMoeda(p.lancado)} · pago {formatarMoeda(p.pago)} · saldo <b>{formatarMoeda(p.saldo)}</b>
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${SITUACAO_PEDIDO[p.situacao_pedido].classe}`}>
+                      {SITUACAO_PEDIDO[p.situacao_pedido].rotulo}
+                    </span>
+                    {pend > 0 && <span className="text-xs text-amber-700">{pend} NF(s) aguardando lançamento</span>}
+                  </div>
+                </button>
+                {exp && (
+                  <div className="mt-2 space-y-2">
+                    <ul className="border rounded-lg divide-y bg-slate-50/60 text-xs">
+                      {p.parcelas.map((x) => (
+                        <li key={x.nr_solicitacao} className={`px-2 py-1.5 ${x.situacao === "cancelada" ? "text-slate-500 line-through" : "text-slate-700"}`}>
+                          <span className="font-semibold">{x.nr_solicitacao}</span> {x.descricao} · {formatarMoeda(x.valor)}
+                          <span className="block text-slate-500">
+                            {x.numero_nf ? `NF ${x.numero_nf}` : x.situacao === "cancelada" ? "cancelada" : "aguardando NF"}
+                            {x.vencimento ? ` · vence ${data(x.vencimento)}` : ""}
+                            {x.data_pagamento ? ` · pago ${data(x.data_pagamento)}` : ""}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {doApp.map((n) => (
+                      <button key={n.id} onClick={() => setDetalhe(n.id)} className="w-full text-left border rounded-lg px-3 py-2 bg-white text-xs">
+                        <span className="font-semibold">NF {n.numero_nf}</span> · {formatarMoeda(n.valor)} · vence {data(n.vencimento)}{" "}
+                        <BadgeStatusNf status={n.status} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {podeEncaminhar && p.situacao_pedido !== "encerrado" && (
+                  <button
+                    onClick={() => setEncaminhar({ pedido: p })}
+                    className="mt-2 w-full px-3 py-2 rounded-lg bg-[#2A6377] text-white text-sm font-bold flex items-center justify-center gap-1"
+                  >
+                    <Send size={14} /> Encaminhar NF
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        {/* computador: tabela */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px] min-w-[1000px]">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
@@ -329,7 +405,7 @@ export function ServicosTerceirosObra({
             <tbody>
               {filtrados.length === 0 && !(erro && pedidos.length === 0) && (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-slate-400">
+                  <td colSpan={8} className="p-6 text-center text-slate-500">
                     {pedidos.length === 0 ? "Nenhum pedido de serviço para esta obra no ERP." : "Nenhum pedido com esses filtros."}
                   </td>
                 </tr>
@@ -353,7 +429,7 @@ export function ServicosTerceirosObra({
             </tbody>
           </table>
         </div>
-        <p className="px-4 py-2 text-[11px] text-slate-400 border-t">
+        <p className="px-4 py-2 text-xs text-slate-500 border-t">
           {filtrados.length} de {pedidos.length} pedido(s) de serviço · atualizado pelo ERP a cada 5 minutos.
         </p>
       </div>
@@ -414,18 +490,18 @@ function FragmentoPedido({
           <span className="font-semibold flex items-center gap-1">
             {aberto ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {p.nr_pedido}
           </span>
-          <span className="block text-[11px] text-slate-400 ml-5">cadastro {data(p.data_pedido)}</span>
+          <span className="block text-xs text-slate-500 ml-5">cadastro {data(p.data_pedido)}</span>
         </td>
         <td className="px-3 py-2">
           <b>{p.fornecedor || "-"}</b>
-          <span className="block text-[11px] text-slate-500">
+          <span className="block text-xs text-slate-500">
             {p.cnpj ? `CNPJ ${p.cnpj} · ` : ""}
             {p.parcelas[0]?.descricao}
           </span>
         </td>
         <td className="px-3 py-2 text-right whitespace-nowrap">
           {formatarMoeda(p.valor)}
-          <span className="block text-[11px] text-slate-400">{p.parcelas.length} parcela(s)</span>
+          <span className="block text-xs text-slate-500">{p.parcelas.length} parcela(s)</span>
         </td>
         <td className="px-3 py-2 text-right whitespace-nowrap">{formatarMoeda(p.lancado)}</td>
         <td className="px-3 py-2 text-right whitespace-nowrap">{formatarMoeda(p.pago)}</td>
@@ -434,7 +510,7 @@ function FragmentoPedido({
           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${SITUACAO_PEDIDO[p.situacao_pedido].classe}`}>
             {SITUACAO_PEDIDO[p.situacao_pedido].rotulo}
           </span>
-          {pendentes > 0 && <span className="block text-[11px] text-amber-700 mt-1">{pendentes} NF(s) aguardando lançamento</span>}
+          {pendentes > 0 && <span className="block text-xs text-amber-700 mt-1">{pendentes} NF(s) aguardando lançamento</span>}
         </td>
         <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
           {podeEncaminhar && (
@@ -447,7 +523,7 @@ function FragmentoPedido({
       {aberto && (
         <tr className="bg-slate-50/60">
           <td colSpan={8} className="px-4 py-3">
-            <table className="w-full text-[12px] bg-white border rounded-lg">
+            <table className="w-full text-xs bg-white border rounded-lg">
               <thead className="text-slate-500">
                 <tr>
                   <th className="px-2 py-1.5 text-left">Solicitação / serviço</th>
@@ -464,7 +540,7 @@ function FragmentoPedido({
                 {p.parcelas.map((x) => {
                   const vencida = x.situacao === "recebida" && !x.data_pagamento && x.vencimento && x.vencimento < hoje;
                   return (
-                    <tr key={x.nr_solicitacao} className={`border-t ${x.situacao === "cancelada" ? "text-slate-400 line-through" : ""}`}>
+                    <tr key={x.nr_solicitacao} className={`border-t ${x.situacao === "cancelada" ? "text-slate-500 line-through" : ""}`}>
                       <td className="px-2 py-1.5">
                         {x.nr_solicitacao} <span className="text-slate-500">{x.descricao}</span>
                       </td>
@@ -473,11 +549,11 @@ function FragmentoPedido({
                       <td className="px-2 py-1.5 whitespace-nowrap">
                         {x.numero_nf ? (
                           <>
-                            NF {x.numero_nf} <span className="text-slate-400">{x.serie_nf}</span>
-                            {x.valor_nf != null && num(x.valor_nf) !== num(x.valor) && <span className="block text-[11px] text-slate-500">{formatarMoeda(x.valor_nf)}</span>}
+                            NF {x.numero_nf} <span className="text-slate-500">{x.serie_nf}</span>
+                            {x.valor_nf != null && num(x.valor_nf) !== num(x.valor) && <span className="block text-xs text-slate-500">{formatarMoeda(x.valor_nf)}</span>}
                           </>
                         ) : (
-                          <span className="text-slate-400">{x.situacao === "cancelada" ? "cancelada" : "aguardando NF"}</span>
+                          <span className="text-slate-500">{x.situacao === "cancelada" ? "cancelada" : "aguardando NF"}</span>
                         )}
                       </td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{data(x.data_emissao)}</td>
@@ -496,12 +572,12 @@ function FragmentoPedido({
             </table>
             {nfsApp.length > 0 && (
               <div className="mt-3">
-                <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">NFs encaminhadas pelo app</p>
+                <p className="text-xs font-bold uppercase text-slate-500 mb-1">NFs encaminhadas pelo app</p>
                 <div className="flex flex-wrap gap-2">
                   {nfsApp.map((n) => (
-                    <button key={n.id} onClick={() => onAbrirNf(n.id)} className="text-left border rounded-lg px-3 py-2 bg-white hover:border-[#2A6377] text-[12px]">
+                    <button key={n.id} onClick={() => onAbrirNf(n.id)} className="text-left border rounded-lg px-3 py-2 bg-white hover:border-[#2A6377] text-xs">
                       <span className="font-semibold">NF {n.numero_nf}</span> · {formatarMoeda(n.valor)} · vence {data(n.vencimento)} <BadgeStatusNf status={n.status} />
-                      <span className="block text-[11px] text-slate-400">
+                      <span className="block text-xs text-slate-500">
                         por {n.nome_encaminhou} em {fmtDataHora(n.encaminhado_em)}
                       </span>
                     </button>
@@ -545,12 +621,14 @@ function ModalEncaminharNf({
   const [novos, setNovos] = useState<File[]>([]);
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // alteracoes nao enviadas (pergunta antes de fechar)
+  const [sujo, setSujo] = useState(false);
   const aviso = useAviso();
   const { confirmar } = useDialogos();
 
   const listaAnexos = [
-    ...mantidos.map((a) => ({ chave: a.caminho, nome: a.nome, tamanho: a.tamanho, remover: () => setMantidos((l) => l.filter((x) => x !== a)) })),
-    ...novos.map((f, i) => ({ chave: `novo-${i}-${f.name}`, nome: f.name, tamanho: f.size, remover: () => setNovos((l) => l.filter((x) => x !== f)) })),
+    ...mantidos.map((a) => ({ chave: a.caminho, nome: a.nome, tamanho: a.tamanho, remover: () => (setSujo(true), setMantidos((l) => l.filter((x) => x !== a))) })),
+    ...novos.map((f, i) => ({ chave: `novo-${i}-${f.name}`, nome: f.name, tamanho: f.size, remover: () => (setSujo(true), setNovos((l) => l.filter((x) => x !== f))) })),
   ];
   const valorNum = parseFloat(valor.replace(/\./g, "").replace(",", ".")) || 0;
   const acimaDoSaldo = valorNum > pedido.saldo + 0.005;
@@ -642,18 +720,30 @@ function ModalEncaminharNf({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 border-b flex justify-between">
-          <div>
-            <h3 className="font-bold text-lg">{devolvida ? "Reenviar NF devolvida" : "Encaminhar NF de terceiros"}</h3>
-            <p className="text-xs text-slate-400">Vai para o fiscal e o financeiro lançarem e pagarem, com os anexos no e-mail.</p>
-          </div>
-          <button onClick={onFechar} className="text-slate-400">
-            <X size={20} />
+    <Modal
+      titulo={devolvida ? "Reenviar NF devolvida" : "Encaminhar NF de terceiros"}
+      subtitulo="Vai para o fiscal e o financeiro lançarem e pagarem, com os anexos no e-mail."
+      onFechar={onFechar}
+      sujo={sujo && !enviando}
+      largura="2xl"
+      rodape={
+        <>
+          {erro && (
+            <p className="text-sm text-red-600 md:mr-auto self-center" role="alert">
+              {erro}
+            </p>
+          )}
+          <button
+            disabled={enviando}
+            onClick={enviar}
+            className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {enviando ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />} {devolvida ? "Reenviar" : "Encaminhar"}
           </button>
-        </div>
-        <div className="overflow-y-auto p-4 space-y-4">
+        </>
+      }
+    >
+        <div className="space-y-4" onChange={() => setSujo(true)}>
           {devolvida?.motivo_devolucao && (
             <p className="text-sm bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">
               <b>Devolvida por {devolvida.nome_devolveu}:</b> {devolvida.motivo_devolucao}
@@ -661,19 +751,19 @@ function ModalEncaminharNf({
           )}
           <div className="grid grid-cols-2 gap-3 text-sm bg-slate-50 border rounded-lg p-3">
             <p>
-              <span className="block text-[11px] text-slate-400">Fornecedor</span>
+              <span className="block text-xs text-slate-500">Fornecedor</span>
               <b>{pedido.fornecedor}</b>
             </p>
             <p>
-              <span className="block text-[11px] text-slate-400">CNPJ</span>
+              <span className="block text-xs text-slate-500">CNPJ</span>
               {pedido.cnpj || "-"}
             </p>
             <p>
-              <span className="block text-[11px] text-slate-400">Pedido de compra</span>
+              <span className="block text-xs text-slate-500">Pedido de compra</span>
               <b>{pedido.nr_pedido}</b> · {formatarMoeda(pedido.valor)}
             </p>
             <p>
-              <span className="block text-[11px] text-slate-400">Saldo do pedido (sem NF lançada)</span>
+              <span className="block text-xs text-slate-500">Saldo do pedido (sem NF lançada)</span>
               <b>{formatarMoeda(pedido.saldo)}</b>
             </p>
           </div>
@@ -692,9 +782,9 @@ function ModalEncaminharNf({
                     <button
                       key={p.rotulo}
                       type="button"
-                      onClick={() => setVencimento(data)}
+                      onClick={() => (setSujo(true), setVencimento(data))}
                       title={`Vencimento em ${formatarDataSegura(data)} (hoje + ${p.dias} dias)`}
-                      className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                      className={`text-xs px-2 py-1 rounded-full border transition-colors ${
                         ativo ? "bg-[#2A6377] border-[#2A6377] text-white" : "bg-white text-slate-600 hover:border-[#2A6377] hover:text-[#2A6377]"
                       }`}
                     >
@@ -723,7 +813,7 @@ function ModalEncaminharNf({
                   key={f.id}
                   type="button"
                   aria-pressed={forma === f.id}
-                  onClick={() => setForma(f.id)}
+                  onClick={() => (setSujo(true), setForma(f.id))}
                   className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                     forma === f.id ? "bg-[#2A6377] border-[#2A6377] text-white font-semibold" : "bg-white text-slate-600 hover:border-[#2A6377] hover:text-[#2A6377]"
                   }`}
@@ -771,7 +861,7 @@ function ModalEncaminharNf({
           </fieldset>
           <div>
             <p className="text-xs font-semibold mb-1">Anexos *</p>
-            <p className="text-[11px] text-slate-400 mb-2">
+            <p className="text-xs text-slate-500 mb-2">
               A NF e, se houver, boleto, fatura, relatório de medição… (PDF, XML ou imagem · até {MAX_ANEXOS} arquivos, 20&nbsp;MB no
               total). O primeiro é o arquivo da NF.
             </p>
@@ -782,9 +872,9 @@ function ModalEncaminharNf({
                     <FileText size={15} className="shrink-0 text-slate-400" aria-hidden="true" />
                     <span className="truncate flex-1 min-w-0">{a.nome}</span>
                     {i === 0 && (
-                      <span className="shrink-0 text-[10px] font-bold uppercase text-[#2A6377] bg-[#2A6377]/10 rounded px-1.5 py-0.5">NF</span>
+                      <span className="shrink-0 text-xs font-bold uppercase text-[#2A6377] bg-[#2A6377]/10 rounded px-1.5 py-0.5">NF</span>
                     )}
-                    {a.tamanho ? <span className="shrink-0 text-[11px] text-slate-400 tabular-nums">{tamanhoTxt(a.tamanho)}</span> : null}
+                    {a.tamanho ? <span className="shrink-0 text-xs text-slate-500 tabular-nums">{tamanhoTxt(a.tamanho)}</span> : null}
                     <button
                       type="button"
                       onClick={a.remover}
@@ -819,14 +909,7 @@ function ModalEncaminharNf({
             <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={2} className="border rounded-lg px-3 py-2 w-full text-sm" />
           </div>
         </div>
-        <div className="p-4 border-t flex items-center justify-between gap-3 bg-slate-50/60 rounded-b-xl">
-          <p className="text-sm text-red-600">{erro}</p>
-          <button disabled={enviando} onClick={enviar} className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-2 disabled:opacity-60">
-            {enviando ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />} {devolvida ? "Reenviar" : "Encaminhar"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -952,99 +1035,8 @@ export function DetalheNfTerceiros({
   const podeCancelar = Boolean(nf && ["encaminhada", "devolvida"].includes(nf.status) && !["fiscal", "financeiro", "logistica", "cliente"].includes(perfil));
   const vencida = Boolean(nf && !["paga", "cancelada"].includes(nf.status) && nf.vencimento < hojeISO());
 
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onFechar} className="absolute right-3 top-3 text-slate-400" aria-label="Fechar">
-          <X size={20} />
-        </button>
-        {!nf ? (
-          <p className="p-6 text-sm text-slate-400">{erro || "Carregando…"}</p>
-        ) : (
-          <>
-            <div className="p-4 border-b pr-10">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-lg">NF {nf.numero_nf}</h3>
-                <BadgeStatusNf status={nf.status} />
-              </div>
-              <p className="text-sm text-slate-500">
-                {nf.fornecedor} · obra{" "}
-                <a href={`/obras/${nf.codigo_obra}/compras`} className="text-[#2A6377] font-semibold hover:underline">
-                  {nf.codigo_obra}
-                </a>{" "}
-                · pedido {nf.nr_pedido}
-              </p>
-            </div>
-            <div className="overflow-y-auto p-4 space-y-4 text-sm">
-              {nf.status === "devolvida" && (
-                <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">
-                  <b>Devolvida por {nf.nome_devolveu}:</b> {nf.motivo_devolucao}
-                </p>
-              )}
-              {nf.status === "cancelada" && (
-                <p className="bg-slate-100 border rounded-lg px-3 py-2 text-slate-600">
-                  <b>Cancelada:</b> {nf.motivo_cancelamento}
-                </p>
-              )}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <Info rotulo="Valor" valor={<b>{formatarMoeda(nf.valor)}</b>} />
-                <Info rotulo="Emissão" valor={data(nf.data_emissao)} />
-                <Info
-                  rotulo="Vencimento"
-                  valor={
-                    <span className={vencida ? "text-red-600 font-semibold" : ""}>
-                      {data(nf.vencimento)} {vencida && <AlertTriangle size={12} className="inline -mt-0.5" />}
-                    </span>
-                  }
-                />
-                <Info rotulo="CNPJ" valor={nf.cnpj || "-"} />
-                <Info rotulo="Lançada no ERP" valor={nf.data_lancamento ? `${data(nf.data_lancamento)} (AD ${nf.nr_ad})` : "-"} />
-                <Info rotulo="Paga em" valor={nf.data_pagamento ? <span className="text-emerald-700 font-semibold">{data(nf.data_pagamento)}</span> : "-"} />
-              </div>
-              <p className="text-slate-500">
-                Encaminhada por {nf.nome_encaminhou} em {fmtDataHora(nf.encaminhado_em)} (NT {nf.numero})
-              </p>
-              {nf.forma_pagamento && (
-                <div className="border rounded-lg p-3">
-                  <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Forma de pagamento</p>
-                  {resumoPagamento(nf.forma_pagamento, nf.dados_pagamento).map((l, i) => (
-                    <p key={i} className={i === 0 ? "font-semibold" : "text-slate-600 break-words"}>
-                      {l}
-                    </p>
-                  ))}
-                </div>
-              )}
-              {nf.observacao && <p className="whitespace-pre-wrap border rounded-lg p-3">{nf.observacao}</p>}
-              <div>
-                <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Anexos ({anexosDa(nf).length})</p>
-                <ul className="space-y-1">
-                  {anexosDa(nf).map((a) => (
-                    <li key={a.caminho}>
-                      <button onClick={() => abrirArquivo(a.caminho)} className="flex items-center gap-2 text-[#2A6377] font-semibold hover:underline text-left">
-                        <FileText size={15} className="shrink-0" aria-hidden="true" /> <span className="break-all">{a.nome}</span>
-                        {a.tamanho ? <span className="text-[11px] font-normal text-slate-400">{tamanhoTxt(a.tamanho)}</span> : null}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Histórico</p>
-                {erroEventos && <ErroCarga compacto mensagem="Não foi possível carregar o histórico." detalhe={erroEventos} onTentar={carregar} />}
-                <ul className="space-y-1">
-                  {eventos.map((e) => (
-                    <li key={e.id} className="text-[12px] text-slate-600">
-                      <span className="text-slate-400">{fmtDataHora(e.created_at)}</span> · <b>{EVENTO[e.evento] || e.evento}</b>
-                      {e.nome_usuario && e.nome_usuario !== "Sistema" ? ` (${e.nome_usuario})` : ""}
-                      {e.detalhe ? ` — ${e.detalhe}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              {erro && <p className="text-red-600">{erro}</p>}
-            </div>
-            {(podeDevolver || podeCancelar) && (
-              <div className="p-4 border-t flex flex-wrap justify-end gap-2 bg-slate-50/60 rounded-b-xl">
+  const acoes = nf && (podeDevolver || podeCancelar) ? (
+    <>
                 {podeDevolver && (
                   <button
                     disabled={ocupado}
@@ -1078,18 +1070,115 @@ export function DetalheNfTerceiros({
                     <Send size={14} /> Corrigir e reenviar
                   </button>
                 )}
-              </div>
-            )}
+    </>
+  ) : undefined;
+
+  return (
+    <Modal
+      titulo={
+        nf ? (
+          <span className="flex items-center gap-2 flex-wrap">
+            NF {nf.numero_nf} <BadgeStatusNf status={nf.status} />
+          </span>
+        ) : (
+          "NF de terceiros"
+        )
+      }
+      rotulo={nf ? `NF ${nf.numero_nf}` : "NF de terceiros"}
+      subtitulo={
+        nf ? (
+          <>
+            {nf.fornecedor} · obra{" "}
+            <a href={`/obras/${nf.codigo_obra}/compras`} className="text-[#2A6377] font-semibold hover:underline">
+              {nf.codigo_obra}
+            </a>{" "}
+            · pedido {nf.nr_pedido}
           </>
+        ) : undefined
+      }
+      onFechar={onFechar}
+      largura="2xl"
+      rodape={acoes}
+    >
+        {!nf ? (
+          <p className="text-sm text-slate-500">{erro || "Carregando…"}</p>
+        ) : (
+            <div className="space-y-4 text-sm">
+              {nf.status === "devolvida" && (
+                <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">
+                  <b>Devolvida por {nf.nome_devolveu}:</b> {nf.motivo_devolucao}
+                </p>
+              )}
+              {nf.status === "cancelada" && (
+                <p className="bg-slate-100 border rounded-lg px-3 py-2 text-slate-600">
+                  <b>Cancelada:</b> {nf.motivo_cancelamento}
+                </p>
+              )}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <Info rotulo="Valor" valor={<b>{formatarMoeda(nf.valor)}</b>} />
+                <Info rotulo="Emissão" valor={data(nf.data_emissao)} />
+                <Info
+                  rotulo="Vencimento"
+                  valor={
+                    <span className={vencida ? "text-red-600 font-semibold" : ""}>
+                      {data(nf.vencimento)} {vencida && <AlertTriangle size={12} className="inline -mt-0.5" />}
+                    </span>
+                  }
+                />
+                <Info rotulo="CNPJ" valor={nf.cnpj || "-"} />
+                <Info rotulo="Lançada no ERP" valor={nf.data_lancamento ? `${data(nf.data_lancamento)} (AD ${nf.nr_ad})` : "-"} />
+                <Info rotulo="Paga em" valor={nf.data_pagamento ? <span className="text-emerald-700 font-semibold">{data(nf.data_pagamento)}</span> : "-"} />
+              </div>
+              <p className="text-slate-500">
+                Encaminhada por {nf.nome_encaminhou} em {fmtDataHora(nf.encaminhado_em)} (NT {nf.numero})
+              </p>
+              {nf.forma_pagamento && (
+                <div className="border rounded-lg p-3">
+                  <p className="text-xs font-bold uppercase text-slate-500 mb-1">Forma de pagamento</p>
+                  {resumoPagamento(nf.forma_pagamento, nf.dados_pagamento).map((l, i) => (
+                    <p key={i} className={i === 0 ? "font-semibold" : "text-slate-600 break-words"}>
+                      {l}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {nf.observacao && <p className="whitespace-pre-wrap border rounded-lg p-3">{nf.observacao}</p>}
+              <div>
+                <p className="text-xs font-bold uppercase text-slate-500 mb-1">Anexos ({anexosDa(nf).length})</p>
+                <ul className="space-y-1">
+                  {anexosDa(nf).map((a) => (
+                    <li key={a.caminho}>
+                      <button onClick={() => abrirArquivo(a.caminho)} className="flex items-center gap-2 text-[#2A6377] font-semibold hover:underline text-left">
+                        <FileText size={15} className="shrink-0" aria-hidden="true" /> <span className="break-all">{a.nome}</span>
+                        {a.tamanho ? <span className="text-xs font-normal text-slate-500">{tamanhoTxt(a.tamanho)}</span> : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase text-slate-500 mb-1">Histórico</p>
+                {erroEventos && <ErroCarga compacto mensagem="Não foi possível carregar o histórico." detalhe={erroEventos} onTentar={carregar} />}
+                <ul className="space-y-1">
+                  {eventos.map((e) => (
+                    <li key={e.id} className="text-xs text-slate-600">
+                      <span className="text-slate-500">{fmtDataHora(e.created_at)}</span> · <b>{EVENTO[e.evento] || e.evento}</b>
+                      {e.nome_usuario && e.nome_usuario !== "Sistema" ? ` (${e.nome_usuario})` : ""}
+                      {e.detalhe ? ` — ${e.detalhe}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {erro && <p className="text-red-600">{erro}</p>}
+            </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
 const Info = ({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) => (
   <div>
-    <p className="text-[11px] text-slate-400">{rotulo}</p>
+    <p className="text-xs text-slate-500">{rotulo}</p>
     <p>{valor}</p>
   </div>
 );
@@ -1099,8 +1188,10 @@ const Info = ({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) => 
 // ------------------------------------------------------------------------------------------------
 export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usuario | null; idAberto: string | null; onAbrir: (id: string | null) => void }) {
   const [nfs, setNfs] = useState<NfTerceiros[] | null>(null);
-  const [filtro, setFiltro] = useState("pendentes");
-  const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useFiltroSalvo<string>("nfs_terceiros.filtro", "pendentes", (v) =>
+    ["pendentes", "a_pagar", "paga", "cancelada", "todas"].includes(String(v)),
+  );
+  const [busca, setBusca] = useFiltroSalvo<string>("nfs_terceiros.busca", "", (v) => typeof v === "string" && v.length <= 100);
   const [reenvio, setReenvio] = useState<{ pedido: PedidoServico; nf: NfTerceiros } | null>(null);
   const [erroCarga, setErroCarga] = useState("");
 
@@ -1126,7 +1217,7 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
     );
   if (nfs === null)
     return (
-      <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
+      <p className="text-sm text-slate-500 flex items-center gap-2 p-6">
         <Loader2 className="animate-spin" size={16} /> Carregando as NFs de terceiros…
       </p>
     );
@@ -1155,9 +1246,9 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {indicadores.map(([rotulo, lista, cor]) => (
           <div key={rotulo} className="bg-white p-4 rounded-xl shadow-sm border">
-            <p className="text-[11px] text-slate-400 font-bold uppercase">{rotulo}</p>
+            <p className="text-xs text-slate-500 font-bold uppercase">{rotulo}</p>
             <p className={`text-2xl font-bold mt-1 ${cor}`}>{lista.length}</p>
-            <p className="text-[11px] text-slate-400">{formatarMoeda(lista.reduce((a, n) => a + num(n.valor), 0))}</p>
+            <p className="text-xs text-slate-500">{formatarMoeda(lista.reduce((a, n) => a + num(n.valor), 0))}</p>
           </div>
         ))}
       </div>
@@ -1172,26 +1263,60 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
           </select>
           <div className="relative">
             <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="NF, fornecedor, obra, pedido…" className="border rounded-lg pl-7 pr-2 py-1.5 w-56" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="NF, fornecedor, obra, pedido…" aria-label="Buscar NFs" className="border rounded-lg pl-7 pr-2 py-1.5 w-full sm:w-56" />
           </div>
-          <button
+          <BotaoExportar
+            disabled={!filtradas.length}
             onClick={() =>
               exportarCsv(
                 "nfs_terceiros",
-                ["NT", "Obra", "Pedido", "Fornecedor", "CNPJ", "NF", "Emissão", "Valor", "Vencimento", "Situação", "Encaminhada por", "Encaminhada em", "Lançada", "Paga"],
+                ["NT", "Obra", "Pedido", "Fornecedor", "CNPJ", "NF", "Emissão", "Valor", "Vencimento", "Situação", "Dias úteis na etapa", "Encaminhada por",
+                  "Encaminhada em", "Devolvida por", "Motivo da devolução", "Lançada", "AD", "Paga", "Forma de pagamento"],
                 filtradas.map((n) => [
-                  n.numero, n.codigo_obra, n.nr_pedido, n.fornecedor, n.cnpj || "", n.numero_nf, data(n.data_emissao), String(n.valor).replace(".", ","),
-                  data(n.vencimento), STATUS_NF[n.status].rotulo, n.nome_encaminhou || "", fmtDataHora(n.encaminhado_em), data(n.data_lancamento), data(n.data_pagamento),
+                  n.numero, n.codigo_obra, n.nr_pedido, n.fornecedor, n.cnpj || "", n.numero_nf, data(n.data_emissao), numCsv(n.valor),
+                  data(n.vencimento), STATUS_NF[n.status].rotulo, NF_ABERTA.includes(n.status) ? diasUteisDesde(desdeEtapaNf(n)) ?? "" : "",
+                  n.nome_encaminhou || "", fmtDataHora(n.encaminhado_em), n.nome_devolveu || "", n.motivo_devolucao || "", data(n.data_lancamento), n.nr_ad ?? "",
+                  data(n.data_pagamento), n.forma_pagamento || "",
                 ]),
               )
             }
-            className="px-3 py-1.5 rounded-lg border text-slate-600 hover:bg-slate-50 flex items-center gap-1"
-          >
-            <Download size={13} /> Exportar
-          </button>
+          />
         </div>
         {erroCarga && <ErroCarga compacto mensagem="Não foi possível atualizar a lista (mostrando a última carregada)." detalhe={erroCarga} onTentar={carregar} />}
-        <div className="overflow-x-auto">
+        {/* celular: cartoes */}
+        <ul className="md:hidden divide-y">
+          {filtradas.length === 0 && (
+            <li className="p-6 text-center text-sm text-slate-500">Nenhuma NF {filtro === "todas" ? "encaminhada ainda" : "com esse filtro"}.</li>
+          )}
+          {filtradas.map((n) => {
+            const vencida = !["paga", "cancelada"].includes(n.status) && n.vencimento < hoje;
+            return (
+              <li key={n.id}>
+                <button type="button" onClick={() => onAbrir(n.id)} className="w-full text-left px-3 py-3 hover:bg-slate-50 active:bg-slate-100">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-slate-800 min-w-0">
+                      NF {n.numero_nf} <span className="font-normal text-slate-600">· {n.fornecedor}</span>
+                    </p>
+                    <span className="font-bold tabular-nums whitespace-nowrap">{formatarMoeda(n.valor)}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Obra {n.codigo_obra} · pedido {n.nr_pedido} ·{" "}
+                    <span className={vencida ? "text-red-600 font-semibold" : ""}>vence {data(n.vencimento)}</span>
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <BadgeStatusNf status={n.status} />
+                    <SeloDiasParados desde={desdeEtapaNf(n)} aberto={NF_ABERTA.includes(n.status)} />
+                    <span className="ml-auto text-xs font-semibold text-[#2A6377] flex items-center">
+                      {n.status === "devolvida" ? "Corrigir" : "Ver detalhes"} <ChevronRight size={14} aria-hidden="true" />
+                    </span>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {/* computador: tabela */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px] min-w-[900px]">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
@@ -1207,7 +1332,7 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
             <tbody>
               {filtradas.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-slate-400">
+                  <td colSpan={7} className="p-6 text-center text-slate-500">
                     Nenhuma NF {filtro === "todas" ? "encaminhada ainda" : "com esse filtro"}.
                   </td>
                 </tr>
@@ -1218,13 +1343,13 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
                   <tr key={n.id} className="border-t hover:bg-slate-50 cursor-pointer" {...linhaClicavel(() => onAbrir(n.id))}>
                     <td className="px-3 py-2">
                       <b>{n.fornecedor}</b>
-                      <span className="block text-[11px] text-slate-500">
+                      <span className="block text-xs text-slate-500">
                         NF {n.numero_nf}
                         {n.cnpj ? ` · CNPJ ${n.cnpj}` : ""}
                       </span>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {n.codigo_obra} <span className="text-slate-400">· pedido {n.nr_pedido}</span>
+                      {n.codigo_obra} <span className="text-slate-500">· pedido {n.nr_pedido}</span>
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">{formatarMoeda(n.valor)}</td>
                     <td className="px-3 py-2 text-center whitespace-nowrap">{data(n.data_emissao)}</td>
@@ -1234,10 +1359,11 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
                     </td>
                     <td className="px-3 py-2 text-center">
                       <BadgeStatusNf status={n.status} />
+                      <div className="mt-1"><SeloDiasParados desde={desdeEtapaNf(n)} aberto={NF_ABERTA.includes(n.status)} /></div>
                     </td>
-                    <td className="px-3 py-2 text-[12px] text-slate-500">
+                    <td className="px-3 py-2 text-xs text-slate-500">
                       {n.nome_encaminhou}
-                      <span className="block text-[11px] text-slate-400">{fmtDataHora(n.encaminhado_em)}</span>
+                      <span className="block text-xs text-slate-500">{fmtDataHora(n.encaminhado_em)}</span>
                     </td>
                   </tr>
                 );

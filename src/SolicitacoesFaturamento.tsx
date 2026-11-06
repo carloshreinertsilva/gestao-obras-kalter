@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronRight,
   Clock,
   FileText,
   Loader2,
@@ -20,7 +21,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { supabase } from "./supabase";
-import { formatarDataSegura, formatarMoeda, normalizarNomeArquivo } from "./utils";
+import { exportarCsv, formatarDataSegura, formatarMoeda, normalizarNomeArquivo } from "./utils";
+import { Modal } from "./Modal";
+import { BotaoExportar, SeloDiasParados, diasUteisDesde, maisRecente, numCsv, useFiltroSalvo } from "./modulos_lista";
 import type { Usuario } from "./types";
 
 // Solicitacao de faturamento (2026-10-15): gestor pede -> logistica (flag aprova_faturamento)
@@ -156,6 +159,26 @@ const arred4 = (v: number) => Math.round(v * 10000) / 10000;
 const tipoTexto = (t: string) => (t === "produto" ? "Produto" : "Serviço");
 const msgErro = (e: any) => String(e?.message || e || "Erro desconhecido.").replace(/^.*?ERROR:\s*/, "");
 
+// SF ainda andando (alguem precisa agir)
+const SF_ABERTA: StatusSolicitacaoFaturamento[] = ["rascunho", "aguardando_logistica", "devolvida", "aguardando_fiscal", "faturada_parcial"];
+// desde quando a SF esta na etapa atual (cada passagem grava a sua data; updated_at muda tambem com lembretes)
+const desdeEtapaSf = (s: SolicitacaoFaturamento) => {
+  switch (s.status) {
+    case "rascunho":
+      return s.created_at;
+    case "aguardando_logistica": // enviada, reenviada ou devolvida pelo fiscal para a logistica
+      return maisRecente(s.enviado_em, s.devolvido_em) || s.created_at;
+    case "devolvida":
+      return s.devolvido_em || s.enviado_em || s.created_at;
+    case "aguardando_fiscal":
+      return s.aprovado_em || s.enviado_em || s.created_at;
+    case "faturada_parcial":
+      return maisRecente(s.faturado_em, s.aprovado_em) || s.created_at;
+    default:
+      return null;
+  }
+};
+
 export const BadgeStatusFaturamento = ({ status }: { status: StatusSolicitacaoFaturamento }) => (
   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${STATUS[status]?.classe}`}>
     {STATUS[status]?.rotulo || status}
@@ -190,6 +213,8 @@ function ModalSolicitarFaturamento({
   const [pctTodos, setPctTodos] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // alteracoes nao salvas (pergunta antes de fechar); a carga dos itens nao conta
+  const [sujo, setSujo] = useState(false);
   const aviso = useAviso();
 
   useEffect(() => {
@@ -235,6 +260,7 @@ function ModalSolicitarFaturamento({
     definirQtd(i, Number.isFinite(v) && num(i.valor_unitario_ipi) > 0 ? v / num(i.valor_unitario_ipi) : 0);
   };
   const saldoTotal = (lista: ItemDisponivel[]) => {
+    setSujo(true);
     const q: Record<number, number> = {};
     lista.forEach((i) => (q[i.sequencia] = num(i.saldo)));
     setQtd((p) => ({ ...p, ...q }));
@@ -247,6 +273,7 @@ function ModalSolicitarFaturamento({
   const aplicarPctTodos = () => {
     const v = parseFloat(pctTodos.replace(",", "."));
     if (!Number.isFinite(v) || v <= 0) return;
+    setSujo(true);
     const q: Record<number, number> = {};
     (itens || []).forEach((i) => (q[i.sequencia] = Math.min(arred4((v / 100) * num(i.quantidade_pedido)), num(i.saldo))));
     setQtd(q);
@@ -300,30 +327,44 @@ function ModalSolicitarFaturamento({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 border-b flex items-start justify-between gap-3">
-          <div>
-            <h3 className="font-bold text-lg text-slate-800">
-              {existente ? `Editar solicitação SF ${existente.solicitacao.numero}` : "Solicitar faturamento"} · {tipoTexto(tipo)}
-            </h3>
-            <p className="text-xs text-slate-400">
-              Obra {codigoObra} · itens do pedido de {tipo === "produto" ? "produto" : "serviço"} com saldo a faturar. Informe o % (do total do item) ou o valor.
-            </p>
-            {existente?.solicitacao.status === "devolvida" && existente.solicitacao.motivo_devolucao && (
-              <p className="mt-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">
-                <b>Devolvida por {existente.solicitacao.nome_devolveu}:</b> {existente.solicitacao.motivo_devolucao}
-              </p>
-            )}
+    <Modal
+      titulo={`${existente ? `Editar solicitação SF ${existente.solicitacao.numero}` : "Solicitar faturamento"} · ${tipoTexto(tipo)}`}
+      subtitulo={
+        <>
+          Obra {codigoObra} · itens do pedido de {tipo === "produto" ? "produto" : "serviço"} com saldo a faturar. Informe o % (do total do item) ou o valor.
+          {existente?.solicitacao.status === "devolvida" && existente.solicitacao.motivo_devolucao && (
+            <span className="block mt-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">
+              <b>Devolvida por {existente.solicitacao.nome_devolveu}:</b> {existente.solicitacao.motivo_devolucao}
+            </span>
+          )}
+        </>
+      }
+      onFechar={onFechar}
+      sujo={sujo && !enviando}
+      largura="5xl"
+      rodape={
+        <>
+          <div className="md:mr-auto">
+            <p className="text-xs text-slate-500">{nItens} item(ns) · {tipoTexto(tipo)} · valor com IPI</p>
+            <p className="text-2xl font-bold text-slate-800">{formatarMoeda(total)}</p>
+            {erro && <p className="text-sm text-red-600 mt-1">{erro}</p>}
           </div>
-          <button onClick={onFechar} className="text-slate-400 hover:text-slate-600">
-            <X size={20} />
+          <button disabled={enviando} onClick={() => salvar(false)} className="px-4 py-2 rounded-lg border font-semibold text-slate-600 hover:bg-white disabled:opacity-60">
+            Salvar rascunho
           </button>
-        </div>
-
-        <div className="overflow-y-auto p-4 space-y-4">
+          <button
+            disabled={enviando}
+            onClick={() => salvar(true)}
+            className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {enviando ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />} Enviar para a logística
+          </button>
+        </>
+      }
+    >
+        <div className="space-y-4" onChange={() => setSujo(true)}>
           {itens === null ? (
-            <p className="text-sm text-slate-400 flex items-center gap-2">
+            <p className="text-sm text-slate-500 flex items-center gap-2">
               <Loader2 className="animate-spin" size={16} /> Carregando itens do pedido…
             </p>
           ) : itens.length === 0 ? (
@@ -348,10 +389,11 @@ function ModalSolicitarFaturamento({
                 </button>
                 <button
                   onClick={() => {
+                    setSujo(true);
                     setQtd({});
                     setEntrada({});
                   }}
-                  className="px-3 py-1 rounded-lg text-slate-400 hover:text-slate-600"
+                  className="px-3 py-1 rounded-lg text-slate-500 hover:text-slate-700"
                 >
                   Limpar
                 </button>
@@ -382,18 +424,18 @@ function ModalSolicitarFaturamento({
                               <td className="px-3 py-2 text-slate-500">{i.sequencia}</td>
                               <td className="px-3 py-2">
                                 <span className="font-semibold">{i.codigo_material}</span>
-                                <span className="block text-[11px] text-slate-500">{i.descricao}</span>
+                                <span className="block text-xs text-slate-500">{i.descricao}</span>
                               </td>
                               <td className="px-3 py-2 text-right whitespace-nowrap">
                                 {formatarMoeda(i.valor_pedido)}
-                                <span className="block text-[11px] text-slate-400">
+                                <span className="block text-xs text-slate-500">
                                   {fmtQtd(i.quantidade_pedido)} {i.unidade}
                                   {num(i.quantidade_faturada) > 0 && ` · faturado ${fmtQtd(i.quantidade_faturada)}`}
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-right whitespace-nowrap text-amber-700 font-semibold">
                                 {formatarMoeda(i.valor_saldo)}
-                                <span className="block text-[11px] text-slate-400 font-normal">{fmtPct((num(i.saldo) / num(i.quantidade_pedido)) * 100)}</span>
+                                <span className="block text-xs text-slate-500 font-normal">{fmtPct((num(i.saldo) / num(i.quantidade_pedido)) * 100)}</span>
                               </td>
                               <td className="px-3 py-2">
                                 <input
@@ -414,7 +456,7 @@ function ModalSolicitarFaturamento({
                                   <button
                                     title="Faturar o saldo todo deste item"
                                     onClick={() => saldoTotal([i])}
-                                    className="text-[10px] font-bold px-1.5 rounded border text-slate-500 hover:bg-slate-50"
+                                    className="text-xs font-bold px-1.5 rounded border text-slate-500 hover:bg-slate-50"
                                   >
                                     tudo
                                   </button>
@@ -424,11 +466,11 @@ function ModalSolicitarFaturamento({
                                 {q > 0 ? (
                                   <>
                                     {fmtQtd(q)} {i.unidade}
-                                    <span className="block text-[11px] text-slate-400">{formatarMoeda(valorDe(i))}</span>
+                                    <span className="block text-xs text-slate-500">{formatarMoeda(valorDe(i))}</span>
                                     {ent.valor !== undefined &&
                                       Math.abs(valorDe(i) - parseFloat(ent.valor.replace(/\./g, "").replace(",", ".") || "0")) >= 0.01 && (
                                         <span
-                                          className="block text-[10px] text-amber-700"
+                                          className="block text-xs text-amber-700"
                                           title="O ERP trabalha com 4 casas decimais na quantidade; o valor é o mais próximo possível do digitado"
                                         >
                                           ajustado (qtd. com 4 casas)
@@ -436,7 +478,7 @@ function ModalSolicitarFaturamento({
                                       )}
                                   </>
                                 ) : (
-                                  <span className="text-slate-300">-</span>
+                                  <span className="text-slate-500">-</span>
                                 )}
                               </td>
                             </tr>
@@ -454,7 +496,7 @@ function ModalSolicitarFaturamento({
             <div>
               <label className="block text-sm font-semibold mb-1">Faturar até *</label>
               <input type="date" value={dataDesejada} onChange={(e) => setDataDesejada(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
-              <p className="text-[11px] text-slate-400 mt-1">Lembretes diários começam 3 dias antes.</p>
+              <p className="text-xs text-slate-500 mt-1">Lembretes diários começam 3 dias antes.</p>
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-semibold mb-1">Observação para logística e fiscal</label>
@@ -486,15 +528,15 @@ function ModalSolicitarFaturamento({
               {anexos.map((a, k) => (
                 <li key={a.caminho} className="text-xs text-slate-600 flex items-center gap-2">
                   <Paperclip size={12} /> {a.nome}
-                  <button onClick={() => setAnexos((p) => p.filter((_, j) => j !== k))} className="text-red-500">
+                  <button onClick={() => (setSujo(true), setAnexos((p) => p.filter((_, j) => j !== k)))} className="text-red-500" aria-label={`Remover ${a.nome}`}>
                     <X size={13} />
                   </button>
                 </li>
               ))}
               {arquivos.map((a, k) => (
                 <li key={k} className="text-xs text-slate-600 flex items-center gap-2">
-                  <Paperclip size={12} /> {a.name} <span className="text-slate-400">(novo)</span>
-                  <button onClick={() => setArquivos((p) => p.filter((_, j) => j !== k))} className="text-red-500">
+                  <Paperclip size={12} /> {a.name} <span className="text-slate-500">(novo)</span>
+                  <button onClick={() => (setSujo(true), setArquivos((p) => p.filter((_, j) => j !== k)))} className="text-red-500" aria-label={`Remover ${a.name}`}>
                     <X size={13} />
                   </button>
                 </li>
@@ -503,27 +545,7 @@ function ModalSolicitarFaturamento({
           </div>
         </div>
 
-        <div className="p-4 border-t flex flex-col md:flex-row md:items-center gap-3 justify-between bg-slate-50/60 rounded-b-xl">
-          <div>
-            <p className="text-xs text-slate-500">{nItens} item(ns) · {tipoTexto(tipo)} · valor com IPI</p>
-            <p className="text-2xl font-bold text-slate-800">{formatarMoeda(total)}</p>
-            {erro && <p className="text-sm text-red-600 mt-1">{erro}</p>}
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row gap-2">
-            <button disabled={enviando} onClick={() => salvar(false)} className="px-4 py-2 rounded-lg border font-semibold text-slate-600 hover:bg-white disabled:opacity-60">
-              Salvar rascunho
-            </button>
-            <button
-              disabled={enviando}
-              onClick={() => salvar(true)}
-              className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
-            >
-              {enviando ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />} Enviar para a logística
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -541,10 +563,10 @@ function FragmentoFamilia({
   return (
     <>
       <tr className="bg-slate-100/70 border-t">
-        <td colSpan={7} className="px-3 py-1.5 text-[12px] font-bold text-slate-600">
+        <td colSpan={7} className="px-3 py-1.5 text-xs font-bold text-slate-600">
           Família {familia}
           {descricao ? ` – ${descricao}` : ""}
-          <button onClick={onSaldo} className="ml-3 text-[11px] font-bold text-[#2A6377] hover:underline">
+          <button onClick={onSaldo} className="ml-3 text-xs font-bold text-[#2A6377] hover:underline">
             faturar saldo da família
           </button>
         </td>
@@ -582,6 +604,7 @@ function ModalConferencia({
   const [obs, setObs] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [sujo, setSujo] = useState(false);
   const aviso = useAviso();
   const { confirmar } = useDialogos();
 
@@ -653,19 +676,32 @@ function ModalConferencia({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 border-b flex justify-between">
-          <div>
-            <h3 className="font-bold text-lg">Conferir SF {solicitacao.numero} · obra {solicitacao.codigo_obra}</h3>
-            <p className="text-xs text-slate-400">Ajuste as quantidades se precisar (0 tira o item) e informe os dados do transporte.</p>
+    <Modal
+      titulo={`Conferir SF ${solicitacao.numero} · obra ${solicitacao.codigo_obra}`}
+      subtitulo="Ajuste as quantidades se precisar (0 tira o item) e informe os dados do transporte."
+      onFechar={onFechar}
+      sujo={sujo && !enviando}
+      largura="4xl"
+      rodape={
+        <>
+          <div className="md:mr-auto">
+            <p className="text-xs text-slate-500">Total aprovado (com IPI)</p>
+            <p className="text-2xl font-bold">{formatarMoeda(total)}</p>
+            {erro && <p className="text-sm text-red-600">{erro}</p>}
           </div>
-          <button onClick={onFechar} className="text-slate-400">
-            <X size={20} />
+          <button
+            disabled={enviando}
+            onClick={aprovar}
+            className="px-4 py-2 rounded-lg bg-emerald-700 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {enviando ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />} Aprovar e enviar ao fiscal
           </button>
-        </div>
-        <div className="overflow-y-auto p-4 space-y-4">
-          <table className="w-full text-[13px] border rounded-lg">
+        </>
+      }
+    >
+        <div className="space-y-4" onChange={() => setSujo(true)}>
+          <div className="overflow-x-auto border rounded-lg">
+          <table className="w-full text-[13px] min-w-[560px]">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="px-3 py-2 text-left">Seq.</th>
@@ -681,11 +717,11 @@ function ModalConferencia({
                 <tr key={i.sequencia} className="border-t">
                   <td className="px-3 py-2 text-slate-500">{i.sequencia}</td>
                   <td className="px-3 py-2">
-                    <b>{i.codigo_material}</b> <span className="text-[11px] text-slate-500">{i.descricao}</span>
+                    <b>{i.codigo_material}</b> <span className="text-xs text-slate-500">{i.descricao}</span>
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     {fmtQtd(i.quantidade_solicitada)} {i.unidade}
-                    <span className="block text-[11px] text-slate-400">{formatarMoeda(i.valor_solicitado)}</span>
+                    <span className="block text-xs text-slate-500">{formatarMoeda(i.valor_solicitado)}</span>
                   </td>
                   <td className="px-3 py-2">
                     <input
@@ -713,6 +749,7 @@ function ModalConferencia({
               ))}
             </tbody>
           </table>
+          </div>
 
           {produto ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -734,7 +771,7 @@ function ModalConferencia({
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-xs text-slate-500 mt-1">
                   Lista do cadastro do ERP (o romaneio exige o código). Não achou? Cadastre no ERP; aparece aqui na próxima sincronização.
                 </p>
               </div>
@@ -747,22 +784,7 @@ function ModalConferencia({
             <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={2} className="border rounded-lg px-3 py-2 w-full text-sm" />
           </div>
         </div>
-        <div className="p-4 border-t flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50/60 rounded-b-xl">
-          <div>
-            <p className="text-xs text-slate-500">Total aprovado (com IPI)</p>
-            <p className="text-2xl font-bold">{formatarMoeda(total)}</p>
-            {erro && <p className="text-sm text-red-600">{erro}</p>}
-          </div>
-          <button
-            disabled={enviando}
-            onClick={aprovar}
-            className="px-4 py-2 rounded-lg bg-emerald-700 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
-          >
-            {enviando ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />} Aprovar e enviar ao fiscal
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -855,9 +877,9 @@ export function DetalheSolicitacaoFaturamento({
 
   if (!sol)
     return (
-      <Moldura onFechar={onFechar}>
-        <p className="p-6 text-sm text-slate-400">{erro || "Carregando…"}</p>
-      </Moldura>
+      <Modal titulo="Solicitação de faturamento" onFechar={onFechar} largura="4xl">
+        <p className="text-sm text-slate-500">{erro || "Carregando…"}</p>
+      </Modal>
     );
 
   const aprovou = sol.aprovado_em !== null;
@@ -869,16 +891,120 @@ export function DetalheSolicitacaoFaturamento({
   const atrasada =
     ["aguardando_logistica", "aguardando_fiscal"].includes(sol.status) && sol.data_desejada && sol.data_desejada < new Date().toISOString().slice(0, 10);
 
+  // edicao e conferencia abrem no lugar do detalhe (uma janela por vez: Esc e foco ficam na janela da frente)
+  if (editando || conferindo)
+    return (
+      <>
+          {editando && (
+            <ModalSolicitarFaturamento
+              idObra={sol.id_obra}
+              codigoObra={sol.codigo_obra}
+              tipo={sol.tipo}
+              existente={{ solicitacao: sol, itens }}
+              onFechar={() => setEditando(false)}
+              onSalvo={() => {
+                setEditando(false);
+                carregar();
+                onAlterada();
+              }}
+            />
+          )}
+          {conferindo && (
+            <ModalConferencia
+              solicitacao={sol}
+              itens={itens}
+              onFechar={() => setConferindo(false)}
+              onFeito={() => {
+                setConferindo(false);
+                carregar();
+                onAlterada();
+              }}
+            />
+          )}
+      </>
+    );
+
   return (
-    <Moldura onFechar={onFechar}>
-      <div className="p-4 border-b flex flex-wrap items-start justify-between gap-3 pr-10">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-bold text-lg text-slate-800">SF {sol.numero}</h3>
-            <BadgeStatusFaturamento status={sol.status} />
-            <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">{tipoTexto(sol.tipo)}</span>
-            <RomaneioResumo romaneios={romaneios} grande />
+    <Modal
+      titulo={
+        <span className="flex items-center gap-2 flex-wrap">
+          SF {sol.numero} <BadgeStatusFaturamento status={sol.status} />
+          <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">{tipoTexto(sol.tipo)}</span>
+          <RomaneioResumo romaneios={romaneios} grande />
+        </span>
+      }
+      rotulo={`Solicitação de faturamento SF ${sol.numero}`}
+      onFechar={onFechar}
+      largura="4xl"
+      rodape={
+        <div className="w-full space-y-2">
+          {erro && <p className="text-sm text-red-600">{erro}</p>}
+          <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap gap-2 sm:justify-end">
+            <button onClick={() => window.print()} className="px-3 py-2 rounded-lg border text-slate-600 flex items-center justify-center gap-1.5 text-sm">
+              <Printer size={15} /> Imprimir
+            </button>
+            {podeCancelar && (
+              <button
+                disabled={ocupado}
+                onClick={() =>
+                  comMotivo("faturamento_cancelar", `Cancelar a solicitação SF ${sol.numero}?`, `SF ${sol.numero} cancelada.`, {
+                    rotuloConfirmar: "Cancelar solicitação",
+                    perigo: true,
+                  })
+                }
+                className="px-3 py-2 rounded-lg border border-red-200 text-red-700 flex items-center justify-center gap-1.5 text-sm"
+              >
+                <XCircle size={15} /> Cancelar solicitação
+              </button>
+            )}
+            {podeEditar && (
+              <button onClick={() => setEditando(true)} className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold text-sm flex items-center justify-center gap-1.5">
+                <FileText size={15} /> {sol.status === "devolvida" ? "Corrigir e reenviar" : "Editar e enviar"}
+              </button>
+            )}
+            {sol.status === "aguardando_logistica" && ehAprovador && (
+              <>
+                <button
+                  disabled={ocupado}
+                  onClick={() =>
+                    comMotivo("faturamento_devolver", "Motivo da devolução ao solicitante", `SF ${sol.numero} devolvida ao solicitante.`, {
+                      rotuloConfirmar: "Devolver ao solicitante",
+                    })
+                  }
+                  className="px-3 py-2 rounded-lg border text-slate-700 flex items-center justify-center gap-1.5 text-sm"
+                >
+                  <RotateCcw size={15} /> Devolver ao solicitante
+                </button>
+                <button onClick={() => setConferindo(true)} className="px-4 py-2 rounded-lg bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-1.5">
+                  <CheckCircle2 size={15} /> Conferir e aprovar
+                </button>
+              </>
+            )}
+            {sol.status === "aguardando_fiscal" && (ehFiscal || ehAprovador) && (
+              <button
+                disabled={ocupado}
+                onClick={() =>
+                  comMotivo("faturamento_devolver", "Motivo da devolução à logística", `SF ${sol.numero} devolvida à logística.`, {
+                    rotuloConfirmar: "Devolver à logística",
+                  })
+                }
+                className="px-3 py-2 rounded-lg border text-slate-700 flex items-center justify-center gap-1.5 text-sm"
+              >
+                <RotateCcw size={15} /> Devolver à logística
+              </button>
+            )}
           </div>
+          {sol.status === "aguardando_fiscal" && (
+            <p className="text-xs text-slate-500 text-right">
+              Depois de emitir a NF no Prosyst, não precisa fazer nada aqui: o sistema liga a nota a esta solicitação em até 5 minutos.
+            </p>
+          )}
+        </div>
+      }
+    >
+      <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b">
+        <div>
           <p className="text-sm text-slate-500">
             Obra{" "}
             <a href={`/obras/${sol.codigo_obra}/faturamento`} className="text-[#2A6377] font-semibold hover:underline">
@@ -892,15 +1018,13 @@ export function DetalheSolicitacaoFaturamento({
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-400">{aprovou ? "Valor aprovado" : "Valor solicitado"} (com IPI)</p>
+          <p className="text-xs text-slate-500">{aprovou ? "Valor aprovado" : "Valor solicitado"} (com IPI)</p>
           <p className="text-2xl font-bold">{formatarMoeda(num(sol.valor_aprovado ?? sol.valor_solicitado))}</p>
           {aprovou && num(sol.valor_aprovado) !== num(sol.valor_solicitado) && (
-            <p className="text-[11px] text-slate-400">solicitado {formatarMoeda(sol.valor_solicitado)}</p>
+            <p className="text-xs text-slate-500">solicitado {formatarMoeda(sol.valor_solicitado)}</p>
           )}
         </div>
       </div>
-
-      <div className="overflow-y-auto p-4 space-y-4">
         {sol.motivo_devolucao && ["devolvida", "aguardando_logistica"].includes(sol.status) && (
           <p className="text-sm bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">
             <b>Devolvida por {sol.nome_devolveu}:</b> {sol.motivo_devolucao}
@@ -933,27 +1057,27 @@ export function DetalheSolicitacaoFaturamento({
                     <td className="px-3 py-2 text-slate-500">{i.sequencia}</td>
                     <td className="px-3 py-2">
                       <b>{i.codigo_material}</b>
-                      <span className="block text-[11px] text-slate-500">
+                      <span className="block text-xs text-slate-500">
                         {i.descricao} · família {i.codigo_familia}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {num(i.quantidade_solicitada) > 0 ? (
                         <>
-                          {fmtQtd(i.quantidade_solicitada)} {i.unidade} <span className="text-slate-400">({fmtPct(pctSol)})</span>
-                          <span className="block text-[11px] text-slate-500">{formatarMoeda(i.valor_solicitado)}</span>
+                          {fmtQtd(i.quantidade_solicitada)} {i.unidade} <span className="text-slate-500">({fmtPct(pctSol)})</span>
+                          <span className="block text-xs text-slate-500">{formatarMoeda(i.valor_solicitado)}</span>
                         </>
                       ) : (
-                        <span className="text-slate-400 text-[11px]">incluído pela logística</span>
+                        <span className="text-slate-500 text-xs">incluído pela logística</span>
                       )}
                     </td>
                     <td className={`px-3 py-2 text-right whitespace-nowrap ${diferente ? "text-amber-700 font-semibold" : ""}`}>
                       {i.quantidade_aprovada === null ? (
-                        <span className="text-slate-300">-</span>
+                        <span className="text-slate-500">-</span>
                       ) : (
                         <>
                           {fmtQtd(i.quantidade_aprovada)} {i.unidade}
-                          <span className="block text-[11px]">
+                          <span className="block text-xs">
                             {formatarMoeda(num(i.valor_aprovado))}
                             {i.volumes !== null && num(i.quantidade_aprovada) > 0 && ` · ${i.volumes} vol.`}
                           </span>
@@ -964,12 +1088,12 @@ export function DetalheSolicitacaoFaturamento({
                       {i.numero_nf ? (
                         <span className="text-emerald-700">
                           NF {i.numero_nf}
-                          <span className="block text-[11px]">
+                          <span className="block text-xs">
                             {fmtQtd(i.quantidade_faturada)} · {formatarMoeda(num(i.valor_faturado))}
                           </span>
                         </span>
                       ) : (
-                        <span className="text-slate-300">-</span>
+                        <span className="text-slate-500">-</span>
                       )}
                     </td>
                   </tr>
@@ -1009,15 +1133,15 @@ export function DetalheSolicitacaoFaturamento({
                     r.situacao === "erro"
                       ? "text-red-700"
                       : ["cancelado", "descartado"].includes(r.situacao)
-                        ? "text-slate-400"
+                        ? "text-slate-500"
                         : r.situacao === "pendente" || r.situacao === "cancelar"
                           ? "text-amber-700"
                           : "text-emerald-700"
                   }
                 >
                   <b>{r.numero_romaneio ? `Romaneio ${r.numero_romaneio}` : "Romaneio"}</b> · {textoRomaneio[r.situacao]}
-                  {r.situacao !== "descartado" && <span className="text-slate-400"> · usuário ERP {r.login_erp}</span>}
-                  {r.erro && <span className="block text-[11px]">{r.erro}</span>}
+                  {r.situacao !== "descartado" && <span className="text-slate-500"> · usuário ERP {r.login_erp}</span>}
+                  {r.erro && <span className="block text-xs">{r.erro}</span>}
                 </p>
               ))}
             </Bloco>
@@ -1028,7 +1152,7 @@ export function DetalheSolicitacaoFaturamento({
                 <p key={n.id} className={n.divergente ? "text-amber-700" : "text-emerald-700"}>
                   <b>NF {n.numero_nf}</b> (série {n.serie_nf}) · {formatarDataSegura(n.data_emissao)} · {formatarMoeda(n.valor)}
                   {n.divergente && (
-                    <span className="block text-[11px]">Diferente do aprovado: {(n.detalhe?.divergencias || []).join("; ")}</span>
+                    <span className="block text-xs">Diferente do aprovado: {(n.detalhe?.divergencias || []).join("; ")}</span>
                   )}
                 </p>
               ))}
@@ -1051,122 +1175,20 @@ export function DetalheSolicitacaoFaturamento({
           <ol className="space-y-1">
             {eventos.map((e) => (
               <li key={e.id} className="text-[13px]">
-                <span className="text-slate-400">{fmtDataHora(e.em)}</span> · <b>{e.nome_usuario}</b> · {EVENTO[e.evento] || e.evento}
+                <span className="text-slate-500">{fmtDataHora(e.em)}</span> · <b>{e.nome_usuario}</b> · {EVENTO[e.evento] || e.evento}
                 {e.detalhe ? <span className="text-slate-500"> — {e.detalhe}</span> : null}
               </li>
             ))}
           </ol>
         </Bloco>
       </div>
-
-      <div className="p-4 border-t bg-slate-50/60 rounded-b-xl space-y-2">
-        {erro && <p className="text-sm text-red-600">{erro}</p>}
-        <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap gap-2 sm:justify-end">
-          <button onClick={() => window.print()} className="px-3 py-2 rounded-lg border text-slate-600 flex items-center justify-center gap-1.5 text-sm">
-            <Printer size={15} /> Imprimir
-          </button>
-          {podeCancelar && (
-            <button
-              disabled={ocupado}
-              onClick={() =>
-                comMotivo("faturamento_cancelar", `Cancelar a solicitação SF ${sol.numero}?`, `SF ${sol.numero} cancelada.`, {
-                  rotuloConfirmar: "Cancelar solicitação",
-                  perigo: true,
-                })
-              }
-              className="px-3 py-2 rounded-lg border border-red-200 text-red-700 flex items-center justify-center gap-1.5 text-sm"
-            >
-              <XCircle size={15} /> Cancelar solicitação
-            </button>
-          )}
-          {podeEditar && (
-            <button onClick={() => setEditando(true)} className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold text-sm flex items-center justify-center gap-1.5">
-              <FileText size={15} /> {sol.status === "devolvida" ? "Corrigir e reenviar" : "Editar e enviar"}
-            </button>
-          )}
-          {sol.status === "aguardando_logistica" && ehAprovador && (
-            <>
-              <button
-                disabled={ocupado}
-                onClick={() =>
-                  comMotivo("faturamento_devolver", "Motivo da devolução ao solicitante", `SF ${sol.numero} devolvida ao solicitante.`, {
-                    rotuloConfirmar: "Devolver ao solicitante",
-                  })
-                }
-                className="px-3 py-2 rounded-lg border text-slate-700 flex items-center justify-center gap-1.5 text-sm"
-              >
-                <RotateCcw size={15} /> Devolver ao solicitante
-              </button>
-              <button onClick={() => setConferindo(true)} className="px-4 py-2 rounded-lg bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-1.5">
-                <CheckCircle2 size={15} /> Conferir e aprovar
-              </button>
-            </>
-          )}
-          {sol.status === "aguardando_fiscal" && (ehFiscal || ehAprovador) && (
-            <button
-              disabled={ocupado}
-              onClick={() =>
-                comMotivo("faturamento_devolver", "Motivo da devolução à logística", `SF ${sol.numero} devolvida à logística.`, {
-                  rotuloConfirmar: "Devolver à logística",
-                })
-              }
-              className="px-3 py-2 rounded-lg border text-slate-700 flex items-center justify-center gap-1.5 text-sm"
-            >
-              <RotateCcw size={15} /> Devolver à logística
-            </button>
-          )}
-        </div>
-        {sol.status === "aguardando_fiscal" && (
-          <p className="text-[11px] text-slate-400 text-right">
-            Depois de emitir a NF no Prosyst, não precisa fazer nada aqui: o sistema liga a nota a esta solicitação em até 5 minutos.
-          </p>
-        )}
-      </div>
-
-      {editando && (
-        <ModalSolicitarFaturamento
-          idObra={sol.id_obra}
-          codigoObra={sol.codigo_obra}
-          tipo={sol.tipo}
-          existente={{ solicitacao: sol, itens }}
-          onFechar={() => setEditando(false)}
-          onSalvo={() => {
-            setEditando(false);
-            carregar();
-            onAlterada();
-          }}
-        />
-      )}
-      {conferindo && (
-        <ModalConferencia
-          solicitacao={sol}
-          itens={itens}
-          onFechar={() => setConferindo(false)}
-          onFeito={() => {
-            setConferindo(false);
-            carregar();
-            onAlterada();
-          }}
-        />
-      )}
-    </Moldura>
+    </Modal>
   );
 }
 
-const Moldura = ({ onFechar, children }: { onFechar: () => void; children: React.ReactNode }) => (
-  <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
-    <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
-      <button onClick={onFechar} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 z-10" aria-label="Fechar">
-        <X size={20} />
-      </button>
-      {children}
-    </div>
-  </div>
-);
-
 const Bloco = ({ titulo, icone, children }: { titulo: string; icone?: React.ReactNode; children: React.ReactNode }) => (
   <div className="border rounded-lg p-3">
-    <p className="text-[11px] font-bold uppercase text-slate-400 mb-1 flex items-center gap-1">
+    <p className="text-xs font-bold uppercase text-slate-500 mb-1 flex items-center gap-1">
       {icone} {titulo}
     </p>
     <div className="text-sm text-slate-700">{children}</div>
@@ -1177,7 +1199,7 @@ const Bloco = ({ titulo, icone, children }: { titulo: string; icone?: React.Reac
 const SELECT_LISTA = "*, romaneios:solicitacoes_faturamento_romaneios(numero_romaneio, situacao, erro, created_at)";
 function RomaneioResumo({ romaneios, grande = false }: { romaneios?: Pick<RomaneioSolicitacao, "numero_romaneio" | "situacao" | "erro">[]; grande?: boolean }) {
   const ativo = (romaneios || []).find((r) => ["criado", "faturado", "pendente", "erro"].includes(r.situacao));
-  if (!ativo) return grande ? null : <span className="text-slate-300">-</span>;
+  if (!ativo) return grande ? null : <span className="text-slate-500">-</span>;
   const tam = grande ? "text-xs px-2 py-0.5" : "text-[11px] px-2 py-0.5";
   if (ativo.situacao === "pendente")
     return <span className={`${tam} font-bold rounded-full border bg-amber-50 text-amber-700 border-amber-200 whitespace-nowrap`}>Romaneio: gerando…</span>;
@@ -1208,7 +1230,43 @@ function TabelaSolicitacoes({
 }) {
   const hoje = new Date().toISOString().slice(0, 10);
   return (
-    <div className="overflow-x-auto">
+    <>
+    {/* celular: cartoes */}
+    <ul className="md:hidden divide-y">
+      {lista.map((s) => {
+        const atrasada = ["aguardando_logistica", "aguardando_fiscal"].includes(s.status) && s.data_desejada && s.data_desejada < hoje;
+        return (
+          <li key={s.id}>
+            <button type="button" onClick={() => onAbrir(s.id)} className="w-full text-left px-3 py-3 hover:bg-slate-50 active:bg-slate-100">
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-bold text-[#2A6377]">
+                  SF {s.numero}
+                  {mostrarObra && <span className="text-slate-700 font-semibold"> · obra {s.codigo_obra}</span>}
+                  <span className="text-slate-500 font-normal"> · {tipoTexto(s.tipo)}</span>
+                </p>
+                <span className="font-bold tabular-nums whitespace-nowrap">{formatarMoeda(num(s.valor_aprovado ?? s.valor_solicitado))}</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {s.nome_solicitante} ·{" "}
+                <span className={atrasada ? "text-red-600 font-semibold" : ""}>
+                  faturar até {s.data_desejada ? formatarDataSegura(s.data_desejada) : "-"}
+                </span>
+              </p>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <BadgeStatusFaturamento status={s.status} />
+                <RomaneioResumo romaneios={s.romaneios} grande />
+                <SeloDiasParados desde={desdeEtapaSf(s)} aberto={SF_ABERTA.includes(s.status)} />
+                <span className="ml-auto text-xs font-semibold text-[#2A6377] flex items-center">
+                  Abrir <ChevronRight size={14} aria-hidden="true" />
+                </span>
+              </div>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+    {/* computador: tabela */}
+    <div className="hidden md:block overflow-x-auto">
       <table className="w-full text-[13px] min-w-[720px]">
         <thead className="bg-slate-50 text-slate-600">
           <tr>
@@ -1220,6 +1278,7 @@ function TabelaSolicitacoes({
             <th className="px-3 py-2 text-right">Valor</th>
             <th className="px-3 py-2 text-center">Romaneio</th>
             <th className="px-3 py-2 text-center">Situação</th>
+            <th className="px-3 py-2 text-center">Na etapa</th>
           </tr>
         </thead>
         <tbody>
@@ -1242,12 +1301,16 @@ function TabelaSolicitacoes({
                 <td className="px-3 py-2 text-center">
                   <BadgeStatusFaturamento status={s.status} />
                 </td>
+                <td className="px-3 py-2 text-center">
+                  <SeloDiasParados desde={desdeEtapaSf(s)} aberto={SF_ABERTA.includes(s.status)} />
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
@@ -1295,7 +1358,7 @@ export function SolicitacoesFaturamentoObra({
           <h3 className="font-bold text-lg flex items-center gap-2">
             <Receipt size={18} className="text-[#2A6377]" /> Solicitações de faturamento
           </h3>
-          <p className="text-[11px] text-slate-400">Pedido do gestor → conferência da logística → emissão da NF pelo fiscal → NF ligada automaticamente.</p>
+          <p className="text-xs text-slate-500">Pedido do gestor → conferência da logística → emissão da NF pelo fiscal → NF ligada automaticamente.</p>
         </div>
         {podeSolicitar && (
           <div className="flex flex-wrap gap-2">
@@ -1314,9 +1377,9 @@ export function SolicitacoesFaturamentoObra({
       {lista === null && erroCarga ? (
         <ErroCarga mensagem="Não foi possível carregar as solicitações de faturamento." detalhe={erroCarga} onTentar={carregar} />
       ) : lista === null ? (
-        <p className="p-4 text-sm text-slate-400">Carregando…</p>
+        <p className="p-4 text-sm text-slate-500">Carregando…</p>
       ) : mostradas.length === 0 ? (
-        <p className="p-4 text-sm text-slate-400">
+        <p className="p-4 text-sm text-slate-500">
           {lista.length === 0 ? "Nenhuma solicitação de faturamento nesta obra." : "Nenhuma solicitação em andamento."}
         </p>
       ) : (
@@ -1375,8 +1438,8 @@ export function TelaFaturamento({
   podeGerenciar?: boolean; // admin/coordenador: edita e cancela como o gestor
 }) {
   const padrao = usuario?.perfil === "fiscal" ? "fiscal" : usuario?.aprova_faturamento ? "logistica" : "andamento";
-  const [filtro, setFiltro] = useState(padrao);
-  const [obra, setObra] = useState("todas");
+  const [filtro, setFiltro] = useFiltroSalvo<string>("faturamento.filtro", padrao, (v) => FILTROS.some((f) => f[0] === v));
+  const [obra, setObra] = useFiltroSalvo<string>("faturamento.obra", "todas", (v) => typeof v === "string" && v.length <= 40);
   const [lista, setLista] = useState<SolicitacaoFaturamento[] | null>(null);
   const [erroCarga, setErroCarga] = useState("");
 
@@ -1399,15 +1462,35 @@ export function TelaFaturamento({
   const statusFiltro = FILTROS.find((f) => f[0] === filtro)?.[2];
   const obras = [...new Set((lista || []).map((s) => s.codigo_obra))].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
   const filtradas = (lista || []).filter(
-    (s) => (!statusFiltro || statusFiltro.includes(s.status)) && (obra === "todas" || s.codigo_obra === obra),
+    (s) => (!statusFiltro || statusFiltro.includes(s.status)) && (obra === "todas" || !obras.includes(obra) || s.codigo_obra === obra),
   );
   const conta = (st: StatusSolicitacaoFaturamento[]) => (lista || []).filter((s) => st.includes(s.status)).length;
+  // obra lembrada que saiu da lista (sem solicitacoes): mostra todas
+  const obraValida = obra === "todas" || obras.includes(obra) || lista === null;
+
+  const exportar = () =>
+    exportarCsv(
+      "faturamento",
+      ["SF", "Obra", "Tipo", "Situação", "Dias úteis na etapa", "Solicitante", "Enviada em", "Faturar até", "Valor solicitado", "Valor aprovado",
+        "Aprovada por", "Aprovada em", "Transportadora", "Volumes", "Peso bruto (kg)", "Romaneio", "Faturada em", "Devolvida por", "Motivo da devolução", "Observação"],
+      filtradas.map((s) => {
+        const rom = (s.romaneios || []).find((r) => ["criado", "faturado", "pendente", "erro"].includes(r.situacao));
+        return [
+          s.numero, s.codigo_obra, tipoTexto(s.tipo), STATUS[s.status]?.rotulo || s.status,
+          SF_ABERTA.includes(s.status) ? diasUteisDesde(desdeEtapaSf(s)) ?? "" : "", s.nome_solicitante || "", fmtDataHora(s.enviado_em),
+          s.data_desejada ? formatarDataSegura(s.data_desejada) : "", numCsv(s.valor_solicitado), numCsv(s.valor_aprovado), s.nome_aprovador || "",
+          fmtDataHora(s.aprovado_em), s.transportadora || "", s.volumes ?? "", numCsv(s.peso_bruto),
+          rom ? (rom.numero_romaneio ? String(rom.numero_romaneio) : textoRomaneio[rom.situacao]) : "", fmtDataHora(s.faturado_em), s.nome_devolveu || "",
+          s.motivo_devolucao || "", s.observacao || "",
+        ];
+      }),
+    );
 
   return (
     <div className="animate-in fade-in space-y-4 max-w-full">
       <div>
         <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Faturamento</h2>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-slate-500 mt-1">
           Solicitações de faturamento das obras: conferência da logística, emissão da NF pelo fiscal e histórico. Para pedir um novo faturamento, abra
           a obra na aba Faturamento.
         </p>
@@ -1422,7 +1505,7 @@ export function TelaFaturamento({
           ] as [string, number, string, string][]
         ).map(([rot, n, cor, f]) => (
           <button key={rot} onClick={() => setFiltro(f)} className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-slate-50">
-            <p className="text-[11px] text-slate-400 font-bold uppercase">{rot}</p>
+            <p className="text-xs text-slate-500 font-bold uppercase">{rot}</p>
             <p className={`text-2xl font-bold mt-1 ${cor}`}>{n}</p>
           </button>
         ))}
@@ -1440,7 +1523,12 @@ export function TelaFaturamento({
               </button>
             ))}
           </div>
-          <select value={obra} onChange={(e) => setObra(e.target.value)} className="border rounded-lg px-2 py-1.5 bg-white">
+          <select
+            value={obraValida ? obra : "todas"}
+            onChange={(e) => setObra(e.target.value)}
+            aria-label="Filtrar por obra"
+            className="border rounded-lg px-2 py-1.5 bg-white"
+          >
             <option value="todas">Todas as obras</option>
             {obras.map((o) => (
               <option key={o} value={o}>
@@ -1448,6 +1536,9 @@ export function TelaFaturamento({
               </option>
             ))}
           </select>
+          <div className="md:ml-auto">
+            <BotaoExportar onClick={exportar} disabled={!filtradas.length} />
+          </div>
         </div>
         {erroCarga && lista !== null && (
           <ErroCarga compacto mensagem="Não foi possível atualizar a lista (mostrando a última carregada)." detalhe={erroCarga} onTentar={carregar} />
@@ -1455,9 +1546,9 @@ export function TelaFaturamento({
         {lista === null && erroCarga ? (
           <ErroCarga mensagem="Não foi possível carregar as solicitações de faturamento." detalhe={erroCarga} onTentar={carregar} />
         ) : lista === null ? (
-          <p className="p-4 text-sm text-slate-400">Carregando…</p>
+          <p className="p-4 text-sm text-slate-500">Carregando…</p>
         ) : filtradas.length === 0 ? (
-          <p className="p-6 text-sm text-slate-400 text-center">Nenhuma solicitação com esse filtro.</p>
+          <p className="p-6 text-sm text-slate-500 text-center">Nenhuma solicitação com esse filtro.</p>
         ) : (
           <TabelaSolicitacoes lista={filtradas} mostrarObra onAbrir={(id) => onAbrir(id)} />
         )}

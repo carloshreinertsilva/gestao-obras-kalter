@@ -19,7 +19,7 @@ export function Rotulo({ htmlFor, texto, obrigatorio, dica }: { htmlFor?: string
         {texto}
         {obrigatorio && <span className="text-red-500 ml-0.5">*</span>}
       </span>
-      {dica && <span className="text-[10px] text-slate-400 truncate">{dica}</span>}
+      {dica && <span className="text-xs text-slate-500 truncate">{dica}</span>}
     </label>
   );
 }
@@ -56,9 +56,9 @@ const TONS = {
 export function Cartao({ rotulo, valor, sub, tom = "normal" }: { rotulo: string; valor: ReactNode; sub?: ReactNode; tom?: keyof typeof TONS }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 min-w-0">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{rotulo}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{rotulo}</p>
       <p className={`text-lg font-bold tabular-nums break-words ${TONS[tom]}`}>{valor}</p>
-      {sub && <p className="text-[11px] text-slate-500 break-words">{sub}</p>}
+      {sub && <p className="text-xs text-slate-500 break-words">{sub}</p>}
     </div>
   );
 }

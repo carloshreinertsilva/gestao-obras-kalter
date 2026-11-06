@@ -45,7 +45,7 @@ export default function AbaFaturamento({
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 2xl:grid-cols-5 gap-4">
         <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Escopo Total
           </p>
           <ValorAjustavel className="text-2xl font-bold text-slate-800">
@@ -53,7 +53,7 @@ export default function AbaFaturamento({
           </ValorAjustavel>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Previsto
           </p>
           <ValorAjustavel className="text-2xl font-bold text-blue-700">
@@ -61,7 +61,7 @@ export default function AbaFaturamento({
           </ValorAjustavel>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Faturado
           </p>
           <ValorAjustavel className="text-2xl font-bold text-emerald-700">
@@ -69,7 +69,7 @@ export default function AbaFaturamento({
           </ValorAjustavel>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             À Faturar
           </p>
           <ValorAjustavel className="text-2xl font-bold text-amber-700">
@@ -77,7 +77,7 @@ export default function AbaFaturamento({
           </ValorAjustavel>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Itens no Escopo
           </p>
           <p className="text-2xl font-bold text-[#2A6377]">
@@ -92,7 +92,7 @@ export default function AbaFaturamento({
             <Receipt size={18} className="text-[#2A6377]" /> Escopo
             por Grupo/Família
           </h3>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Cada linha representa uma combinação de grupo de faturamento, família e valor de escopo.
             A mesma família pode aparecer em mais de um grupo. O escopo vem direto do pedido de
             venda no ERP — ajustes são feitos lá, não neste sistema.
@@ -148,7 +148,7 @@ export default function AbaFaturamento({
                             : ""}
                         </div>
                         {linha.familia?.observacao && (
-                          <div className="text-[10px] text-slate-400 font-normal mt-1">
+                          <div className="text-xs text-slate-500 font-normal mt-1">
                             {linha.familia.observacao}
                           </div>
                         )}
@@ -186,7 +186,7 @@ export default function AbaFaturamento({
             <Activity size={18} className="text-[#2A6377]" />
             Previsão x Realizado por Grupo de Faturamento
           </h3>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Uma linha por material do pedido (grupo de faturamento),
             exatamente como no ERP.
           </p>
@@ -226,7 +226,7 @@ export default function AbaFaturamento({
               </tr>
               <tr>
                 {competenciasFaturamento.length === 0 ? (
-                  <th className="p-3 text-center text-slate-400">
+                  <th className="p-3 text-center text-slate-500">
                     Sem previsão cadastrada
                   </th>
                 ) : (
@@ -266,12 +266,12 @@ export default function AbaFaturamento({
                         {linha.grupo.codigo}
                         {linha.grupo.descricao ? ` - ${linha.grupo.descricao}` : ""}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-normal mt-1">
+                      <div className="text-xs text-slate-500 font-normal mt-1">
                         Escopo: {formatarMoeda(linha.valorEscopo)} • Faturado: {formatarMoeda(linha.valorFaturado)}
                       </div>
                     </td>
                     {competenciasFaturamento.length === 0 ? (
-                      <td className="p-3 text-center text-slate-400">
+                      <td className="p-3 text-center text-slate-500">
                         Sem previsão
                       </td>
                     ) : (
@@ -292,14 +292,14 @@ export default function AbaFaturamento({
                           >
                             <div className="grid grid-cols-2 min-w-[260px]">
                               <span
-                                className={`p-3 text-right border-r whitespace-nowrap ${previsto > 0 ? "font-bold text-blue-700" : "text-slate-300"}`}
+                                className={`p-3 text-right border-r whitespace-nowrap ${previsto > 0 ? "font-bold text-blue-700" : "text-slate-500"}`}
                               >
                                 {previsto > 0
                                   ? formatarMoeda(previsto)
                                   : "-"}
                               </span>
                               <span
-                                className={`p-3 text-right whitespace-nowrap ${realizado > 0 ? "font-bold text-emerald-700" : "text-slate-300"}`}
+                                className={`p-3 text-right whitespace-nowrap ${realizado > 0 ? "font-bold text-emerald-700" : "text-slate-500"}`}
                               >
                                 {realizado > 0
                                   ? formatarMoeda(realizado)

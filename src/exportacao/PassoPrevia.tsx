@@ -18,13 +18,13 @@ const n2 = (v: number) => milhar(v, 2).replace(/,/g, "§").replace(/\./g, ",").r
 const n3 = (v: number) => milhar(v, 3).replace(/,/g, "§").replace(/\./g, ",").replace(/§/g, ".");
 
 function Falta() {
-  return <span className="inline-block px-1.5 rounded bg-red-100 text-red-700 text-[11px] font-bold">FALTA</span>;
+  return <span className="inline-block px-1.5 rounded bg-red-100 text-red-700 text-[11px] font-semibold">FALTA</span>;
 }
 /** Valor de campo obrigatorio: vazio vira FALTA. */
 const Obrig = ({ v, texto }: { v: unknown; texto?: ReactNode }) => (vazio(v) ? <Falta /> : <>{texto ?? String(v)}</>);
 
-const CAB = "bg-[#1F3864] text-white text-[11px] font-bold px-1.5 py-1 text-center border border-slate-400";
-const ROT = "bg-slate-100 text-[10px] font-bold text-slate-600 px-1.5 py-1 border border-slate-400";
+const CAB = "bg-[#1F3864] text-white text-xs font-bold px-1.5 py-1 text-center border border-slate-400";
+const ROT = "bg-slate-100 text-xs font-bold text-slate-600 px-1.5 py-1 border border-slate-400";
 const CEL = "px-1.5 py-1 border border-slate-400 align-top text-[12px]";
 
 // ------------------------------------------------------------------------------------------------ contagem de "FALTA"
@@ -74,7 +74,7 @@ function Fatura({ proc, revisao, proforma }: { proc: Processo; revisao: Revisao;
   return (
     <Papel>
       <p className="text-center text-xl font-bold text-[#1F3864]">{nome}</p>
-      <p className="text-center text-[11px] mt-2 whitespace-pre-line">
+      <p className="text-center text-xs mt-2 whitespace-pre-line">
         {[exp.razao, exp.endereco, exp.cep ? `CEP ${exp.cep}` : "", exp.cidade, exp.uf, "Brasil"].filter(Boolean).join("  -  ")}
         {"\n"}
         {[exp.cnpj ? `CNPJ ${exp.cnpj}` : "", exp.fone ? `Fone ${exp.fone}` : "", exp.email ? `E-mail  ${exp.email}` : ""].filter(Boolean).join("  -  ")}
@@ -180,7 +180,7 @@ function Fatura({ proc, revisao, proforma }: { proc: Processo; revisao: Revisao;
           </tr>
         </tbody>
       </table>
-      <p className="text-center text-[11px] mt-8 border-t border-slate-400 w-1/2 ml-auto pt-1 whitespace-pre-line">
+      <p className="text-center text-xs mt-8 border-t border-slate-400 w-1/2 ml-auto pt-1 whitespace-pre-line">
         {exp.razao}
         {"\n"}
         {exp.cidade}, {dataBR(d.data)}
@@ -239,7 +239,7 @@ function Packing({ proc, revisao }: { proc: Processo; revisao: Revisao }) {
         ))}
       </div>
       <p className="text-center font-bold mt-3">FATURA {d.numero}</p>
-      <p className={`text-[11px] px-2 py-1 mt-2 ${classeEstimado}`}>Em azul: valores estimados (catálogo / cálculo; peso bruto = líquido + 1,5%). Confira antes de aprovar.</p>
+      <p className={`text-xs px-2 py-1 mt-2 ${classeEstimado}`}>Em azul: valores estimados (catálogo / cálculo; peso bruto = líquido + 1,5%). Confira antes de aprovar.</p>
       <table className="w-full border-collapse mt-2 min-w-[760px]">
         <thead>
           <tr>
@@ -271,7 +271,7 @@ function Packing({ proc, revisao }: { proc: Processo; revisao: Revisao }) {
           </tr>
         </tbody>
       </table>
-      <p className="text-center text-[11px] mt-8 border-t border-slate-400 w-1/2 ml-auto pt-1 whitespace-pre-line">
+      <p className="text-center text-xs mt-8 border-t border-slate-400 w-1/2 ml-auto pt-1 whitespace-pre-line">
         {proc.exportador?.razao}
         {"\n"}
         {proc.exportador?.cidade}, {dataBR(d.data)}
@@ -329,7 +329,7 @@ function Certificado({ proc }: { proc: Processo }) {
   return (
     <Papel>
       <p className="text-center text-lg font-bold text-[#1F3864]">CERTIFICADO DE ORIGEM - DADOS PARA EMISSÃO</p>
-      <p className="text-center text-[11px] italic text-slate-500">O certificado oficial é emitido pela entidade credenciada no sistema dela; esta aba reúne os dados para preencher lá.</p>
+      <p className="text-center text-xs italic text-slate-500">O certificado oficial é emitido pela entidade credenciada no sistema dela; esta aba reúne os dados para preencher lá.</p>
       <div className="grid grid-cols-2 gap-2 mt-3 min-w-[560px]">
         {campo("ACORDO / ACUERDO", co.acordo)}
         {campo("ENTIDADE EMISSORA", co.entidade)}

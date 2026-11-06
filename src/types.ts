@@ -351,6 +351,7 @@ export interface SyncStatus {
   terminou_em?: string | null;
   ok: boolean;
   etapas_com_erro: string[];
+  avisos?: { etapa: string; texto: string }[] | null; // 06/11: itens que o robo nao conseguiu processar
 }
 
 export type TipoNotificacao =

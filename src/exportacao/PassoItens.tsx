@@ -105,16 +105,16 @@ function CartaoItem({
         <span className="shrink-0 grid place-items-center w-7 h-7 rounded-full bg-slate-100 text-xs font-bold text-slate-600">{n + 1}</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-slate-800 truncate">{item.descricao || "Item sem descrição"}</p>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-xs text-slate-500">
             {item.codigo ? `Código do pedido ${item.codigo}` : "Item incluído na Invoice"}
             {num(item.valor_unit_brl) > 0 && ` · pedido R$ ${fmtBR(item.valor_unit_brl)} por unidade`}
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-[11px] uppercase tracking-wide text-slate-500">Total {moeda}</p>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Total {moeda}</p>
           <p className="text-sm font-bold tabular-nums text-slate-800">{milhar(num(item.quantidade) * num(item.valor_unit), 2)}</p>
         </div>
-        <button type="button" onClick={remover} className="p-1 text-slate-400 hover:text-red-600" aria-label={`Remover item ${n + 1}`}>
+        <button type="button" onClick={remover} className="p-1 text-slate-500 hover:text-red-600" aria-label={`Remover item ${n + 1}`}>
           <X size={16} />
         </button>
       </header>
@@ -238,7 +238,7 @@ function PainelPesos({
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-sm border-collapse">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+            <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-2 py-1.5 border-b font-semibold">Família</th>
               <th className="px-2 py-1.5 border-b font-semibold text-right">Materiais</th>
               <th className="px-2 py-1.5 border-b font-semibold text-right">Líq. (kg)</th>
@@ -399,7 +399,7 @@ export function PassoItens({
         {itens.map((i, n) => (
           <CartaoItem key={n} item={i} n={n} moeda={moeda} atualizar={atualizar} remover={() => tirarItem(n)} />
         ))}
-        {!itens.length && <p className="rounded-xl border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-400">Nenhum item na Invoice.</p>}
+        {!itens.length && <p className="rounded-xl border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500">Nenhum item na Invoice.</p>}
       </div>
 
       <div className="flex flex-wrap gap-2">

@@ -165,7 +165,7 @@ export function MenuGrupos({ grupos, recolhido, onIr }: { grupos: GrupoMenu[]; r
           >
             {/* ponte invisivel entre o icone e a lista: o mouse atravessa sem fechar */}
             <div className="absolute -left-3 top-0 bottom-0 w-3" />
-            <p className="text-[10px] uppercase text-white/50 font-bold tracking-wider px-3 pt-1 pb-2">{aberto.titulo}</p>
+            <p className="text-[11px] uppercase text-white/60 font-bold tracking-wider px-3 pt-1 pb-2">{aberto.titulo}</p>
             <div className="space-y-0.5">
               {aberto.itens.map((i) => (
                 <BotaoItem key={i.tela} item={i} onIr={ir} compacto />

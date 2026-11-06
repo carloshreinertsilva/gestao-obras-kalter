@@ -16,7 +16,7 @@ const dataHora = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "";
 
 const TABELA = "w-full text-sm border-collapse";
-const TH = "text-left text-[11px] uppercase tracking-wide text-slate-500 font-semibold px-2 py-1.5 bg-slate-50 border-b";
+const TH = "text-left text-xs uppercase tracking-wide text-slate-500 font-semibold px-2 py-1.5 bg-slate-50 border-b";
 const TD = "px-2 py-1.5 border-b border-slate-100 align-top";
 
 // ------------------------------------------------------------------------------------------------ 1. Dados do ERP
@@ -119,7 +119,7 @@ export function PassoErp({
                   ))}
                   {!(erp.parcelas ?? []).length && (
                     <tr>
-                      <td className={`${TD} text-slate-400`} colSpan={4}>
+                      <td className={`${TD} text-slate-500`} colSpan={4}>
                         Sem parcelas.
                       </td>
                     </tr>
@@ -134,13 +134,13 @@ export function PassoErp({
                     Romaneio <b>{r.romaneio}</b>: {fmtBR(r.volumes, 0)} vol., {milhar(Number(r.peso_liq) || 0, 1)} kg líq., {milhar(Number(r.peso_bruto) || 0, 1)} kg bruto
                   </li>
                 ))}
-                {!(erp.romaneios ?? []).length && <li className="text-slate-400">Nenhum romaneio.</li>}
+                {!(erp.romaneios ?? []).length && <li className="text-slate-500">Nenhum romaneio.</li>}
                 {(erp.nfs ?? []).map((n) => (
                   <li key={`${n.nota}-${n.serie}`}>
                     NF <b>{n.nota}</b>/{n.serie} de {dataBR(n.emissao)}: R$ {fmtBR(n.valor)}
                   </li>
                 ))}
-                {!(erp.nfs ?? []).length && <li className="text-slate-400">Nenhuma NF emitida.</li>}
+                {!(erp.nfs ?? []).length && <li className="text-slate-500">Nenhuma NF emitida.</li>}
               </ul>
             </Secao>
           </div>

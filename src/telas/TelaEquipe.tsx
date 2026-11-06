@@ -250,14 +250,14 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                       </option>
                     ))}
                 </select>
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-xs text-slate-500 mt-1">
                   O assistente passa a ter o mesmo acesso às obras deste engenheiro.
                 </p>
               </div>
             )}
           </div>
           <div className="mt-4 pt-4 border-t space-y-2">
-            <p className="text-xs font-bold uppercase text-slate-400 tracking-wider">Previsões</p>
+            <p className="text-xs font-bold uppercase text-slate-500 tracking-wider">Previsões</p>
             <label className="flex items-start gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
@@ -267,7 +267,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               />
               <span>
                 <b>Aprova previsões</b>
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-500">
                   Recebe o e-mail com as solicitações para aprovar e pode aprovar ou recusar no app (a aprovação grava no ERP).
                 </span>
               </span>
@@ -281,14 +281,14 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               />
               <span>
                 <b>Recebe cópia das previsões</b>
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-500">
                   Cópia informativa de cada solicitação nova (sem aprovar) e cópia das aprovações e recusas.
                 </span>
               </span>
             </label>
           </div>
           <div className="mt-4 pt-4 border-t space-y-2">
-            <p className="text-xs font-bold uppercase text-slate-400 tracking-wider">Faturamento</p>
+            <p className="text-xs font-bold uppercase text-slate-500 tracking-wider">Faturamento</p>
             <div>
               <label className="block text-sm font-bold mb-1">Usuário no ERP</label>
               <select
@@ -312,7 +312,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               {erroLogins && (
                 <ErroCarga compacto mensagem="Não foi possível carregar os usuários do ERP." detalhe={erroLogins} onTentar={carregarLogins} />
               )}
-              <span className="block text-[11px] text-slate-400 mt-1">
+              <span className="block text-xs text-slate-500 mt-1">
                 Gravado no romaneio que o app gera no ERP quando este usuário aprova um faturamento de produto (obrigatório para quem aprova).
               </span>
             </div>
@@ -325,7 +325,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               />
               <span>
                 <b>Aprova faturamento (logística)</b>
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-500">
                   Recebe as solicitações de faturamento para conferir itens, pesos, volumes e transportadora, e aprova ou devolve.
                 </span>
               </span>
@@ -339,7 +339,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               />
               <span>
                 <b>Recebe cópia do faturamento</b>
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-500">
                   Cópia de todas as etapas das solicitações de faturamento (envio, aprovação, devolução, NF emitida).
                 </span>
               </span>
@@ -353,7 +353,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               />
               <span>
                 <b>Recebe NFs de terceiros</b>
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-500">
                   Recebe por e-mail (com a NF anexada) as NFs de prestadores de serviço que os gestores encaminham, para lançar e pagar; e os lembretes de vencimento.
                 </span>
               </span>
@@ -367,7 +367,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               />
               <span>
                 <b>Responsável pelo cadastro de materiais</b>
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-500">
                   Revisa as solicitações de material novo (descrição, unidade, classe/tipo), aprova para o fiscal, devolve ou recusa apontando o item que já existe.
                 </span>
               </span>
@@ -381,7 +381,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               />
               <span>
                 <b>Revisão fiscal de materiais</b>
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-500">
                   Revisa NCM, tipo do item e % de IPI dos materiais aprovados pelo cadastro e cria o item no ERP.
                 </span>
               </span>
@@ -395,14 +395,14 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               />
               <span>
                 <b>Recebe cópia dos avisos de material</b>
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-500">
                   Acompanha as solicitações de material: recebe o aviso de cada pedido novo, da ida para a revisão fiscal e do item cadastrado no ERP.
                 </span>
               </span>
             </label>
           </div>
           <div className="mt-4 pt-4 border-t space-y-2">
-            <p className="text-xs font-bold uppercase text-slate-400 tracking-wider">Sistema</p>
+            <p className="text-xs font-bold uppercase text-slate-500 tracking-wider">Sistema</p>
             <label className="flex items-start gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
@@ -412,7 +412,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               />
               <span>
                 <b>Recebe alertas do sistema</b>
-                <span className="block text-[11px] text-slate-400">
+                <span className="block text-xs text-slate-500">
                   Aviso (e-mail e push) quando o robô do servidor para ou falha, a fila de e-mails trava ou o backup diário não é feito; e quando volta ao normal.
                 </span>
               </span>
@@ -465,70 +465,70 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 <div className="overflow-hidden flex-1">
                   <p className="font-bold text-sm truncate max-w-full">
                     {user.nome}{" "}
-                    <span className="text-[10px] ml-2 px-2 py-0.5 bg-gray-200 rounded uppercase inline-block">
+                    <span className="text-[11px] ml-2 px-2 py-0.5 bg-gray-200 rounded uppercase inline-block">
                       {labelPerfilUsuario(user.perfil ?? "")}
                     </span>
                   </p>
                   <p className="text-xs text-slate-500 truncate max-w-full">
                     {user.email}
-                    {user.login_erp && <span className="text-slate-400"> · ERP {user.login_erp}</span>}
+                    {user.login_erp && <span className="text-slate-500"> · ERP {user.login_erp}</span>}
                   </p>
                   {(user.aprova_previsao || user.recebe_copia_previsao || user.aprova_faturamento || user.recebe_copia_faturamento || user.recebe_nf_terceiros || user.recebe_alerta_sistema || user.cadastra_materiais || user.revisa_fiscal_material || user.recebe_copia_material) && (
                     <p className="flex flex-wrap gap-1 mt-1">
                       {user.aprova_previsao && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
                           Aprova previsões
                         </span>
                       )}
                       {user.recebe_copia_previsao && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
                           Cópia das previsões
                         </span>
                       )}
                       {user.aprova_faturamento && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                           Aprova faturamento
                         </span>
                       )}
                       {user.aprova_faturamento && !user.login_erp && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
                           Sem usuário do ERP
                         </span>
                       )}
                       {user.recebe_copia_faturamento && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
                           Cópia do faturamento
                         </span>
                       )}
                       {user.recebe_alerta_sistema && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
                           Alertas do sistema
                         </span>
                       )}
                       {user.recebe_nf_terceiros && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">
                           NFs de terceiros
                         </span>
                       )}
                       {user.cadastra_materiais && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
                           Cadastro de materiais
                         </span>
                       )}
                       {user.revisa_fiscal_material && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
                           Fiscal de materiais
                         </span>
                       )}
                       {user.recebe_copia_material && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border">
                           Cópia dos materiais
                         </span>
                       )}
                     </p>
                   )}
                   {user.perfil === "assistente" && (
-                    <p className="text-[11px] text-[#2A6377] font-bold truncate max-w-full">
+                    <p className="text-xs text-[#2A6377] font-bold truncate max-w-full">
                       Assistente de:{" "}
                       {nomeUsuarioPorId(user.id_engenheiro_vinculado) ||
                         "não definido"}

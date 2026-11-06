@@ -36,7 +36,7 @@ export default function AbaResumo({
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-blue-500">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Venda Total
           </p>
           <ValorAjustavel className="text-2xl font-bold text-slate-800 mt-1">
@@ -44,7 +44,7 @@ export default function AbaResumo({
           </ValorAjustavel>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-emerald-500">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Recebido
           </p>
           <ValorAjustavel className="text-2xl font-bold text-emerald-700 mt-1">
@@ -52,7 +52,7 @@ export default function AbaResumo({
           </ValorAjustavel>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-amber-500">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Cronograma
           </p>
           <p className="text-2xl font-bold text-amber-700 mt-1">
@@ -60,7 +60,7 @@ export default function AbaResumo({
           </p>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-l-4 border-l-red-500">
-          <p className="text-xs text-slate-400 font-bold uppercase">
+          <p className="text-xs text-slate-500 font-bold uppercase">
             Parcelas Vencidas
           </p>
           <p className="text-2xl font-bold text-red-600 mt-1">

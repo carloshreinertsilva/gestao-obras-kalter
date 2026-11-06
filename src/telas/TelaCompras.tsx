@@ -129,7 +129,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
 
   if (carregando)
     return (
-      <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
+      <p className="text-sm text-slate-500 flex items-center gap-2 p-6">
         <Loader2 className="animate-spin" size={16} /> Carregando o painel de compras…
       </p>
     );
@@ -145,13 +145,13 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
     <div className="animate-in fade-in space-y-6 max-w-full">
       <div>
         <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Compras</h2>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-slate-500 mt-1">
           Material solicitado nas SMAs das obras em andamento, previsões liberadas e saldo por família. Atualizado pelo ERP.
         </p>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border p-3 flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-xs font-bold uppercase text-slate-400 mr-1">Filtrar</span>
+        <span className="text-xs font-bold uppercase text-slate-500 mr-1">Filtrar</span>
         <select
           value={gestor}
           onChange={(e) => {
@@ -186,13 +186,13 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
             Limpar filtro
           </button>
         )}
-        <span className="text-[11px] text-slate-400 ml-auto">Vale para SMAs, previsões liberadas e saldo por família.</span>
+        <span className="text-xs text-slate-500 ml-auto">Vale para SMAs, previsões liberadas e saldo por família.</span>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {indicadores.map(([rotulo, valor, cor]) => (
           <div key={rotulo} className="bg-white p-4 rounded-xl shadow-sm border">
-            <p className="text-[11px] text-slate-400 font-bold uppercase">{rotulo}</p>
+            <p className="text-xs text-slate-500 font-bold uppercase">{rotulo}</p>
             <p className={`text-2xl font-bold mt-1 ${cor}`}>{valor}</p>
           </div>
         ))}
@@ -217,7 +217,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
             </label>
             <div className="relative">
               <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Material, SMA…" className="border rounded-lg pl-7 pr-2 py-1.5 w-40" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Material, SMA…" aria-label="Buscar material ou SMA" className="border rounded-lg pl-7 pr-2 py-1.5 w-40" />
             </div>
             <button
               onClick={() =>
@@ -238,7 +238,59 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
             </button>
           </div>
         </div>
-        <div className="overflow-x-auto max-h-[60vh]">
+        {/* celular: cartoes (a tabela larga nao cabe) */}
+        <ul className="md:hidden divide-y max-h-[70vh] overflow-y-auto">
+          {filtrados.length === 0 ? (
+            <li className="p-6 text-center text-sm text-slate-500">Nenhum material com esses filtros.</li>
+          ) : (
+            filtrados.map((i) => (
+              <li key={`${i.id_obra}-${i.nr_sma}-${i.sequencia}`} className="p-3 text-sm space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <a href={`/obras/${i.codigo_obra}/lista-materiais`} className="text-[#2A6377] font-semibold hover:underline">
+                      {i.codigo_obra}
+                    </a>
+                    <span className="text-slate-500"> · SMA {i.nr_sma}</span>
+                    {i.gestor && <span className="block text-xs text-slate-500">{i.gestor}</span>}
+                  </div>
+                  <span className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${SITUACAO[i.situacao_compra]?.classe}`}>
+                    {SITUACAO[i.situacao_compra]?.rotulo}
+                  </span>
+                </div>
+                <p className="text-slate-800">
+                  {i.urgente && (
+                    <span className="mr-1 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">
+                      URGENTE
+                    </span>
+                  )}
+                  <span className="text-slate-500 text-xs">{i.codigo_material}</span> {i.descricao_material}
+                </p>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+                  <dt className="text-slate-500">Qtd. pendente</dt>
+                  <dd className="text-right font-semibold">{Number(i.quantidade_pendente).toLocaleString("pt-BR")}</dd>
+                  <dt className="text-slate-500">Necessidade</dt>
+                  <dd className={`text-right ${atrasado(i) ? "text-red-600 font-semibold" : ""}`}>
+                    {i.data_necessidade ? formatarDataSegura(i.data_necessidade) : "-"}
+                    {atrasado(i) && " (atrasado)"}
+                  </dd>
+                  {i.projeto_sma && (
+                    <>
+                      <dt className="text-slate-500">Família</dt>
+                      <dd className="text-right">{i.projeto_sma}</dd>
+                    </>
+                  )}
+                  {i.solicitante && (
+                    <>
+                      <dt className="text-slate-500">Solicitante</dt>
+                      <dd className="text-right truncate">{i.solicitante}</dd>
+                    </>
+                  )}
+                </dl>
+              </li>
+            ))
+          )}
+        </ul>
+        <div className="hidden md:block overflow-x-auto max-h-[60vh]">
           <table className="w-full text-[13px] min-w-[900px]">
             <thead className="bg-slate-50 text-slate-600 sticky top-0">
               <tr>
@@ -255,7 +307,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
             <tbody>
               {filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-slate-400">
+                  <td colSpan={8} className="p-6 text-center text-slate-500">
                     Nenhum material com esses filtros.
                   </td>
                 </tr>
@@ -266,16 +318,16 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
                       <a href={`/obras/${i.codigo_obra}/lista-materiais`} className="text-[#2A6377] font-semibold hover:underline">
                         {i.codigo_obra}
                       </a>
-                      <span className="block text-[11px] text-slate-400">{i.gestor}</span>
+                      <span className="block text-xs text-slate-500">{i.gestor}</span>
                     </td>
                     <td className="px-3 py-2 text-center">{i.nr_sma}</td>
                     <td className="px-3 py-2">
                       {i.urgente && (
-                        <span className="mr-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">
+                        <span className="mr-1 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">
                           URGENTE
                         </span>
                       )}
-                      <span className="text-slate-400 text-[11px]">{i.codigo_material}</span> {i.descricao_material}
+                      <span className="text-slate-500 text-xs">{i.codigo_material}</span> {i.descricao_material}
                     </td>
                     <td className="px-3 py-2 text-slate-500">{i.projeto_sma}</td>
                     <td className="px-3 py-2 text-right">{Number(i.quantidade_pendente).toLocaleString("pt-BR")}</td>
@@ -285,7 +337,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
                     </td>
                     <td className="px-3 py-2 text-slate-500">{i.solicitante}</td>
                     <td className="px-3 py-2 text-center">
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${SITUACAO[i.situacao_compra]?.classe}`}>
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${SITUACAO[i.situacao_compra]?.classe}`}>
                         {SITUACAO[i.situacao_compra]?.rotulo}
                       </span>
                     </td>
@@ -295,7 +347,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
             </tbody>
           </table>
         </div>
-        <p className="px-4 py-2 text-[11px] text-slate-400 border-t">
+        <p className="px-4 py-2 text-xs text-slate-500 border-t">
           {filtrados.length} item(ns). "Com pedido": a SMA já virou pedido de compra no ERP (ligação pelo número da SMA na solicitação de compra).
         </p>
       </div>
@@ -318,7 +370,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
               <tbody>
                 {liberadasFiltro.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-6 text-center text-slate-400">
+                    <td colSpan={4} className="p-6 text-center text-slate-500">
                       Nenhuma previsão gravada nos últimos 30 dias.
                     </td>
                   </tr>
@@ -331,7 +383,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
                           {p.codigo_obra}
                         </a>{" "}
                         · {p.familia_destino}
-                        <span className="block text-[11px] text-slate-400">
+                        <span className="block text-xs text-slate-500">
                           {p.tipo === "aumento" ? "Aumento" : "Transferência"} · {p.nome_solicitante}
                         </span>
                       </td>

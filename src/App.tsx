@@ -9,6 +9,9 @@ import { TelaNfsTerceiros } from "./NfsTerceiros";
 import { TelaFretes } from "./Fretes";
 import { TelaMateriais } from "./Materiais";
 import { MenuGrupos } from "./MenuGrupos";
+import { usePainelObra } from "./usePainelObra";
+import { BuscaGlobal } from "./BuscaGlobal";
+import { AlertasObra } from "./AlertasObra";
 import { avisar } from "./aviso";
 import { confirmar as confirmarDialogo } from "./Dialogos";
 import { MinhasPendencias, contadorDoMenu, type Pendencias } from "./MinhasPendencias";
@@ -23,15 +26,6 @@ import type {
   Obra,
   Tarefa,
   ComentarioTarefa,
-  ParcelaCliente,
-  DocumentoProjeto,
-  CronogramaObra,
-  ObraFaturamentoFamilia,
-  ObraFaturamentoGrupo,
-  ObraFaturamentoPrevisao,
-  ObraFaturamentoRealizado,
-  ObraSmaMaterial,
-  ObraRentabilidadeFamilia,
 } from "./types";
 import {
   formatarDataSegura,
@@ -46,7 +40,6 @@ import {
   labelFase,
   indicadorPorStatusDocumento,
   normalizarNomeArquivo,
-  compararCodigoFamilia,
   isAtrasada,
 } from "./utils";
 import {
@@ -93,6 +86,8 @@ import {
   Truck,
   Ship,
   Package,
+  Search,
+  Star,
 } from "lucide-react";
 
 // Link de "Esqueceu a senha?": o Supabase entra com a pessoa logada e marca
@@ -178,6 +173,17 @@ export default function App() {
   const [minhasNotificacoes, setMinhasNotificacoes] = useState<Tarefa[]>([]);
   // 06/11: o que esta esperando a pessoa (contadores do menu e "Minhas pendencias" do Dashboard)
   const [pendencias, setPendencias] = useState<Pendencias | null>(null);
+  // busca global (Ctrl+K) e Minhas Obras (busca, favoritas e contadores do cartao)
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [buscaObras, setBuscaObras] = useState("");
+  const [obrasFavoritas, setObrasFavoritas] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("obras_favoritas") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [resumoObras, setResumoObras] = useState<Record<string, any>>({});
   // quadro de tarefas: concluidas/canceladas so dos ultimos 30 dias, as antigas sob demanda
   const [tarefasAntigas, setTarefasAntigas] = useState(false);
   // usuarios e obras: recarrega no maximo a cada poucos minutos (antes: a cada troca de tela)
@@ -214,9 +220,6 @@ export default function App() {
   const [subAbaDiario, setSubAbaDiario] = useState<
     "historico" | "anexos" | "tarefas"
   >("historico");
-  const [parcelasCliente, setParcelasCliente] = useState<ParcelaCliente[]>([]);
-  const [documentosProjeto, setDocumentosProjeto] = useState<DocumentoProjeto[]>([]);
-  const [cronogramaObra, setCronogramaObra] = useState<CronogramaObra[]>([]);
   const [novaParcelaCliente, setNovaParcelaCliente] = useState<any>({
     descricao: "",
     data_prevista: "",
@@ -237,7 +240,6 @@ export default function App() {
     data_conclusao: "",
     observacao: "",
   });
-  const [arquivosDocumentos, setArquivosDocumentos] = useState<any>({});
   const [uploadDocumentoId, setUploadDocumentoId] = useState<string>("");
   const [faseCronogramaModal, setFaseCronogramaModal] = useState<any>(null);
   const [acaoCronogramaModal, setAcaoCronogramaModal] = useState<string>("");
@@ -247,22 +249,6 @@ export default function App() {
   });
 
   // ESTADOS DO CONTROLE DE FATURAMENTO POR FAMÍLIA
-  const [familiasFaturamento, setFamiliasFaturamento] = useState<
-    ObraFaturamentoFamilia[]
-  >([]);
-  const [gruposFaturamentoObra, setGruposFaturamentoObra] = useState<
-    ObraFaturamentoGrupo[]
-  >([]);
-  const [previsoesFaturamento, setPrevisoesFaturamento] = useState<
-    ObraFaturamentoPrevisao[]
-  >([]);
-  const [realizadosFaturamento, setRealizadosFaturamento] = useState<
-    ObraFaturamentoRealizado[]
-  >([]);
-  const [materiaisSma, setMateriaisSma] = useState<ObraSmaMaterial[]>([]);
-  const [rentabilidadeFamilias, setRentabilidadeFamilias] = useState<
-    ObraRentabilidadeFamilia[]
-  >([]);
   // ESTADOS DE ENCERRAMENTO DA OBRA
   const [modalFinalizarObraAberto, setModalFinalizarObraAberto] =
     useState<boolean>(false);
@@ -307,6 +293,34 @@ export default function App() {
     ultimoAvisoFalha.current = { texto, quando: agora };
     mostrarAviso(texto, "erro");
   };
+
+  // 06/11 (item 37): estados e cargas do painel da obra ficam em src/usePainelObra.ts
+  const {
+    parcelasCliente,
+    documentosProjeto,
+    setDocumentosProjeto,
+    cronogramaObra,
+    setCronogramaObra,
+    arquivosDocumentos,
+    familiasFaturamento,
+    gruposFaturamentoObra,
+    previsoesFaturamento,
+    realizadosFaturamento,
+    materiaisSma,
+    setMateriaisSma,
+    rentabilidadeFamilias,
+    setRentabilidadeFamilias,
+    buscarParcelasCliente,
+    buscarDocumentosProjeto,
+    buscarArquivosDocumentos,
+    buscarCronogramaObra,
+    buscarFamiliasFaturamento,
+    buscarGruposFaturamentoObra,
+    buscarPrevisoesFaturamento,
+    buscarRealizadosFaturamento,
+    buscarMateriaisSma,
+    buscarRentabilidadeFamilias,
+  } = usePainelObra(falhaAoCarregar);
 
   const agendarNoOutlookWeb = (tarefa: any) => {
     if (!tarefa.data_vencimento) {
@@ -576,7 +590,7 @@ export default function App() {
       buscarPendencias();
       const { data: sync } = await supabase
         .from("sync_status")
-        .select("iniciou_em, terminou_em, ok, etapas_com_erro")
+        .select("iniciou_em, terminou_em, ok, etapas_com_erro, avisos")
         .eq("id", "robo")
         .maybeSingle();
       setStatusSync(sync || null);
@@ -731,6 +745,44 @@ export default function App() {
     else window.history.pushState(null, "", caminhoAtual);
   }, [caminhoAtual]);
 
+  const navegarPara = (caminho: string) => {
+    const destino = new URL(caminho, window.location.origin);
+    window.history.pushState(null, "", destino.pathname + destino.search);
+    aplicarRota(caminhoParaRota(destino.pathname, destino.search));
+    setMenuMobileAberto(false);
+  };
+
+  useEffect(() => {
+    const atalho = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setBuscaAberta(true);
+      }
+    };
+    window.addEventListener("keydown", atalho);
+    return () => window.removeEventListener("keydown", atalho);
+  }, []);
+
+  // contadores dos cartoes de Minhas Obras (uma consulta so)
+  useEffect(() => {
+    if (telaAtiva !== "minhas_obras" || !obrasLista.length) return;
+    supabase.rpc("obras_resumo_cartao", { p_ids: obrasLista.map((o) => o.id) }).then(({ data, error }) => {
+      if (error) return;
+      setResumoObras(Object.fromEntries((data || []).map((r: any) => [r.id_obra, r])));
+    });
+  }, [telaAtiva, obrasLista]);
+
+  const alternarFavorita = (idObra: string) =>
+    setObrasFavoritas((atual) => {
+      const nova = atual.includes(idObra) ? atual.filter((x) => x !== idObra) : [...atual, idObra];
+      try {
+        localStorage.setItem("obras_favoritas", JSON.stringify(nova));
+      } catch {
+        /* sem armazenamento local */
+      }
+      return nova;
+    });
+
   const alternarMenuRecolhido = () =>
     setMenuRecolhido((atual) => {
       const novo = !atual;
@@ -792,58 +844,8 @@ export default function App() {
     }
   }, [telaAtiva, sessao?.user?.id, usuarioAtual?.id]);
 
-  const buscarParcelasCliente = async (idDaObra: any) => {
-    if (!idDaObra) return;
-    try {
-      const { data, error } = await supabase
-        .from("parcelas_cliente")
-        .select("*")
-        .eq("id_obra", idDaObra)
-        .order("data_prevista", { ascending: true });
-      if (error) throw error;
-      setParcelasCliente(data || []);
-    } catch (error) {
-      falhaAoCarregar("as parcelas do cliente", error);
-    }
-  };
 
-  const buscarDocumentosProjeto = async (idDaObra: any) => {
-    if (!idDaObra) return;
-    try {
-      const { data, error } = await supabase
-        .from("documentos_projeto")
-        .select("*")
-        .eq("id_obra", idDaObra)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      setDocumentosProjeto(data || []);
-    } catch (error) {
-      falhaAoCarregar("os documentos do projeto", error);
-    }
-  };
 
-  const buscarArquivosDocumentos = async (idDaObra: any) => {
-    if (!idDaObra) return;
-    try {
-      const { data, error } = await supabase
-        .from("documentos_projeto_arquivos")
-        .select("*")
-        .eq("id_obra", idDaObra)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      const agrupado = (data || []).reduce((acc: any, arquivo: any) => {
-        if (!acc[arquivo.id_documento]) acc[arquivo.id_documento] = [];
-        acc[arquivo.id_documento].push(arquivo);
-        return acc;
-      }, {});
-
-      setArquivosDocumentos(agrupado);
-    } catch (error) {
-      falhaAoCarregar("os anexos dos documentos", error);
-    }
-  };
 
   const anexarArquivoDocumento = async (doc: any, arquivo: File | null) => {
     if (!obraEcoSelecionada || !doc?.id || !arquivo) return;
@@ -946,118 +948,12 @@ export default function App() {
     }
   };
 
-  const buscarCronogramaObra = async (idDaObra: any) => {
-    if (!idDaObra) return;
-    try {
-      const { data, error } = await supabase
-        .from("cronograma_obra")
-        .select("*")
-        .eq("id_obra", idDaObra)
-        .order("ordem", { ascending: true });
-      if (error) throw error;
-      setCronogramaObra(data || []);
-    } catch (error) {
-      falhaAoCarregar("o cronograma da obra", error);
-    }
-  };
 
-  const buscarFamiliasFaturamento = async (idDaObra: any) => {
-    if (!idDaObra) return;
-    try {
-      const { data, error } = await supabase
-        .from("obra_faturamento_familias")
-        .select("*")
-        .eq("id_obra", idDaObra)
-        .order("ordem", { ascending: true });
-      if (error) throw error;
-      setFamiliasFaturamento(
-        (data || []).sort((a, b) =>
-          compararCodigoFamilia(a.codigo_familia, b.codigo_familia),
-        ),
-      );
-    } catch (error) {
-      falhaAoCarregar("as famílias de faturamento", error);
-    }
-  };
 
-  const buscarGruposFaturamentoObra = async (idDaObra: any) => {
-    if (!idDaObra) return;
 
-    try {
-      const { data, error } = await supabase
-        .from("obra_faturamento_grupos")
-        .select("*")
-        .eq("id_obra", idDaObra)
-        .order("codigo", { ascending: true });
 
-      if (error) throw error;
 
-      setGruposFaturamentoObra(data || []);
-    } catch (error) {
-      falhaAoCarregar("os grupos de faturamento", error);
-      setGruposFaturamentoObra([]);
-    }
-  };
 
-  const buscarPrevisoesFaturamento = async (idDaObra: any) => {
-    if (!idDaObra) return;
-    try {
-      const { data, error } = await supabase
-        .from("obra_faturamento_previsoes")
-        .select("*")
-        .eq("id_obra", idDaObra)
-        .order("competencia", { ascending: true });
-      if (error) throw error;
-      setPrevisoesFaturamento(data || []);
-    } catch (error) {
-      falhaAoCarregar("as previsões de faturamento", error);
-    }
-  };
-
-  const buscarRealizadosFaturamento = async (idDaObra: any) => {
-    if (!idDaObra) return;
-    try {
-      const { data, error } = await supabase
-        .from("obra_faturamento_realizados")
-        .select("*")
-        .eq("id_obra", idDaObra)
-        .order("competencia", { ascending: true });
-      if (error) throw error;
-      setRealizadosFaturamento(data || []);
-    } catch (error) {
-      falhaAoCarregar("os faturamentos realizados", error);
-    }
-  };
-
-  const buscarMateriaisSma = async (idDaObra: any) => {
-    if (!idDaObra) return;
-    try {
-      const { data, error } = await supabase
-        .from("obra_sma_materiais")
-        .select("*")
-        .eq("id_obra", idDaObra)
-        .order("nr_sma", { ascending: false });
-      if (error) throw error;
-      setMateriaisSma(data || []);
-    } catch (error) {
-      falhaAoCarregar("a lista de materiais (SMA)", error);
-    }
-  };
-
-  const buscarRentabilidadeFamilias = async (idDaObra: any) => {
-    if (!idDaObra) return;
-    try {
-      const { data, error } = await supabase
-        .from("obra_rentabilidade_familias")
-        .select("*")
-        .eq("id_obra", idDaObra)
-        .order("codigo_projeto", { ascending: true });
-      if (error) throw error;
-      setRentabilidadeFamilias(data || []);
-    } catch (error) {
-      falhaAoCarregar("a rentabilidade do projeto", error);
-    }
-  };
 
 
   const salvarParcelaCliente = async () => {
@@ -1915,7 +1811,7 @@ export default function App() {
     >
       <Bell size={20} />
       {totalSino > 0 && (
-        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-[#2A6377]">
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center border-2 border-[#2A6377]">
           {totalSino > 99 ? "99+" : totalSino}
         </span>
       )}
@@ -1940,7 +1836,25 @@ export default function App() {
     )
     .slice(0, 6);
 
-  const obrasListaOrdenada = [...obrasLista].sort((a, b) => {
+  const termoObras = buscaObras
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const obrasListaOrdenada = [...obrasLista]
+    .filter(
+      (o) =>
+        !termoObras ||
+        `${o.codigo_externo || ""} ${o.nome || ""} ${o.usuarios?.nome || ""}`
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .includes(termoObras),
+    )
+    .sort((a, b) => {
+    const fa = obrasFavoritas.includes(a.id) ? 0 : 1;
+    const fb = obrasFavoritas.includes(b.id) ? 0 : 1;
+    if (fa !== fb) return fa - fb;
     if (ordenacaoMinhasObras === "nome") {
       return (a.nome || "").localeCompare(b.nome || "", "pt-BR", {
         sensitivity: "base",
@@ -2487,6 +2401,8 @@ export default function App() {
     <div className="flex h-screen bg-gray-50 font-sans relative overflow-hidden flex-col md:flex-row">
 
 
+      <BuscaGlobal aberta={buscaAberta} onFechar={() => setBuscaAberta(false)} obras={obrasLista} onNavegar={navegarPara} />
+
       {/* HEADER MOBILE */}
       <div className="md:hidden bg-[#2A6377] text-white p-4 flex justify-between items-center shadow-md z-30">
         <div className="flex items-center gap-2">
@@ -2497,6 +2413,9 @@ export default function App() {
           />
         </div>
         <div className="flex items-center gap-3">
+          <button onClick={() => setBuscaAberta(true)} aria-label="Buscar" className="p-2 bg-white/10 rounded-lg hover:bg-white/20 transition">
+            <Search size={20} />
+          </button>
           {botaoSino("p-2 bg-white/10 rounded-lg hover:bg-white/20 transition")}
           <button
             onClick={() => setMenuMobileAberto(true)}
@@ -2694,7 +2613,7 @@ export default function App() {
                     <User className="text-[#2A6377]" size={18} />
                   </div>
                   <div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
                       Responsável
                     </p>
                     <p className="font-bold text-slate-700 text-sm">
@@ -2703,7 +2622,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1 text-sm text-slate-600 bg-slate-50 p-4 rounded-lg border">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
                     <Calendar size={12} /> Criada em
                   </p>
                   <p className="font-bold text-slate-700">
@@ -2714,7 +2633,7 @@ export default function App() {
                 <div
                   className={`flex flex-col gap-1 text-sm p-4 rounded-lg border ${isAtrasada(tarefaSelecionada.data_vencimento, tarefaSelecionada.status) ? "bg-red-50 border-red-100 text-red-600" : "bg-slate-50 border-slate-100 text-slate-600"}`}
                 >
-                  <p className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 mb-1">
+                  <p className="text-xs font-bold uppercase tracking-wider flex items-center gap-1 mb-1">
                     <Clock size={12} /> Prazo da Tarefa
                   </p>
                   <input
@@ -2735,14 +2654,14 @@ export default function App() {
               <div className="w-full md:w-2/3 flex flex-col">
                 <div className="mb-4 bg-slate-50 border rounded-lg p-4 text-sm">
                   <div className="flex flex-wrap gap-2 mb-3">
-                    <span className="text-[10px] font-bold uppercase px-2 py-1 rounded bg-[#2A6377]/10 text-[#2A6377]">
+                    <span className="text-xs font-bold uppercase px-2 py-1 rounded bg-[#2A6377]/10 text-[#2A6377]">
                       Origem: {tarefaSelecionada.origem === "reuniao" ? "Reunião" : "Avulsa"}
                     </span>
-                    <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded ${tarefaSelecionada.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefaSelecionada.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefaSelecionada.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
+                    <span className={`text-xs font-bold uppercase px-2 py-1 rounded ${tarefaSelecionada.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefaSelecionada.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefaSelecionada.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
                       Prioridade: {tarefaSelecionada.prioridade || "normal"}
                     </span>
                   </div>
-                  <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">
+                  <p className="text-xs font-bold uppercase text-slate-400 mb-1">
                     Descrição
                   </p>
                   <p className="text-slate-700 whitespace-pre-wrap">
@@ -2769,7 +2688,7 @@ export default function App() {
                           <span className="font-bold text-[#2A6377]">
                             {com.usuarios?.nome}
                           </span>
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-xs text-slate-400">
                             {formatarDataHora(com.created_at)}
                           </span>
                         </div>
@@ -3164,19 +3083,19 @@ export default function App() {
             <div className="p-5 space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-slate-50 border rounded-xl p-4">
-                  <p className="text-[10px] uppercase font-bold text-slate-400">Escopo a faturar</p>
+                  <p className="text-xs uppercase font-bold text-slate-400">Escopo a faturar</p>
                   <p className="text-xl font-bold text-slate-800 mt-1">
                     {formatarMoeda(totalEscopoFaturamento)}
                   </p>
                 </div>
                 <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
-                  <p className="text-[10px] uppercase font-bold text-emerald-600">Faturado</p>
+                  <p className="text-xs uppercase font-bold text-emerald-600">Faturado</p>
                   <p className="text-xl font-bold text-emerald-700 mt-1">
                     {formatarMoeda(totalRealizadoFaturamento)}
                   </p>
                 </div>
                 <div className={`${saldoFaturarFamiliasPositivo > 0 ? "bg-red-50 border-red-100" : "bg-green-50 border-green-100"} border rounded-xl p-4`}>
-                  <p className={`text-[10px] uppercase font-bold ${saldoFaturarFamiliasPositivo > 0 ? "text-red-600" : "text-green-600"}`}>Saldo a faturar</p>
+                  <p className={`text-xs uppercase font-bold ${saldoFaturarFamiliasPositivo > 0 ? "text-red-600" : "text-green-600"}`}>Saldo a faturar</p>
                   <p className={`text-xl font-bold mt-1 ${saldoFaturarFamiliasPositivo > 0 ? "text-red-700" : "text-green-700"}`}>
                     {formatarMoeda(saldoFaturarFamiliasPositivo)}
                   </p>
@@ -3479,7 +3398,7 @@ export default function App() {
                       key={notif.id}
                       className="bg-white p-4 rounded-xl border border-l-4 border-l-[#2A6377]"
                     >
-                      <span className="text-[10px] font-bold text-[#2A6377] uppercase bg-[#2A6377]/10 px-2 py-1 rounded inline-block mb-2">
+                      <span className="text-xs font-bold text-[#2A6377] uppercase bg-[#2A6377]/10 px-2 py-1 rounded inline-block mb-2">
                         {notif.obras?.codigo_externo || "Obra"}
                       </span>
                       <p className="font-semibold text-sm mb-3">
@@ -3549,6 +3468,14 @@ export default function App() {
             <div
               className={`hidden md:flex items-center gap-3 ${menuRecolhido ? "md:flex-col" : ""}`}
             >
+              <button
+                onClick={() => setBuscaAberta(true)}
+                title="Buscar (Ctrl+K)"
+                aria-label="Buscar"
+                className="p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition"
+              >
+                <Search size={20} />
+              </button>
               {botaoSino("p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition")}
               <button
                 onClick={alternarMenuRecolhido}
@@ -3575,7 +3502,7 @@ export default function App() {
                   titulo: "Principal",
                   icone: LayoutDashboard,
                   itens: [
-                    { tela: "dashboard", rotulo: "Dashboard", icone: LayoutDashboard, ativo: telaAtiva === "dashboard" },
+                    { tela: "dashboard", rotulo: "Painel", icone: LayoutDashboard, ativo: telaAtiva === "dashboard" },
                     { tela: "tarefas", rotulo: "Tarefas", icone: CheckSquare, ativo: telaAtiva === "tarefas" , contador: contadorDoMenu(pendencias, "tarefas") },
                   ],
                 },
@@ -3692,7 +3619,17 @@ export default function App() {
               <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
                 Minhas Obras em Andamento
               </h2>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <label className="relative">
+                  <span className="sr-only">Buscar obra</span>
+                  <Search size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                  <input
+                    value={buscaObras}
+                    onChange={(e) => setBuscaObras(e.target.value)}
+                    placeholder="Buscar por código, nome ou responsável"
+                    className="border rounded-lg py-2 pl-8 pr-3 text-sm bg-white w-full sm:w-72 focus:border-[#2A6377]"
+                  />
+                </label>
                 <label
                   htmlFor="ordenacao-minhas-obras"
                   className="text-sm font-medium text-slate-500 whitespace-nowrap"
@@ -3720,20 +3657,51 @@ export default function App() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {obrasListaOrdenada.map((obra) => (
+                {obrasListaOrdenada.length === 0 && (
+                  <p className="text-sm text-slate-500 col-span-full">Nenhuma obra encontrada para "{buscaObras}".</p>
+                )}
+                {obrasListaOrdenada.map((obra) => {
+                  const r = resumoObras[obra.id];
+                  const motivos: string[] = [];
+                  if (r?.alertas_criticos) motivos.push(`${r.alertas_criticos} alerta(s) crítico(s)`);
+                  if (r?.parcelas_vencidas) motivos.push(`${r.parcelas_vencidas} parcela(s) vencida(s)`);
+                  if (r?.tarefas_atrasadas) motivos.push(`${r.tarefas_atrasadas} tarefa(s) atrasada(s)`);
+                  if (r?.fases_atrasadas) motivos.push(`${r.fases_atrasadas} fase(s) atrasada(s)`);
+                  if (r?.documentos_atrasados) motivos.push(`${r.documentos_atrasados} documento(s) atrasado(s)`);
+                  if (r && r.alertas_abertos > r.alertas_criticos) motivos.push(`${r.alertas_abertos - r.alertas_criticos} alerta(s)`);
+                  const selo = !r
+                    ? null
+                    : r.alertas_criticos || r.parcelas_vencidas
+                      ? { t: "Crítico", c: "bg-red-50 text-red-800 border-red-200", barra: "bg-red-500" }
+                      : motivos.length
+                        ? { t: "Atenção", c: "bg-amber-50 text-amber-900 border-amber-200", barra: "bg-amber-400" }
+                        : { t: "Em dia", c: "bg-emerald-50 text-emerald-800 border-emerald-200", barra: "bg-emerald-500" };
+                  const favorita = obrasFavoritas.includes(obra.id);
+                  return (
                   <div
                     key={obra.id}
-                    onClick={() => abrirPainelObra(obra)}
-                    className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md hover:border-[#2A6377] transition cursor-pointer flex flex-col group"
+                    className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md hover:border-[#2A6377] transition flex flex-col group relative"
                   >
-                    <div className="h-2 bg-[#2A6377]"></div>
-                    <div className="p-5 flex-1 flex flex-col">
-                      <span className="text-[10px] font-bold bg-slate-100 text-slate-500 uppercase px-2 py-1 rounded w-fit mb-3">
-                        {obra.codigo_externo}
+                    <div className={`h-2 ${selo?.barra || "bg-[#2A6377]"}`}></div>
+                    <button
+                      type="button"
+                      onClick={() => alternarFavorita(obra.id)}
+                      aria-pressed={favorita}
+                      aria-label={favorita ? "Tirar dos favoritos" : "Fixar nos favoritos"}
+                      title={favorita ? "Tirar dos favoritos" : "Fixar no topo"}
+                      className={`absolute top-4 right-3 p-1.5 rounded-lg hover:bg-slate-100 ${favorita ? "text-amber-500" : "text-slate-400"}`}
+                    >
+                      <Star size={18} fill={favorita ? "currentColor" : "none"} />
+                    </button>
+                    <button type="button" onClick={() => abrirPainelObra(obra)} className="p-5 flex-1 flex flex-col text-left">
+                      <span className="flex items-center gap-2 flex-wrap mb-3 pr-8">
+                        <span className="text-xs font-bold bg-slate-100 text-slate-600 uppercase px-2 py-1 rounded">{obra.codigo_externo}</span>
+                        {selo && <span className={`text-xs font-semibold px-2 py-1 rounded border ${selo.c}`}>{selo.t}</span>}
                       </span>
-                      <h3 className="text-lg font-bold text-slate-800 leading-tight mb-4 group-hover:text-[#2A6377] transition">
+                      <h3 className="text-lg font-bold text-slate-800 leading-tight mb-3 group-hover:text-[#2A6377] transition">
                         {obra.nome}
                       </h3>
+                      {motivos.length > 0 && <p className="text-xs text-slate-600 mb-3">{motivos.join(" · ")}</p>}
                       <div className="mt-auto pt-4 border-t border-slate-100 flex flex-col gap-2">
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                           <User size={14} /> {obra.usuarios?.nome}
@@ -3743,9 +3711,10 @@ export default function App() {
                           {formatarDataSegura(obra.data_previsao_fim)}
                         </div>
                       </div>
-                    </div>
+                    </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -3819,6 +3788,8 @@ export default function App() {
                 </details>
               )}
             </header>
+
+            <AlertasObra idObra={obraEcoSelecionada.id} />
 
             <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur pb-3 mb-3">
               <div className="bg-white rounded-xl border shadow-sm overflow-visible">

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, Pencil, Plus, Search, Trash2, Truck, X, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, ChevronRight, Loader2, Pencil, Plus, Search, Trash2, Truck, XCircle } from "lucide-react";
 import { supabase } from "./supabase";
-import { formatarDataSegura, formatarMoeda } from "./utils";
+import { exportarCsv, formatarDataSegura, formatarMoeda } from "./utils";
 import { linhaClicavel } from "./teclado";
-import { useAviso } from "./aviso";
+import { avisar, useAviso } from "./aviso";
 import { ErroCarga, useDialogos } from "./Dialogos";
+import { Modal } from "./Modal";
+import { BotaoExportar, numCsv, useFiltroSalvo } from "./modulos_lista";
 import type { Usuario } from "./types";
 
 // Fretes (2026-10-20): solicitacao de frete com controle da verba da familia <obra>.510.
@@ -127,8 +129,66 @@ const STATUS: Record<StatusFrete, { rotulo: string; classe: string }> = {
   liberado: { rotulo: "Liberado", classe: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   bloqueado: { rotulo: "Bloqueado – sem verba", classe: "bg-red-50 text-red-700 border-red-200" },
   realizado: { rotulo: "Realizado", classe: "bg-slate-100 text-slate-700 border-slate-200" },
-  cancelado: { rotulo: "Cancelado", classe: "bg-slate-50 text-slate-400 border-slate-200" },
+  cancelado: { rotulo: "Cancelado", classe: "bg-slate-50 text-slate-500 border-slate-200" },
 };
+
+const STATUS_ABERTOS: StatusFrete[] = ["aguardando_cotacao", "bloqueado", "liberado"];
+// fretes encerrados (realizados/cancelados) vem so os mais recentes; os abertos vem todos
+const LIMITE_ENCERRADOS = 300;
+const COLUNAS_FORNECEDOR = "codigo, nome, cidade, uf, ibge, transportadora";
+
+// texto da busca seguro para o filtro .or() do PostgREST (virgula, parenteses e curingas quebram a expressao)
+const termoBusca = (t: string) => t.trim().replace(/[,()%*\\:"']/g, " ").replace(/\s+/g, " ").trim();
+
+// fornecedores do ERP por nome/cidade/codigo, no servidor (sao ~3 mil: carregar tudo passava do limite de 1.000 linhas da API)
+async function buscarFornecedores(texto: string, opcoes: { transportadora?: boolean; comCidade?: boolean; limite?: number } = {}) {
+  const t = termoBusca(texto);
+  let q = supabase.from("fornecedores_erp").select(COLUNAS_FORNECEDOR);
+  const condicoes = [`nome.ilike.%${t}%`, `cidade.ilike.%${t}%`];
+  if (/^\d+$/.test(t)) condicoes.push(`codigo.eq.${t}`);
+  q = q.or(condicoes.join(","));
+  if (opcoes.transportadora !== undefined) q = q.eq("transportadora", opcoes.transportadora);
+  if (opcoes.comCidade) q = q.not("ibge", "is", null);
+  return q.order("nome").limit(opcoes.limite ?? 50);
+}
+
+// busca com espera (debounce) enquanto a pessoa digita
+function useBuscaFornecedores(texto: string, ativo: boolean, opcoes: { transportadora?: boolean; comCidade?: boolean; limite?: number; minimo?: number }) {
+  const [lista, setLista] = useState<Fornecedor[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const minimo = opcoes.minimo ?? 2;
+  useEffect(() => {
+    if (!ativo || termoBusca(texto).length < minimo) {
+      setLista([]);
+      setBuscando(false);
+      return;
+    }
+    let vivo = true;
+    setBuscando(true);
+    const t = setTimeout(async () => {
+      const { data, error } = await buscarFornecedores(texto, opcoes);
+      if (!vivo) return;
+      setBuscando(false);
+      if (error) avisoBuscaFalhou(error);
+      setLista(error ? [] : (data as Fornecedor[]) || []);
+    }, 300);
+    return () => {
+      vivo = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [texto, ativo, opcoes.transportadora, opcoes.comCidade, opcoes.limite, minimo]);
+  return { lista, buscando };
+}
+let ultimoAvisoBusca = 0;
+const avisoBuscaFalhou = (e: any) => {
+  // um aviso so por rajada de digitacao
+  if (Date.now() - ultimoAvisoBusca < 5000) return;
+  ultimoAvisoBusca = Date.now();
+  avisar.erro("Não foi possível buscar os fornecedores: " + msgErro(e));
+};
+
+const FILTROS_FRETE = ["abertos", "aguardando_cotacao", "bloqueado", "liberado", "realizado", "cancelado", "todos"];
 
 const DOCUMENTOS: Record<string, string> = {
   op: "OP",
@@ -227,44 +287,76 @@ export function TelaFretes({
   const mantemCadastros = ehLogistica || usuario?.perfil === "admin" || usuario?.perfil === "coordenador";
   const [aba, setAba] = useState<"fretes" | "transportadoras">("fretes");
   const [fretes, setFretes] = useState<Frete[] | null>(null);
-  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [encerradosNoLimite, setEncerradosNoLimite] = useState(false);
+  // so as transportadoras (poucas); os demais fornecedores sao buscados no servidor ao digitar
+  const [transportadoras, setTransportadoras] = useState<Fornecedor[]>([]);
   const [obras, setObras] = useState<ObraOpcao[]>([]);
-  const [filtro, setFiltro] = useState<StatusFrete | "abertos" | "todos">("abertos");
-  const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useFiltroSalvo<string>("fretes.filtro", "abertos", (v) => FILTROS_FRETE.includes(String(v)));
+  const [busca, setBusca] = useFiltroSalvo<string>("fretes.busca", "", (v) => typeof v === "string" && v.length <= 100);
   const [editando, setEditando] = useState<Frete | "novo" | null>(null);
   const [erro, setErro] = useState("");
   const [erroCarga, setErroCarga] = useState("");
 
-  const carregar = async () => {
-    const [f, fo, o] = await Promise.all([
-      supabase.from("fretes").select("*").order("created_at", { ascending: false }),
-      supabase.from("fornecedores_erp").select("codigo, nome, cidade, uf, ibge, transportadora").order("nome"),
+  const carregarFretes = async () => {
+    const [a, e] = await Promise.all([
+      supabase.from("fretes").select("*").in("status", STATUS_ABERTOS).order("created_at", { ascending: false }),
+      supabase
+        .from("fretes")
+        .select("*")
+        .in("status", ["realizado", "cancelado"])
+        .order("created_at", { ascending: false })
+        .limit(LIMITE_ENCERRADOS),
+    ]);
+    const falha = a.error || e.error;
+    if (falha) {
+      // mantem a lista anterior (se houver) e mostra o erro no lugar de "nenhum frete"
+      setErroCarga(msgErro(falha));
+      setFretes((ant) => ant ?? []);
+      return;
+    }
+    setErroCarga("");
+    setEncerradosNoLimite((e.data || []).length >= LIMITE_ENCERRADOS);
+    setFretes(
+      [...((a.data as Frete[]) || []), ...((e.data as Frete[]) || [])].sort((x, y) => (x.created_at < y.created_at ? 1 : x.created_at > y.created_at ? -1 : 0)),
+    );
+  };
+
+  const carregarCadastros = async () => {
+    const [t, o] = await Promise.all([
+      supabase.from("fornecedores_erp").select(COLUNAS_FORNECEDOR).eq("transportadora", true).order("nome"),
       supabase.from("obras").select("id, codigo_externo, nome, id_responsavel, cidade_ibge").eq("status", "em_andamento").order("codigo_externo"),
     ]);
-    if (f.error) {
-      // mantem a lista anterior (se houver) e mostra o erro no lugar de "nenhum frete"
-      setErroCarga(msgErro(f.error));
-      setFretes((ant) => ant ?? []);
-    } else {
-      setErroCarga("");
-      setFretes((f.data as Frete[]) || []);
-    }
     setErro(
-      fo.error || o.error
-        ? `Não foi possível carregar ${fo.error ? "os fornecedores" : "as obras"}: ${msgErro(fo.error || o.error)}. Tente de novo antes de lançar um frete.`
+      t.error || o.error
+        ? `Não foi possível carregar ${t.error ? "as transportadoras" : "as obras"}: ${msgErro(t.error || o.error)}. Tente de novo antes de lançar um frete.`
         : "",
     );
-    if (!fo.error) setFornecedores((fo.data as Fornecedor[]) || []);
+    if (!t.error) setTransportadoras((t.data as Fornecedor[]) || []);
     if (!o.error) {
       const todas = (o.data as ObraOpcao[]) || [];
       setObras(verTodasObras || ehLogistica ? todas : todas.filter((x) => x.id_responsavel === idResponsavelEscopo));
     }
   };
 
+  const carregar = () => Promise.all([carregarFretes(), carregarCadastros()]);
+
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // frete aberto por link/aviso que nao veio na lista (encerrado antigo, fora do limite): busca so ele
+  useEffect(() => {
+    if (!idAberto || fretes === null || fretes.some((f) => f.id === idAberto)) return;
+    supabase
+      .from("fretes")
+      .select("*")
+      .eq("id", idAberto)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setFretes((ant) => (ant && !ant.some((f) => f.id === (data as Frete).id) ? [...ant, data as Frete] : ant));
+      });
+  }, [idAberto, fretes]);
 
   const contagem = useMemo(() => {
     const c: Record<string, number> = {};
@@ -289,9 +381,25 @@ export function TelaFretes({
     .filter((f) => f.status === "liberado" && !f.nr_ad)
     .reduce((s, f) => s + Number(f.valor_cotado || 0), 0);
 
+  const exportar = () =>
+    exportarCsv(
+      "fretes",
+      ["Nº", "Obra", "Família", "Data", "Operação", "Veículo", "Tipo documento", "Nº documento", "Origem", "Destino", "Km", "Volumes", "Peso (kg)",
+        "Cubagem (m³)", "Transportadora", "Valor cotado", "Valor realizado (CT-e)", "AD", "Situação", "Solicitante", "Pedido em", "Observação"],
+      lista.map((f) => [
+        f.numero, f.codigo_obra, f.familia, formatarDataSegura(f.data_frete), f.operacao === "compra" ? "Compra" : "Venda", f.tipo_veiculo || "",
+        f.tipo_documento ? DOCUMENTOS[f.tipo_documento] || f.tipo_documento : "", f.numero_documento || "", f.origem_nome || "", f.destino_nome || "",
+        numCsv(f.km), f.volumes ?? "", numCsv(f.peso_kg), numCsv(f.cubagem_m3), f.transportadora_nome || "", numCsv(f.valor_cotado),
+        numCsv(f.valor_realizado), f.nr_ad ?? "", STATUS[f.status]?.rotulo || f.status, f.nome_solicitante || "",
+        new Date(f.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }), f.observacao || "",
+      ]),
+    );
+  const valorFrete = (f: Frete) =>
+    f.valor_realizado != null ? formatarMoeda(f.valor_realizado) : f.valor_cotado != null ? formatarMoeda(f.valor_cotado) : "-";
+
   if (fretes === null)
     return (
-      <p className="text-sm text-slate-400 flex items-center gap-2 p-6">
+      <p className="text-sm text-slate-500 flex items-center gap-2 p-6">
         <Loader2 className="animate-spin" size={16} /> Carregando os fretes…
       </p>
     );
@@ -346,7 +454,7 @@ export function TelaFretes({
       {erro && <p className="text-sm text-red-600">{erro}</p>}
 
       {aba === "transportadoras" ? (
-        <CadastroTransportadoras fornecedores={fornecedores} onMudou={carregar} />
+        <CadastroTransportadoras transportadorasErp={transportadoras} onMudou={carregarCadastros} />
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -367,20 +475,65 @@ export function TelaFretes({
                   {f.rotulo}
                 </button>
               ))}
-              <div className="relative ml-auto">
-                <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" aria-hidden="true" />
-                <input
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Obra, cidade, transportadora…"
-                  aria-label="Buscar fretes"
-                  className="border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377] w-64 max-w-full"
-                />
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:ml-auto">
+                <div className="relative flex-1 md:flex-none">
+                  <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" aria-hidden="true" />
+                  <input
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                    placeholder="Obra, cidade, transportadora…"
+                    aria-label="Buscar fretes"
+                    className="border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377] w-full md:w-64"
+                  />
+                </div>
+                <BotaoExportar onClick={exportar} disabled={!lista.length} />
               </div>
             </div>
-            <div className="overflow-x-auto">
+            {erroCarga && (
+              <div className="md:hidden">
+                <ErroCarga
+                  mensagem={fretes.length ? "Não foi possível atualizar a lista (mostrando a última carregada)." : "Não foi possível carregar os fretes."}
+                  detalhe={erroCarga}
+                  compacto={fretes.length > 0}
+                  onTentar={carregarFretes}
+                />
+              </div>
+            )}
+            {/* celular: cartoes */}
+            <ul className="md:hidden divide-y">
+              {erroCarga && !fretes.length ? null : lista.length === 0 ? (
+                <li className="px-3 py-8 text-center text-sm text-slate-500">Nenhum frete neste filtro.</li>
+              ) : (
+                lista.map((f) => (
+                  <li key={f.id}>
+                    <button type="button" onClick={() => onAbrir(f.id)} className="w-full text-left px-3 py-3 hover:bg-slate-50 active:bg-slate-100">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-bold text-[#2A6377]">
+                          Frete {f.numero} <span className="text-slate-700 font-semibold">· obra {f.codigo_obra}</span>
+                        </p>
+                        <span className="font-bold tabular-nums whitespace-nowrap">{valorFrete(f)}</span>
+                      </div>
+                      <p className="text-sm text-slate-600 mt-0.5 line-clamp-2">{rota(f)}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {formatarDataSegura(f.data_frete)} · {f.operacao === "compra" ? "Compra" : "Venda"}
+                        {f.tipo_veiculo ? ` · ${f.tipo_veiculo}` : ""}
+                        {f.transportadora_nome ? ` · ${f.transportadora_nome}` : ""}
+                      </p>
+                      <div className="flex items-center justify-between gap-2 mt-2">
+                        <BadgeStatusFrete status={f.status} />
+                        <span className="text-xs font-semibold text-[#2A6377] flex items-center">
+                          {f.status === "aguardando_cotacao" && ehLogistica ? "Cotar" : "Ver detalhes"} <ChevronRight size={14} aria-hidden="true" />
+                        </span>
+                      </div>
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+            {/* computador: tabela */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm min-w-[900px]">
-                <thead className="bg-slate-50 text-slate-500 uppercase text-[11px]">
+                <thead className="bg-slate-50 text-slate-500 uppercase text-xs">
                   <tr>
                     <th className="px-3 py-2 text-left">Nº</th>
                     <th className="px-3 py-2 text-left">Obra</th>
@@ -407,7 +560,7 @@ export function TelaFretes({
                   )}
                   {erroCarga && !fretes.length ? null : lista.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
+                      <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
                         Nenhum frete neste filtro.
                       </td>
                     </tr>
@@ -419,16 +572,14 @@ export function TelaFretes({
                         <td className="px-3 py-2 whitespace-nowrap">{formatarDataSegura(f.data_frete)}</td>
                         <td className="px-3 py-2">
                           {f.operacao === "compra" ? "Compra" : "Venda"}
-                          {f.tipo_veiculo && <span className="text-slate-400"> · {f.tipo_veiculo}</span>}
+                          {f.tipo_veiculo && <span className="text-slate-500"> · {f.tipo_veiculo}</span>}
                         </td>
                         <td className="px-3 py-2 max-w-[260px]">
                           <span className="line-clamp-2">{rota(f)}</span>
-                          {f.km != null && <span className="text-[11px] text-slate-400">{txtNum(f.km, 0)} km</span>}
+                          {f.km != null && <span className="text-xs text-slate-500">{txtNum(f.km, 0)} km</span>}
                         </td>
                         <td className="px-3 py-2">{f.transportadora_nome || "-"}</td>
-                        <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">
-                          {f.valor_realizado != null ? formatarMoeda(f.valor_realizado) : f.valor_cotado != null ? formatarMoeda(f.valor_cotado) : "-"}
-                        </td>
+                        <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{valorFrete(f)}</td>
                         <td className="px-3 py-2">
                           <BadgeStatusFrete status={f.status} />
                         </td>
@@ -438,6 +589,10 @@ export function TelaFretes({
                 </tbody>
               </table>
             </div>
+            <p className="px-3 py-2 text-xs text-slate-500 border-t">
+              {lista.length} frete(s) neste filtro
+              {encerradosNoLimite && ` · realizados e cancelados: mostrando os ${LIMITE_ENCERRADOS} mais recentes`}
+            </p>
           </div>
         </>
       )}
@@ -447,11 +602,12 @@ export function TelaFretes({
           frete={editando === "novo" ? null : editando}
           usuario={usuario}
           obras={obras}
-          fornecedores={fornecedores}
+          transportadoras={transportadoras}
           onFechar={() => setEditando(null)}
           onSalvo={async (id) => {
             setEditando(null);
-            await carregar();
+            // so a lista de fretes muda ao salvar (fornecedores e obras continuam os mesmos)
+            await carregarFretes();
             onAbrir(id);
           }}
         />
@@ -464,18 +620,18 @@ export function TelaFretes({
           podeGerir={ehLogistica || verTodasObras || aberto.id_solicitante === usuario?.id || obras.some((o) => o.id === aberto.id_obra)}
           onFechar={() => onAbrir(null)}
           onEditar={() => setEditando(aberto)}
-          onMudou={carregar}
+          onMudou={carregarFretes}
           onPedirVerba={onPedirVerba}
         />
       )}
-      {idAberto && !aberto && fretes && <p className="text-sm text-slate-400">Frete não encontrado ou sem acesso.</p>}
+      {idAberto && !aberto && fretes && <p className="text-sm text-slate-500">Frete não encontrado ou sem acesso.</p>}
     </div>
   );
 }
 
 const Resumo = ({ rotulo, valor, cor }: { rotulo: string; valor: string; cor: string }) => (
   <div className="bg-white border rounded-xl p-3">
-    <p className="text-[10px] uppercase font-bold text-slate-400">{rotulo}</p>
+    <p className="text-xs uppercase font-bold text-slate-500">{rotulo}</p>
     <p className={`text-xl font-bold tabular-nums ${cor}`}>{valor}</p>
   </div>
 );
@@ -498,14 +654,12 @@ function EscolhaPonto({
   titulo,
   ponto,
   onChange,
-  fornecedores,
   obra,
   cidadeObra,
 }: {
   titulo: string;
   ponto: Ponto;
   onChange: (p: Ponto) => void;
-  fornecedores: Fornecedor[];
   obra: ObraOpcao | null;
   cidadeObra: Municipio | null;
 }) {
@@ -522,13 +676,8 @@ function EscolhaPonto({
     return () => clearTimeout(t);
   }, [busca, ponto.tipo]);
 
-  const fornecedoresFiltrados = useMemo(() => {
-    const t = busca.trim().toLowerCase();
-    if (ponto.tipo !== "fornecedor" || t.length < 2) return [];
-    return fornecedores
-      .filter((f) => f.ibge && (f.nome.toLowerCase().includes(t) || String(f.codigo) === t || (f.cidade || "").toLowerCase().includes(t)))
-      .slice(0, 20);
-  }, [busca, fornecedores, ponto.tipo]);
+  // fornecedor: busca no servidor (nome, cidade ou codigo), so os que tem cidade (IBGE) para calcular a rota
+  const { lista: fornecedoresFiltrados, buscando } = useBuscaFornecedores(busca, ponto.tipo === "fornecedor", { comCidade: true, limite: 50 });
 
   const trocarTipo = (tipo: TipoPonto) => {
     setBusca("");
@@ -581,7 +730,7 @@ function EscolhaPonto({
                       setBusca("");
                     }}
                   >
-                    <b>{f.nome}</b> <span className="text-slate-400">· {f.cidade}/{f.uf} · cód. {f.codigo}</span>
+                    <b>{f.nome}</b> <span className="text-slate-500">· {f.cidade}/{f.uf} · cód. {f.codigo}</span>
                   </button>
                 </li>
               ))}
@@ -601,6 +750,10 @@ function EscolhaPonto({
               ))}
             </ul>
           )}
+          {ponto.tipo === "fornecedor" && termoBusca(busca).length >= 2 && !buscando && fornecedoresFiltrados.length === 0 && (
+            <p className="text-xs text-slate-500 mt-1">Nenhum fornecedor com cidade cadastrada para “{busca.trim()}”.</p>
+          )}
+          {buscando && <p className="text-xs text-slate-500 mt-1">Buscando…</p>}
         </div>
       )}
       <p className={`text-sm ${ponto.ibge ? "text-slate-800 font-semibold" : "text-amber-700"}`}>
@@ -617,20 +770,29 @@ function ModalFrete({
   frete,
   usuario,
   obras,
-  fornecedores,
+  transportadoras: transportadorasErp,
   onFechar,
   onSalvo,
 }: {
   frete: Frete | null;
   usuario: Usuario | null;
   obras: ObraOpcao[];
-  fornecedores: Fornecedor[];
+  transportadoras: Fornecedor[];
   onFechar: () => void;
   onSalvo: (id: string) => void;
 }) {
   // quem cota: logistica (e admin/coordenador)
   const ehLogistica = ["logistica", "admin", "coordenador"].includes(usuario?.perfil || "");
-  const transportadoras = useMemo(() => fornecedores.filter((f) => f.transportadora), [fornecedores]);
+  // a transportadora ja gravada no frete continua na lista mesmo que tenha deixado de ser marcada como transportadora
+  const transportadoras = useMemo(
+    () =>
+      frete?.transportadora_codigo && !transportadorasErp.some((t) => t.codigo === frete.transportadora_codigo)
+        ? [...transportadorasErp, { codigo: frete.transportadora_codigo, nome: frete.transportadora_nome || `cód. ${frete.transportadora_codigo}`, cidade: null, uf: null, ibge: null, transportadora: true }]
+        : transportadorasErp,
+    [transportadorasErp, frete?.transportadora_codigo, frete?.transportadora_nome],
+  );
+  // alteracoes feitas pela pessoa (efeitos automaticos, como a distancia estimada, nao contam)
+  const [sujo, setSujo] = useState(false);
   const [idObra, setIdObra] = useState(frete?.id_obra || (obras.length === 1 ? obras[0].id : ""));
   const [data, setData] = useState(frete?.data_frete || hojeISO());
   const [operacao, setOperacao] = useState<"compra" | "venda">(frete?.operacao || "compra");
@@ -739,6 +901,7 @@ function ModalFrete({
   }, [origem.ibge, destino.ibge, veiculo]);
 
   const escolherSugestao = (s: Sugestao) => {
+    setSujo(true);
     setTransp(String(s.transportadora_codigo));
     setValorKm(txtNum(s.valor_km));
     setValor(txtNum(s.preco));
@@ -792,23 +955,34 @@ function ModalFrete({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 border-b flex justify-between">
-          <div>
-            <h3 className="font-bold text-lg">{frete ? `Frete ${frete.numero}` : "Novo frete"}</h3>
-            <p className="text-xs text-slate-400">
-              {ehLogistica
-                ? "Informe a rota e a cotação: o app sugere a transportadora e confere a verba da família de fretes."
-                : "Peça o frete; a logística completa a cotação (transportadora e valor)."}
+    <Modal
+      titulo={frete ? `Frete ${frete.numero}` : "Novo frete"}
+      subtitulo={
+        ehLogistica
+          ? "Informe a rota e a cotação: o app sugere a transportadora e confere a verba da família de fretes."
+          : "Peça o frete; a logística completa a cotação (transportadora e valor)."
+      }
+      onFechar={onFechar}
+      sujo={sujo && !salvando}
+      largura="3xl"
+      rodape={
+        <>
+          {erro && (
+            <p className="text-sm text-red-600 md:mr-auto self-center" role="alert">
+              {erro}
             </p>
-          </div>
-          <button onClick={onFechar} className="text-slate-400" aria-label="Fechar">
-            <X size={20} />
+          )}
+          <button
+            disabled={salvando}
+            onClick={salvar}
+            className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {salvando ? <Loader2 className="animate-spin" size={16} /> : <Truck size={16} />} {frete ? "Salvar" : "Pedir frete"}
           </button>
-        </div>
-
-        <div className="overflow-y-auto p-4 space-y-4">
+        </>
+      }
+    >
+        <div className="space-y-4" onChange={() => setSujo(true)}>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="col-span-2">
               <Rotulo texto="Obra *" />
@@ -825,7 +999,7 @@ function ModalFrete({
                   </option>
                 ))}
               </select>
-              {obra && <p className="text-[11px] text-slate-400 mt-1">Família de fretes: {obra.codigo_externo}.510</p>}
+              {obra && <p className="text-xs text-slate-500 mt-1">Família de fretes: {obra.codigo_externo}.510</p>}
             </div>
             <div>
               <Rotulo texto="Data *" />
@@ -867,18 +1041,18 @@ function ModalFrete({
           </div>
 
           <div className="grid md:grid-cols-[1fr_auto_1fr] gap-2 items-center">
-            <EscolhaPonto titulo="Origem" ponto={origem} onChange={setOrigem} fornecedores={fornecedores} obra={obra} cidadeObra={cidadeObra} />
+            <EscolhaPonto titulo="Origem" ponto={origem} onChange={(p) => (setSujo(true), setOrigem(p))} obra={obra} cidadeObra={cidadeObra} />
             <ArrowRight className="text-slate-400 hidden md:block" aria-hidden="true" />
-            <EscolhaPonto titulo="Destino" ponto={destino} onChange={setDestino} fornecedores={fornecedores} obra={obra} cidadeObra={cidadeObra} />
+            <EscolhaPonto titulo="Destino" ponto={destino} onChange={(p) => (setSujo(true), setDestino(p))} obra={obra} cidadeObra={cidadeObra} />
           </div>
 
-          <CargaLista linhas={linhas} onChange={setLinhas} />
+          <CargaLista linhas={linhas} onChange={(l) => (setSujo(true), setLinhas(l))} />
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 border rounded-lg p-3">
             <div>
               <Rotulo texto="Distância (km)" />
               <input value={km} onChange={(e) => setKm(e.target.value)} inputMode="decimal" className="border rounded-lg px-2 py-2 w-full text-sm bg-white" />
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 {kmEstimado != null ? `Estimada: ${txtNum(kmEstimado, 0)} km.` : "Escolha origem e destino."}
                 {ehLogistica && " Corrigindo, vale para as próximas vezes."}
               </p>
@@ -919,9 +1093,9 @@ function ModalFrete({
                 Transportadoras para esta rota ({veiculo})
               </p>
               {sugestoes === null ? (
-                <p className="px-3 py-3 text-sm text-slate-400">Calculando…</p>
+                <p className="px-3 py-3 text-sm text-slate-500">Calculando…</p>
               ) : sugestoes.length === 0 ? (
-                <p className="px-3 py-3 text-sm text-slate-400">
+                <p className="px-3 py-3 text-sm text-slate-500">
                   Nenhuma transportadora com tarifa de “{veiculo}” cadastrada. A logística cadastra em “Transportadoras”.
                 </p>
               ) : (
@@ -931,12 +1105,12 @@ function ModalFrete({
                       <span className="flex-1 min-w-[200px]">
                         <b>{s.transportadora_nome}</b>
                         {i === 0 && s.atende && (
-                          <span className="ml-2 text-[10px] font-bold uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                          <span className="ml-2 text-xs font-bold uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
                             menor preço
                           </span>
                         )}
-                        {!s.atende && <span className="ml-2 text-[11px] text-amber-700">não atende origem/destino (UF)</span>}
-                        <span className="block text-[11px] text-slate-400">
+                        {!s.atende && <span className="ml-2 text-xs text-amber-700">não atende origem/destino (UF)</span>}
+                        <span className="block text-xs text-slate-500">
                           {formatarMoeda(s.valor_km)}/km · mínimo {formatarMoeda(s.valor_minimo)}
                           {s.historico_ctes ? ` · histórico ${formatarMoeda(s.historico_rs_km)}/km em ${s.historico_ctes} CT-e(s)` : ""}
                         </span>
@@ -984,15 +1158,7 @@ function ModalFrete({
             </div>
           )}
         </div>
-
-        <div className="p-4 border-t flex items-center justify-between gap-3 bg-slate-50/60 rounded-b-xl">
-          <p className="text-sm text-red-600">{erro}</p>
-          <button disabled={salvando} onClick={salvar} className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-2 disabled:opacity-60">
-            {salvando ? <Loader2 className="animate-spin" size={16} /> : <Truck size={16} />} {frete ? "Salvar" : "Pedir frete"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1026,7 +1192,7 @@ function CargaLista({ linhas, onChange }: { linhas: LinhaCarga[]; onChange: (l: 
       <p className="px-3 py-2 text-xs font-bold uppercase text-slate-500 border-b">Carga</p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
-          <thead className="text-[11px] text-slate-500 uppercase">
+          <thead className="text-xs text-slate-500 uppercase">
             <tr className="text-left">
               <th className="px-2 py-1.5 font-semibold">Descrição</th>
               <th className="px-2 py-1.5 font-semibold w-16">Qtd.</th>
@@ -1077,7 +1243,7 @@ function CargaLista({ linhas, onChange }: { linhas: LinhaCarga[]; onChange: (l: 
               <td className="px-2 py-2 tabular-nums" title="Total de volumes">
                 {itens.length ? totais.volumes : "-"}
               </td>
-              <td className="px-2 py-2 text-[11px] uppercase text-slate-500" colSpan={4}>
+              <td className="px-2 py-2 text-xs uppercase text-slate-500" colSpan={4}>
                 Total do pedido
               </td>
               <td className="px-2 py-2 text-right tabular-nums">{totais.peso != null ? txtPeso(totais.peso) : "-"}</td>
@@ -1087,7 +1253,7 @@ function CargaLista({ linhas, onChange }: { linhas: LinhaCarga[]; onChange: (l: 
           </tfoot>
         </table>
       </div>
-      <p className="px-3 py-2 text-[11px] text-slate-400 border-t">
+      <p className="px-3 py-2 text-xs text-slate-500 border-t">
         Cada linha são volumes iguais: informe a quantidade, o peso e as medidas de <b>um</b> volume. Peso e m³ da linha = quantidade × cada um.
       </p>
     </div>
@@ -1098,8 +1264,8 @@ function TabelaCarga({ itens }: { itens: ItemCarga[] }) {
   const t = totaisCarga(itens);
   return (
     <div className="border rounded-lg overflow-x-auto">
-      <table className="w-full text-[12px] min-w-[480px]">
-        <thead className="text-[10px] uppercase text-slate-500">
+      <table className="w-full text-xs min-w-[480px]">
+        <thead className="text-xs uppercase text-slate-500">
           <tr className="text-left">
             <th className="px-2 py-1">Carga</th>
             <th className="px-2 py-1 text-right">Qtd.</th>
@@ -1203,22 +1369,35 @@ function DetalheFrete({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-2 md:p-6" onClick={onFechar}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 border-b flex justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="font-bold text-lg flex items-center gap-2 flex-wrap">
-              Frete {frete.numero} <BadgeStatusFrete status={frete.status} />
-            </h3>
-            <p className="text-xs text-slate-500">
-              Obra {frete.codigo_obra} · família {frete.familia} · pedido por {frete.nome_solicitante}
-            </p>
-          </div>
-          <button onClick={onFechar} className="text-slate-400" aria-label="Fechar">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="overflow-y-auto p-4 space-y-4 text-sm">
+    <Modal
+      titulo={
+        <span className="flex items-center gap-2 flex-wrap">
+          Frete {frete.numero} <BadgeStatusFrete status={frete.status} />
+        </span>
+      }
+      rotulo={`Frete ${frete.numero}`}
+      subtitulo={`Obra ${frete.codigo_obra} · família ${frete.familia} · pedido por ${frete.nome_solicitante || "-"}`}
+      onFechar={onFechar}
+      largura="2xl"
+      rodape={
+        aberto && podeGerir ? (
+          <>
+            {erro && <p className="text-sm text-red-600 md:mr-auto self-center">{erro}</p>}
+            <button
+              disabled={ocupado}
+              onClick={cancelar}
+              className="px-3 py-2 rounded-lg border text-slate-600 font-semibold flex items-center justify-center gap-1 text-sm"
+            >
+              <XCircle size={14} /> Cancelar frete
+            </button>
+            <button onClick={onEditar} className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-1 text-sm">
+              <Pencil size={14} /> {frete.status === "aguardando_cotacao" ? "Cotar" : "Editar"}
+            </button>
+          </>
+        ) : undefined
+      }
+    >
+        <div className="space-y-4 text-sm">
           {frete.status === "bloqueado" && (
             <div className="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2">
               <p>
@@ -1256,12 +1435,12 @@ function DetalheFrete({
             </p>
           )}
           <div>
-            <p className="text-[11px] font-bold uppercase text-slate-400 mb-1">Histórico</p>
+            <p className="text-xs font-bold uppercase text-slate-500 mb-1">Histórico</p>
             {erroEventos && <ErroCarga compacto mensagem="Não foi possível carregar o histórico." detalhe={erroEventos} />}
             <ul className="space-y-1">
               {eventos.map((e) => (
-                <li key={e.id} className="text-[12px] text-slate-600">
-                  <span className="text-slate-400">{new Date(e.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span> ·{" "}
+                <li key={e.id} className="text-xs text-slate-600">
+                  <span className="text-slate-500">{new Date(e.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span> ·{" "}
                   <b>{EVENTO[e.evento] || e.evento}</b>
                   {e.nome_usuario && e.nome_usuario !== "Sistema" ? ` (${e.nome_usuario})` : ""}
                   {e.detalhe ? ` — ${e.detalhe}` : ""}
@@ -1270,27 +1449,13 @@ function DetalheFrete({
             </ul>
           </div>
         </div>
-        {aberto && podeGerir && (
-          <div className="p-4 border-t flex items-center justify-between gap-2 bg-slate-50/60 rounded-b-xl">
-            <p className="text-sm text-red-600">{erro}</p>
-            <div className="flex gap-2">
-              <button disabled={ocupado} onClick={cancelar} className="px-3 py-2 rounded-lg border text-slate-600 font-semibold flex items-center gap-1 text-sm">
-                <XCircle size={14} /> Cancelar frete
-              </button>
-              <button onClick={onEditar} className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-1 text-sm">
-                <Pencil size={14} /> {frete.status === "aguardando_cotacao" ? "Cotar" : "Editar"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
 const Info = ({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) => (
   <div>
-    <p className="text-[11px] text-slate-400">{rotulo}</p>
+    <p className="text-xs text-slate-500">{rotulo}</p>
     <p className="text-slate-800">{valor}</p>
   </div>
 );
@@ -1298,7 +1463,19 @@ const Info = ({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) => 
 // ------------------------------------------------------------------------------------------------
 // Transportadoras: UFs atendidas, tarifa por tipo de veiculo e historico real dos CT-es (logistica/admin)
 
-function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Fornecedor[]; onMudou: () => void }) {
+// le a tabela inteira em paginas de 1.000 (limite da API), filtrada pelas transportadoras
+async function lerPaginado<T>(tabela: string, colunas: string, codigos: number[]): Promise<{ data: T[]; error: any }> {
+  if (!codigos.length) return { data: [], error: null };
+  const todos: T[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await supabase.from(tabela).select(colunas).in("transportadora_codigo", codigos).range(de, de + 999);
+    if (error) return { data: todos, error };
+    todos.push(...((data as T[]) || []));
+    if (!data || data.length < 1000) return { data: todos, error: null };
+  }
+}
+
+function CadastroTransportadoras({ transportadorasErp, onMudou }: { transportadorasErp: Fornecedor[]; onMudou: () => void }) {
   const [ufs, setUfs] = useState<{ transportadora_codigo: number; uf: string; origem: string }[]>([]);
   const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [historico, setHistorico] = useState<Historico[]>([]);
@@ -1309,21 +1486,28 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
   const [erroCarga, setErroCarga] = useState("");
   const aviso = useAviso();
 
+  const codigos = useMemo(() => transportadorasErp.map((f) => f.codigo), [transportadorasErp]);
+  const chaveCodigos = codigos.join(",");
+
   const carregar = async () => {
     const [u, t, h] = await Promise.all([
-      supabase.from("fretes_transp_ufs").select("*"),
-      supabase.from("fretes_transp_tarifas").select("*"),
-      supabase.from("fretes_transp_historico").select("*"),
+      lerPaginado<{ transportadora_codigo: number; uf: string; origem: string }>("fretes_transp_ufs", "transportadora_codigo, uf, origem", codigos),
+      lerPaginado<Tarifa>("fretes_transp_tarifas", "id, transportadora_codigo, tipo_veiculo, valor_km, valor_minimo, ativo", codigos),
+      lerPaginado<Historico>("fretes_transp_historico", "transportadora_codigo, ctes, valor_total, rs_km, ufs, ultimo_cte", codigos),
     ]);
     const falha = u.error || t.error || h.error;
     setErroCarga(falha ? msgErro(falha) : "");
-    if (!u.error) setUfs(u.data || []);
-    if (!t.error) setTarifas((t.data as Tarifa[]) || []);
-    if (!h.error) setHistorico((h.data as Historico[]) || []);
+    if (!u.error) setUfs(u.data);
+    if (!t.error) setTarifas(t.data);
+    if (!h.error) setHistorico(h.data);
   };
   useEffect(() => {
     carregar();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveCodigos]);
+
+  // fornecedores que ainda nao sao transportadora: busca no servidor
+  const { lista: candidatas } = useBuscaFornecedores(novaBusca, true, { transportadora: false, limite: 10, minimo: 3 });
 
   const gravar = async (p: PromiseLike<{ error: any }>) => {
     setErro("");
@@ -1335,15 +1519,10 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
     carregar();
   };
 
-  const transportadoras = fornecedores
-    .filter((f) => f.transportadora)
+  const transportadoras = transportadorasErp
     .filter((f) => !busca.trim() || f.nome.toLowerCase().includes(busca.trim().toLowerCase()))
     .map((f) => ({ ...f, hist: historico.find((h) => h.transportadora_codigo === f.codigo) }))
     .sort((a, b) => (b.hist?.ctes || 0) - (a.hist?.ctes || 0));
-
-  const candidatas = novaBusca.trim().length >= 3
-    ? fornecedores.filter((f) => !f.transportadora && f.nome.toLowerCase().includes(novaBusca.trim().toLowerCase())).slice(0, 10)
-    : [];
 
   return (
     <div className="space-y-3">
@@ -1354,7 +1533,7 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
         </p>
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" aria-hidden="true" />
-          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar…" aria-label="Filtrar transportadoras" className="border rounded-lg pl-8 pr-3 py-1.5 text-sm w-48" />
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar…" aria-label="Filtrar transportadoras" className="border rounded-lg pl-8 pr-3 py-1.5 text-sm w-full sm:w-48" />
         </div>
         <div className="relative">
           <input
@@ -1362,10 +1541,10 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
             onChange={(e) => setNovaBusca(e.target.value)}
             placeholder="Adicionar transportadora (fornecedor)…"
             aria-label="Adicionar transportadora"
-            className="border rounded-lg px-3 py-1.5 text-sm w-72"
+            className="border rounded-lg px-3 py-1.5 text-sm w-full sm:w-72"
           />
           {candidatas.length > 0 && (
-            <ul className="absolute z-10 right-0 mt-1 w-96 bg-white border rounded-lg shadow-lg max-h-64 overflow-y-auto text-sm">
+            <ul className="absolute z-10 right-0 mt-1 w-[min(24rem,85vw)] bg-white border rounded-lg shadow-lg max-h-64 overflow-y-auto text-sm">
               {candidatas.map((f) => (
                 <li key={f.codigo}>
                   <button
@@ -1384,7 +1563,7 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
                       }
                     }}
                   >
-                    <b>{f.nome}</b> <span className="text-slate-400">· {f.cidade}/{f.uf} · cód. {f.codigo}</span>
+                    <b>{f.nome}</b> <span className="text-slate-500">· {f.cidade}/{f.uf} · cód. {f.codigo}</span>
                   </button>
                 </li>
               ))}
@@ -1398,7 +1577,7 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
         {erroCarga && (
           <ErroCarga compacto mensagem="Não foi possível carregar UFs, tarifas ou histórico das transportadoras." detalhe={erroCarga} onTentar={carregar} />
         )}
-        {transportadoras.length === 0 && <p className="p-4 text-sm text-slate-400">Nenhuma transportadora.</p>}
+        {transportadoras.length === 0 && <p className="p-4 text-sm text-slate-500">Nenhuma transportadora.</p>}
         {transportadoras.map((t) => {
           const ufsT = ufs.filter((u) => u.transportadora_codigo === t.codigo);
           const tarT = tarifas.filter((x) => x.transportadora_codigo === t.codigo);
@@ -1407,7 +1586,7 @@ function CadastroTransportadoras({ fornecedores, onMudou }: { fornecedores: Forn
             <div key={t.codigo}>
               <button type="button" onClick={() => setAberta(expandida ? null : t.codigo)} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex flex-wrap items-center gap-x-4 gap-y-1">
                 <span className="flex-1 min-w-[240px]">
-                  <b>{t.nome}</b> <span className="text-xs text-slate-400">cód. {t.codigo} · {t.cidade}/{t.uf}</span>
+                  <b>{t.nome}</b> <span className="text-xs text-slate-500">cód. {t.codigo} · {t.cidade}/{t.uf}</span>
                 </span>
                 <span className="text-xs text-slate-500 tabular-nums">
                   {t.hist ? `${t.hist.ctes} CT-e(s) · ${formatarMoeda(t.hist.rs_km)}/km` : "sem CT-e em 12 meses"}
@@ -1476,7 +1655,7 @@ function TarifasTransportadora({
     <div>
       <p className="text-xs font-bold uppercase text-slate-500 mb-2">Tarifa por tipo de veículo</p>
       <ul className="border rounded-lg divide-y bg-white mb-2">
-        {tarifas.length === 0 && <li className="px-3 py-2 text-sm text-slate-400">Nenhuma tarifa.</li>}
+        {tarifas.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">Nenhuma tarifa.</li>}
         {tarifas.map((t) => (
           <li key={t.id} className="px-3 py-2 text-sm flex items-center gap-2">
             <span className="flex-1 font-semibold">{t.tipo_veiculo}</span>
@@ -1490,7 +1669,7 @@ function TarifasTransportadora({
                 if (v > 0 && v !== Number(t.valor_km)) gravar(supabase.from("fretes_transp_tarifas").update({ valor_km: v, atualizado_em: new Date().toISOString() }).eq("id", t.id));
               }}
             />
-            <span className="text-xs text-slate-400">R$/km · mín.</span>
+            <span className="text-xs text-slate-500">R$/km · mín.</span>
             <input
               defaultValue={txtNum(t.valor_minimo)}
               aria-label={`Valor mínimo ${t.tipo_veiculo}`}
@@ -1547,7 +1726,7 @@ function TarifasTransportadora({
           >
             <Plus size={14} /> Tarifa
           </button>
-          {rsKmHistorico != null && <span className="text-[11px] text-slate-400">histórico: {formatarMoeda(rsKmHistorico)}/km</span>}
+          {rsKmHistorico != null && <span className="text-xs text-slate-500">histórico: {formatarMoeda(rsKmHistorico)}/km</span>}
         </div>
       )}
     </div>
