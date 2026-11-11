@@ -217,10 +217,16 @@ function ModalSolicitarFaturamento({
   const [sujo, setSujo] = useState(false);
   const aviso = useAviso();
 
+  // carrega 1x por solicitacao aberta. Depende da id, NAO do objeto `existente`: o App redesenha a cada 60 s (sino) e
+  // ao voltar para a aba; com o objeto como dependencia a quantidade voltava ao valor salvo enquanto o campo de % seguia
+  // mostrando o que foi digitado, e o "salvar" gravava o valor antigo (SF 531, obra 2126, 11/11/2026).
+  const idExistente = existente?.solicitacao.id ?? null;
   useEffect(() => {
+    let ativo = true;
     supabase
-      .rpc("sf_itens_disponiveis", { p_id_obra: idObra, p_tipo: tipo, p_ignorar: existente?.solicitacao.id ?? null })
+      .rpc("sf_itens_disponiveis", { p_id_obra: idObra, p_tipo: tipo, p_ignorar: idExistente })
       .then(({ data, error }) => {
+        if (!ativo) return;
         if (error) setErro(msgErro(error));
         setItens((data as ItemDisponivel[]) || []);
         if (existente) {
@@ -229,7 +235,11 @@ function ModalSolicitarFaturamento({
           setQtd(q);
         }
       });
-  }, [idObra, tipo, existente]);
+    return () => {
+      ativo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idObra, tipo, idExistente]);
 
   const porFamilia = useMemo(() => {
     const mapa = new Map<string, ItemDisponivel[]>();
@@ -846,6 +856,8 @@ export function DetalheSolicitacaoFaturamento({
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+  // mesmo objeto entre redesenhos (o formulario de edicao nao deve recarregar as quantidades sozinho)
+  const existenteEdicao = useMemo(() => (sol ? { solicitacao: sol, itens } : null), [sol, itens]);
 
   const acao = async (fn: string, args: Record<string, unknown>, sucesso: string) => {
     setOcupado(true);
@@ -900,7 +912,7 @@ export function DetalheSolicitacaoFaturamento({
               idObra={sol.id_obra}
               codigoObra={sol.codigo_obra}
               tipo={sol.tipo}
-              existente={{ solicitacao: sol, itens }}
+              existente={existenteEdicao}
               onFechar={() => setEditando(false)}
               onSalvo={() => {
                 setEditando(false);
