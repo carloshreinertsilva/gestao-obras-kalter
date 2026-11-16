@@ -64,7 +64,6 @@ CREATE TRIGGER auditar_obras AFTER INSERT OR DELETE OR UPDATE ON public.obras FO
 CREATE TRIGGER trg_after_insert_obras_criar_pmis_padrao AFTER INSERT ON public.obras FOR EACH ROW EXECUTE FUNCTION public.after_insert_obras_criar_pmis_padrao();
 CREATE TRIGGER trg_notif_fase_obra AFTER UPDATE OF fase_atual ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_notif_fase_obra();
 CREATE TRIGGER trg_notif_obra_nova AFTER INSERT ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_notif_obra_nova();
-CREATE TRIGGER trg_obras_espelha_valores_restritos AFTER INSERT OR UPDATE OF margem_prevista_erp, venda_sem_impostos_erp, margem_contribuicao_erp, rentabilidade_erp ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_obras_espelha_valores_restritos();
 CREATE TRIGGER trg_obras_protege_codigo BEFORE UPDATE OF codigo_externo ON public.obras FOR EACH ROW WHEN (old.codigo_externo::text IS DISTINCT FROM new.codigo_externo::text) EXECUTE FUNCTION public.trg_obras_protege_codigo();
 CREATE TRIGGER trg_validar_responsavel_obra BEFORE INSERT OR UPDATE OF id_responsavel ON public.obras FOR EACH ROW EXECUTE FUNCTION public.validar_responsavel_obra_e_engenheiro();
 CREATE TRIGGER update_obras_modtime BEFORE UPDATE ON public.obras FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();

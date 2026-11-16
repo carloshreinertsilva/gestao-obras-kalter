@@ -841,19 +841,13 @@ create table public.obras (
     data_cancelamento date,
     motivo_cancelamento text,
     observacao_cancelamento text,
-    margem_prevista_erp numeric(15,2),
-    venda_sem_impostos_erp numeric(15,2),
     cidade_ibge integer,
-    margem_contribuicao_erp numeric,
-    rentabilidade_erp numeric,
     exportacao boolean default false not null,
     constraint obras_pkey PRIMARY KEY (id),
     constraint obras_codigo_externo_key UNIQUE (codigo_externo),
     constraint obras_fase_atual_check CHECK (fase_atual = ANY (ARRAY['processo_inicial'::text, 'engenharia'::text, 'compras'::text, 'fabricacao'::text, 'montagem'::text, 'comissionamento'::text, 'start_up'::text, 'garantia'::text])),
     constraint obras_id_responsavel_fkey FOREIGN KEY (id_responsavel) REFERENCES public.usuarios(id) ON DELETE SET NULL
 );
-comment on column public.obras.margem_prevista_erp is 'Margem prevista do orcamento no ERP = cadproj.cpj_valor_proprio (contribuicao) + cpj_valor_terceiro (rentabilidade). Sincronizado pelo robo (estagio rentabilidade).';
-comment on column public.obras.venda_sem_impostos_erp is 'Valor de venda sem impostos do pedido no ERP (pedven.pv_meta_venda via cadproj2). Base do % de margem. Sincronizado pelo robo.';
 
 create table public.obras_valores_erp (
     id uuid default gen_random_uuid() not null,

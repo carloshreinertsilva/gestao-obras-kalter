@@ -264,7 +264,6 @@ grant execute on function public.sf_itens_disponiveis(p_id_obra uuid, p_tipo tex
 -- function public.trg_notif_tarefa_atribuida(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_notificacao_push(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_obra_alertas_avisar(): sem execute para anon, authenticated, PUBLIC
--- function public.trg_obras_espelha_valores_restritos(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_obras_protege_codigo(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_sf_romaneio_avisos(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_solicitacao_faturamento_avisos(): sem execute para anon, authenticated, PUBLIC

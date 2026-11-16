@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- 177 funcoes/procedures do schema public, ordenadas por nome + argumentos
+-- 176 funcoes/procedures do schema public, ordenadas por nome + argumentos
 
 -- public.after_insert_obras_criar_pmis_padrao()
 CREATE OR REPLACE FUNCTION public.after_insert_obras_criar_pmis_padrao()
@@ -3996,34 +3996,6 @@ begin
   end if;
   return new;
 end $function$
-;
-
--- public.trg_obras_espelha_valores_restritos()
-CREATE OR REPLACE FUNCTION public.trg_obras_espelha_valores_restritos()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-begin
-  if tg_op = 'INSERT' and num_nonnulls(new.margem_prevista_erp, new.venda_sem_impostos_erp,
-                                        new.margem_contribuicao_erp, new.rentabilidade_erp) = 0 then
-    return null;
-  end if;
-  insert into public.obras_valores_restritos (id_obra, margem_prevista_erp, venda_sem_impostos_erp, margem_contribuicao_erp, rentabilidade_erp)
-  values (new.id, new.margem_prevista_erp, new.venda_sem_impostos_erp, new.margem_contribuicao_erp, new.rentabilidade_erp)
-  on conflict (id_obra) do update
-     set margem_prevista_erp = excluded.margem_prevista_erp,
-         venda_sem_impostos_erp = excluded.venda_sem_impostos_erp,
-         margem_contribuicao_erp = excluded.margem_contribuicao_erp,
-         rentabilidade_erp = excluded.rentabilidade_erp
-   where (obras_valores_restritos.margem_prevista_erp, obras_valores_restritos.venda_sem_impostos_erp,
-          obras_valores_restritos.margem_contribuicao_erp, obras_valores_restritos.rentabilidade_erp)
-         is distinct from
-         (excluded.margem_prevista_erp, excluded.venda_sem_impostos_erp, excluded.margem_contribuicao_erp, excluded.rentabilidade_erp);
-  return null;
-end
-$function$
 ;
 
 -- public.trg_obras_protege_codigo()
