@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabase";
 import TimelineObra from "../TimelineObra";
 import ReunioesHistorico from "../ReunioesHistorico";
@@ -12,6 +12,14 @@ import { Modal } from "../Modal";
 // ocorrencias e tarefas, sessao do dia, contexto da obra, gravacao Plaud) e a ata
 // (texto, PDF e e-mail). Fica sempre montado no App e so desenha a tela quando
 // ativa, para o rascunho da reuniao nao se perder ao trocar de tela.
+const TAREFA_VAZIA = {
+  titulo: "",
+  descricao: "",
+  data_vencimento: "",
+  id_responsavel: "",
+  prioridade: "normal",
+};
+
 interface Props {
   ativa: boolean;
   usuarioAtual: Usuario | null;
@@ -66,6 +74,16 @@ export default function TelaReunioes({
     prioridade: "normal",
   });
   const [listaTarefas, setListaTarefas] = useState<any[]>([]);
+  // obra ja gravada aberta para edicao: o banco continua com a versao gravada ate salvar
+  // (salvar_ata troca tudo numa transacao so; a versao recusa a gravacao se outra pessoa alterou antes)
+  const [ataEmEdicao, setAtaEmEdicao] = useState<{
+    idReuniao: string;
+    versao: string;
+    nomeObra: string;
+  } | null>(null);
+  const refDescricaoOcorrencia = useRef<HTMLTextAreaElement>(null);
+  const refTituloTarefa = useRef<HTMLInputElement>(null);
+  const refResponsavelTarefa = useRef<HTMLSelectElement>(null);
   const [ataGerada, setAtaGerada] = useState<string>("");
   const [modalAtaAberto, setModalAtaAberto] = useState<boolean>(false);
   const [obrasNaAtaAtual, setObrasNaAtaAtual] = useState<any[]>([]);
@@ -343,13 +361,13 @@ export default function TelaReunioes({
   };
 
   const adicionarOcorrencia = () => {
-    if (!novaOcorrencia.descricao) return;
+    if (!String(novaOcorrencia.descricao || "").trim()) return; // o banco recusa descricao em branco
     setListaOcorrencias([...listaOcorrencias, novaOcorrencia]);
     setNovaOcorrencia({ tipo: "avanco", descricao: "" });
   };
 
   const adicionarTarefa = () => {
-    if (!novaTarefa.titulo || !novaTarefa.id_responsavel)
+    if (!String(novaTarefa.titulo || "").trim() || !novaTarefa.id_responsavel)
       return onAviso("Preencha título e responsável.", "erro");
     const nomeResp =
       listaUsuarios.find((u) => u.id === novaTarefa.id_responsavel)?.nome || "";
@@ -357,206 +375,275 @@ export default function TelaReunioes({
       ...listaTarefas,
       { ...novaTarefa, nome_responsavel: nomeResp },
     ]);
-    setNovaTarefa({
-      titulo: "",
-      descricao: "",
-      data_vencimento: "",
-      id_responsavel: "",
-      prioridade: "normal",
+    setNovaTarefa(TAREFA_VAZIA);
+  };
+
+  // texto digitado nos campos de nova ocorrencia / nova tarefa sem clicar em "Adicionar"
+  const ocorrenciaPendente = () => !!String(novaOcorrencia.descricao || "").trim();
+  const tarefaPendente = () =>
+    !!(String(novaTarefa.titulo || "").trim() || String(novaTarefa.descricao || "").trim());
+  const formularioTemConteudo = () =>
+    !!String(reuniaoForm.resumo_geral || "").trim() ||
+    listaOcorrencias.length > 0 ||
+    listaTarefas.length > 0 ||
+    ocorrenciaPendente() ||
+    tarefaPendente();
+
+  const limparFormularioObra = () => {
+    setReuniaoForm((prev: any) => ({
+      ...prev,
+      id_obra: "",
+      resumo_geral: "",
+    }));
+    setListaOcorrencias([]);
+    setListaTarefas([]);
+    setNovaOcorrencia({ tipo: "avanco", descricao: "" });
+    setNovaTarefa(TAREFA_VAZIA);
+    setAtaEmEdicao(null);
+    setContextoObraAta(null);
+  };
+
+  // Antes de salvar: o que ficou digitado e nao foi adicionado nao some calado (A9).
+  // Devolve as listas a gravar, ou null para voltar ao formulario.
+  const resolverItensPendentes = async (): Promise<{ ocorrencias: any[]; tarefas: any[] } | null> => {
+    const temOc = ocorrenciaPendente();
+    const temTar = tarefaPendente();
+    if (!temOc && !temTar)
+      return { ocorrencias: listaOcorrencias, tarefas: listaTarefas };
+    const oque =
+      temOc && temTar
+        ? "uma ocorrência e uma tarefa digitadas que ainda não foram adicionadas"
+        : temOc
+          ? "uma ocorrência digitada que ainda não foi adicionada"
+          : "uma tarefa digitada que ainda não foi adicionada";
+    const faltaTitulo = temTar && !String(novaTarefa.titulo || "").trim();
+    const faltaResponsavel = temTar && !novaTarefa.id_responsavel;
+    const tarefaIncompleta = faltaTitulo || faltaResponsavel;
+    const adicionar = await confirmar({
+      titulo: `Há ${oque}`,
+      texto: tarefaIncompleta
+        ? `Para adicionar a tarefa falta ${faltaTitulo && faltaResponsavel ? "o título e o responsável" : faltaTitulo ? "o título" : "o responsável"}.`
+        : "Você pode adicionar e salvar tudo junto.",
+      rotuloConfirmar: tarefaIncompleta ? "Completar a tarefa" : "Adicionar e salvar",
+      rotuloCancelar: "Não adicionar",
     });
+    if (adicionar) {
+      if (tarefaIncompleta) {
+        (faltaTitulo ? refTituloTarefa : refResponsavelTarefa).current?.focus();
+        return null;
+      }
+      const ocorrencias = temOc ? [...listaOcorrencias, novaOcorrencia] : listaOcorrencias;
+      const tarefas = temTar
+        ? [
+            ...listaTarefas,
+            {
+              ...novaTarefa,
+              nome_responsavel: listaUsuarios.find((u) => u.id === novaTarefa.id_responsavel)?.nome || "",
+            },
+          ]
+        : listaTarefas;
+      // ja entra na lista da tela: se a gravacao falhar, o item continua visivel
+      setListaOcorrencias(ocorrencias);
+      setListaTarefas(tarefas);
+      if (temOc) setNovaOcorrencia({ tipo: "avanco", descricao: "" });
+      if (temTar) setNovaTarefa(TAREFA_VAZIA);
+      return { ocorrencias, tarefas };
+    }
+    // descartar exige clique explicito (Esc / fechar no dialogo = voltar)
+    const descartar = await confirmar({
+      titulo: "Salvar sem o que não foi adicionado?",
+      texto: "O texto digitado e não adicionado será descartado.",
+      rotuloConfirmar: "Salvar sem adicionar",
+      rotuloCancelar: "Voltar",
+      perigo: true,
+    });
+    if (!descartar) {
+      (temOc ? refDescricaoOcorrencia : refTituloTarefa).current?.focus();
+      return null;
+    }
+    return { ocorrencias: listaOcorrencias, tarefas: listaTarefas };
   };
 
   async function salvarReuniaoObra() {
     if (!reuniaoForm.id_obra)
       return onAviso("Selecione uma obra.", "erro");
+    const itens = await resolverItensPendentes();
+    if (!itens) return;
+    const emEdicao = ataEmEdicao;
     setCarregando(true);
     try {
       const obraSelecionada = obrasLista.find(
         (o) => o.id === reuniaoForm.id_obra,
       );
 
-      let idSessao = idSessaoAtaAtual;
-      if (!idSessao) {
-        const { data: sessaoCriada, error: errSessao } = await supabase
-          .from("reunioes_sessoes")
-          .insert([
-            {
-              data_reuniao: reuniaoForm.data_reuniao,
-              id_criador: usuarioAtual?.id,
-            },
-          ])
-          .select()
-          .single();
-        if (errSessao) throw errSessao;
-        idSessao = sessaoCriada.id;
-        setIdSessaoAtaAtual(sessaoCriada.id);
-      }
-
-      const { data: reuniaoSalva, error: errReuniao } = await supabase
-        .from("reunioes")
-        .insert([
-          {
-            id_obra: reuniaoForm.id_obra,
-            id_sessao: idSessao,
-            data_reuniao: reuniaoForm.data_reuniao,
-            resumo_geral: reuniaoForm.resumo_geral,
-          },
-        ])
-        .select()
-        .single();
-      if (errReuniao) throw errReuniao;
-
-      // a reuniao ja foi gravada: falha nas ocorrencias/tarefas vira aviso (nao lanca erro, para a
-      // obra nao ser salva de novo em dobro)
-      const falhasParciais: string[] = [];
-      if (listaOcorrencias.length > 0) {
-        const { error: errOcorrencias } = await supabase.from("ocorrencias").insert(
-          listaOcorrencias.map((o) => ({
-            id_reuniao: reuniaoSalva.id,
-            id_obra: reuniaoForm.id_obra,
+      // uma transacao no banco (salvar_ata): sessao (se for a 1a obra), reuniao, ocorrencias e tarefas
+      // gravam juntas ou nada grava. Editando, a reuniao e atualizada no lugar; tarefa tirada da ata
+      // continua ativa no quadro (so desligada da ata) e as ja criadas nao sao duplicadas.
+      const { data: salva, error: errSalvar } = await supabase.rpc("salvar_ata", {
+        p_ata: {
+          id_reuniao: emEdicao?.idReuniao || null,
+          versao: emEdicao?.versao || null,
+          id_sessao: idSessaoAtaAtual,
+          id_obra: reuniaoForm.id_obra,
+          data_reuniao: reuniaoForm.data_reuniao,
+          resumo_geral: reuniaoForm.resumo_geral,
+          ocorrencias: itens.ocorrencias.map((o) => ({
+            id: o.id || null,
             tipo: o.tipo,
             descricao: o.descricao,
           })),
-        );
-        if (errOcorrencias) falhasParciais.push(`ocorrências (${errOcorrencias.message})`);
-      }
-      // tarefas que ja existem (vieram da ata reaberta) voltam a ser ligadas a esta reuniao, sem duplicar;
-      // so as novas sao criadas (e so elas geram e-mail de atribuicao)
-      const tarefasExistentes = listaTarefas.filter((t) => t.id);
-      const tarefasNovas = listaTarefas.filter((t) => !t.id);
-      let tarefasGravadas: any[] = [];
-      if (tarefasExistentes.length > 0) {
-        const { data: religadas, error: errReligar } = await supabase.rpc("religar_tarefas_ata", {
-          p_id_reuniao: reuniaoSalva.id,
-          p_ids_tarefas: tarefasExistentes.map((t) => t.id),
-        });
-        if (errReligar) falhasParciais.push(`vínculo das tarefas já criadas (${errReligar.message})`);
-        else if (Number(religadas) < tarefasExistentes.length)
-          falhasParciais.push(
-            `vínculo de ${tarefasExistentes.length - Number(religadas)} tarefa(s) já criada(s) (elas continuam no quadro de tarefas)`,
+          tarefas: itens.tarefas.map((t) => ({
+            id: t.id || null,
+            titulo: t.titulo,
+            descricao: t.descricao || null,
+            data_vencimento: t.data_vencimento || null,
+            id_responsavel: t.id_responsavel || null,
+            prioridade: t.prioridade || "normal",
+          })),
+        },
+      });
+      if (errSalvar) {
+        // a obra sumiu da ata (reaberta pelo app antigo em outra tela): sai do modo edicao; o texto fica
+        // na tela e o proximo "Salvar" grava como obra nova
+        if (emEdicao && errSalvar.code === "P0002") {
+          setAtaEmEdicao(null);
+          setObrasNaAtaAtual((prev: any) =>
+            prev.filter((ob: any) => ob.id_reuniao !== emEdicao.idReuniao),
           );
-        tarefasGravadas = [...tarefasExistentes];
+          onAviso(`${errSalvar.message} Clique em salvar de novo para gravar o que está na tela.`, "erro");
+          return;
+        }
+        throw errSalvar;
       }
-      if (tarefasNovas.length > 0) {
-        const { data: tarefasCriadas, error: errTarefas } = await supabase
-          .from("tarefas")
-          .insert(
-            tarefasNovas.map((t) => ({
-              id_obra: reuniaoForm.id_obra,
-              id_reuniao_origem: reuniaoSalva.id,
-              titulo: t.titulo,
-              descricao: t.descricao || null,
-              data_vencimento: t.data_vencimento || null,
-              id_responsavel: t.id_responsavel,
-              prioridade: t.prioridade || "normal",
-              origem: "reuniao",
-              status: "pendente",
-            })),
-          )
-          .select();
-        if (errTarefas) falhasParciais.push(`tarefas (${errTarefas.message})`);
+      if (!salva?.id_reuniao) throw new Error("A gravação não retornou a reunião.");
+      setIdSessaoAtaAtual(salva.id_sessao);
 
-        (tarefasCriadas || []).forEach((tarefaCriada: any) => {
+      const nomeObra = obraSelecionada
+        ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}`
+        : "Obra Não Identificada";
+      const idsNovas: string[] = salva.tarefas_novas || [];
+      (salva.tarefas || [])
+        .filter((t: any) => idsNovas.includes(t.id))
+        .forEach((tarefaCriada: any) => {
           enviarEmailAtribuicaoTarefa(tarefaCriada.id, {
             titulo: tarefaCriada.titulo,
             descricao: tarefaCriada.descricao,
             data_vencimento: tarefaCriada.data_vencimento,
             id_responsavel: tarefaCriada.id_responsavel,
-            nome_obra: obraSelecionada
-              ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}`
-              : undefined,
+            nome_obra: obraSelecionada ? nomeObra : undefined,
           });
         });
-        // guarda o id: se a obra for reaberta de novo, a tarefa e reaproveitada
-        tarefasGravadas = [
-          ...tarefasGravadas,
-          ...(tarefasCriadas || []).map((tc: any) => ({
-            ...tc,
-            nome_responsavel: listaUsuarios.find((u) => u.id === tc.id_responsavel)?.nome || "Geral",
-          })),
-        ];
-      }
 
+      // o registro vem do banco (com ids): reabrir de novo reaproveita ocorrencias e tarefas
       const registroObraAta = {
-        id_reuniao: reuniaoSalva.id,
-        id_obra: obraSelecionada?.id,
+        id_reuniao: salva.id_reuniao,
+        id_obra: obraSelecionada?.id || salva.id_obra,
         id_gestor: obraSelecionada?.id_responsavel || null,
         nome_gestor: obraSelecionada?.usuarios?.nome || "Sem gestor definido",
-        data_reuniao: reuniaoForm.data_reuniao,
-        nome_obra: obraSelecionada
-          ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}`
-          : "Obra Não Identificada",
-        resumo: reuniaoForm.resumo_geral,
-        ocorrencias: [...listaOcorrencias],
-        tarefas: tarefasGravadas,
+        data_reuniao: salva.data_reuniao,
+        nome_obra: nomeObra,
+        resumo: salva.resumo_geral,
+        ocorrencias: salva.ocorrencias || [],
+        tarefas: salva.tarefas || [],
       };
-      setObrasNaAtaAtual((prev: any) => [...prev, registroObraAta]);
+      setObrasNaAtaAtual((prev: any[]) =>
+        prev.some((ob: any) => ob.id_reuniao === registroObraAta.id_reuniao)
+          ? prev.map((ob: any) =>
+              ob.id_reuniao === registroObraAta.id_reuniao ? registroObraAta : ob,
+            )
+          : [...prev, registroObraAta],
+      );
 
-      if (falhasParciais.length)
+      const naoReligadas = Number(salva.tarefas_nao_religadas || 0);
+      if (naoReligadas > 0)
         onAviso(
-          `${obraSelecionada?.nome || "Obra"} salva, mas não foi possível gravar: ${falhasParciais.join("; ")}. Reabra a obra na ata para conferir.`,
+          `${obraSelecionada?.nome || "Obra"} salva, mas ${naoReligadas} tarefa(s) já criada(s) não voltaram para a ata (elas continuam no quadro de tarefas).`,
           "erro",
         );
       else
         onAviso(
-          `${obraSelecionada?.nome || "Obra"} salva! Vá para a próxima.`,
+          emEdicao
+            ? `${obraSelecionada?.nome || "Obra"}: alterações salvas!`
+            : `${obraSelecionada?.nome || "Obra"} salva! Vá para a próxima.`,
         );
-      setReuniaoForm((prev: any) => ({
-        ...prev,
-        id_obra: "",
-        resumo_geral: "",
-      }));
-      setListaOcorrencias([]);
-      setListaTarefas([]);
-      setContextoObraAta(null);
+      limparFormularioObra();
       setTelaAtiva("reunioes");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error: any) {
-      onAviso("Erro: " + error.message, "erro");
+      // nada foi gravado (transacao unica): o que esta na tela continua para tentar de novo
+      onAviso("Não foi possível salvar: " + (error?.message || "erro desconhecido"), "erro");
     } finally {
       setCarregando(false);
     }
   }
 
-  const editarRegistroAta = async (registro: any, index: number) => {
-    if (
-      !(await confirmar({
-        titulo: `Reabrir ${registro.nome_obra} para edição?`,
-        texto:
-          "O resumo e as ocorrências saem da ata até você salvar a obra de novo.\nAs tarefas criadas por esta ata NÃO são excluídas: continuam no quadro (status, comentários e histórico) e voltam a ficar ligadas à ata quando você salvar.",
-        rotuloConfirmar: "Reabrir para edição",
-        rotuloCancelar: "Manter como está",
-      }))
-    )
-      return;
+  // Reabrir so carrega a ata gravada no formulario: nada e apagado no banco. A versao gravada continua
+  // valendo ate salvar (recarregar a pagina ou cancelar nao perde nada).
+  const editarRegistroAta = async (registro: any) => {
+    if (ataEmEdicao?.idReuniao === registro.id_reuniao) return;
+    if (formularioTemConteudo()) {
+      const emAndamento = ataEmEdicao
+        ? ataEmEdicao.nomeObra
+        : (() => {
+            const o = obrasLista.find((ob) => ob.id === reuniaoForm.id_obra);
+            return o ? `${o.codigo_externo} - ${o.nome}` : "";
+          })();
+      if (
+        !(await confirmar({
+          titulo: `Abrir ${registro.nome_obra} para edição?`,
+          texto: `O que está digitado agora${emAndamento ? ` (${emAndamento})` : ""} ainda não foi salvo e será descartado.`,
+          rotuloConfirmar: "Descartar e abrir",
+          rotuloCancelar: "Voltar",
+          perigo: true,
+        }))
+      )
+        return;
+    }
     setCarregando(true);
     try {
-      // uma transacao no banco: desvincula as tarefas (sem excluir), remove ocorrencias e a reuniao
-      const { error: errReabrir } = await supabase.rpc("reabrir_ata", { p_id_reuniao: registro.id_reuniao });
-      if (errReabrir) throw errReabrir;
-
-      setObrasNaAtaAtual((prev: any) =>
-        prev.filter((_: any, i: number) => i !== index),
-      );
+      const { data: ata, error } = await supabase.rpc("ata_para_edicao", {
+        p_id_reuniao: registro.id_reuniao,
+      });
+      if (error) throw error;
 
       setGestorSelecionadoAta(registro.id_gestor || "");
       setReuniaoForm({
-        id_obra: registro.id_obra,
-        data_reuniao:
-          registro.data_reuniao || new Date().toISOString().split("T")[0],
-        resumo_geral: registro.resumo,
+        id_obra: ata.id_obra,
+        data_reuniao: ata.data_reuniao || new Date().toISOString().split("T")[0],
+        resumo_geral: ata.resumo_geral || "",
       });
-      setListaOcorrencias(registro.ocorrencias || []);
-      setListaTarefas(registro.tarefas || []);
+      setListaOcorrencias(ata.ocorrencias || []);
+      setListaTarefas(ata.tarefas || []);
+      setNovaOcorrencia({ tipo: "avanco", descricao: "" });
+      setNovaTarefa(TAREFA_VAZIA);
+      setAtaEmEdicao({
+        idReuniao: ata.id_reuniao,
+        versao: ata.versao,
+        nomeObra: registro.nome_obra,
+      });
       onAviso(
-        "Rascunho recuperado! Faça as alterações e salve novamente.",
+        "Obra aberta para edição. A versão gravada continua valendo até você salvar.",
       );
     } catch (error: any) {
-      onAviso("Erro ao recuperar rascunho: " + error.message, "erro");
+      onAviso("Não foi possível abrir a obra para edição: " + error.message, "erro");
     } finally {
       setCarregando(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+  };
+
+  const cancelarEdicaoAta = async () => {
+    if (
+      !(await confirmar({
+        titulo: "Cancelar a edição?",
+        texto: "As alterações feitas na tela são descartadas. A versão gravada continua como estava.",
+        rotuloConfirmar: "Descartar alterações",
+        rotuloCancelar: "Continuar editando",
+        perigo: true,
+      }))
+    )
+      return;
+    limparFormularioObra();
   };
 
   const agruparObrasPorGestor = (lista: any[]) => {
@@ -620,6 +707,22 @@ export default function TelaReunioes({
   const gerarAtaFinal = async () => {
     if (obrasNaAtaAtual.length === 0)
       return onAviso("Você não salvou obras.", "erro");
+    // a ata sai com o que esta gravado: avisa se ha edicao ou obra digitada e nao salva
+    if (ataEmEdicao || formularioTemConteudo()) {
+      if (
+        !(await confirmar({
+          titulo: "Há uma obra na tela que não foi salva",
+          texto: ataEmEdicao
+            ? `As alterações em ${ataEmEdicao.nomeObra} não foram salvas: a ata sai com a versão gravada antes.`
+            : "O que está digitado no formulário não entra na ata.",
+          rotuloConfirmar: "Fechar a ata assim mesmo",
+          rotuloCancelar: "Voltar",
+          perigo: true,
+        }))
+      )
+        return;
+      limparFormularioObra();
+    }
     const dataHj = formatarDataSegura(reuniaoForm.data_reuniao);
     let textoAta = `ATA DE REUNIÃO DE OBRAS - KALTER\nData: ${dataHj}\n\n`;
     agruparObrasPorGestor(obrasNaAtaAtual).forEach(({ nomeGestor, obras }) => {
@@ -803,6 +906,7 @@ export default function TelaReunioes({
                   <select
                     className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] font-bold bg-gray-50 max-w-full"
                     value={gestorSelecionadoAta}
+                    disabled={!!ataEmEdicao}
                     onChange={(e) => {
                       setGestorSelecionadoAta(e.target.value);
                       setReuniaoForm({ ...reuniaoForm, id_obra: "" });
@@ -823,6 +927,7 @@ export default function TelaReunioes({
                   <select
                     className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] font-bold bg-gray-50 max-w-full"
                     value={reuniaoForm.id_obra}
+                    disabled={!!ataEmEdicao}
                     onChange={(e) =>
                       setReuniaoForm({
                         ...reuniaoForm,
@@ -853,7 +958,7 @@ export default function TelaReunioes({
                         );
                       })}
                   </select>
-                  {obrasNaAtaAtual.some(
+                  {!ataEmEdicao && obrasNaAtaAtual.some(
                     (ob: any) => ob.id_obra === reuniaoForm.id_obra,
                   ) && (
                     <p className="text-amber-600 text-xs mt-1 font-bold w-full">
@@ -869,9 +974,10 @@ export default function TelaReunioes({
                   disabled={
                     carregando ||
                     !reuniaoForm.id_obra ||
-                    obrasNaAtaAtual.some(
-                      (ob: any) => ob.id_obra === reuniaoForm.id_obra,
-                    )
+                    (!ataEmEdicao &&
+                      obrasNaAtaAtual.some(
+                        (ob: any) => ob.id_obra === reuniaoForm.id_obra,
+                      ))
                   }
                   className="bg-[#2A6377]/10 text-[#2A6377] px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 disabled:opacity-50 flex-1 w-full sm:w-auto max-w-full"
                 >
@@ -883,7 +989,7 @@ export default function TelaReunioes({
                     size={18}
                     className={`shrink-0 ${carregando ? "hidden" : "block"}`}
                   />{" "}
-                  Salvar Obra na Ata
+                  {ataEmEdicao ? "Salvar Alterações" : "Salvar Obra na Ata"}
                 </button>
                 <button
                   onClick={gerarAtaFinal}
@@ -894,6 +1000,20 @@ export default function TelaReunioes({
                 </button>
               </div>
             </div>
+            {ataEmEdicao && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 text-sm">
+                <span>
+                  Editando <strong>{ataEmEdicao.nomeObra}</strong>. A versão gravada continua valendo até você salvar.
+                </span>
+                <button
+                  onClick={cancelarEdicaoAta}
+                  disabled={carregando}
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg border border-amber-300 bg-white hover:bg-amber-100 disabled:opacity-50"
+                >
+                  Cancelar edição
+                </button>
+              </div>
+            )}
             {obrasNaAtaAtual.length > 0 && (
               <div className="mt-6 pt-4 border-t flex flex-wrap items-center gap-2 max-w-full">
                 <span className="text-sm font-medium text-gray-500 mr-2 max-w-full">
@@ -907,9 +1027,10 @@ export default function TelaReunioes({
                   >
                     <CheckCheck size={14} /> {ob.nome_gestor} · {ob.nome_obra}
                     <button
-                      onClick={() => editarRegistroAta(ob, idx)}
-                      className="ml-2 hover:bg-green-200 hover:text-green-900 bg-green-100 rounded-full p-1 transition-colors"
-                      title="Reabrir para Edição"
+                      onClick={() => editarRegistroAta(ob)}
+                      disabled={carregando || ataEmEdicao?.idReuniao === ob.id_reuniao}
+                      className="ml-2 hover:bg-green-200 hover:text-green-900 bg-green-100 rounded-full p-1 transition-colors disabled:opacity-50"
+                      title={ataEmEdicao?.idReuniao === ob.id_reuniao ? "Em edição" : "Reabrir para Edição"}
                     >
                       <Edit2 size={12} />
                     </button>
@@ -1065,6 +1186,7 @@ export default function TelaReunioes({
                       </select>
                     </div>
                     <textarea
+                      ref={refDescricaoOcorrencia}
                       className="border rounded-lg p-3 w-full flex-1 min-h-[110px] outline-none focus:border-[#2A6377] text-sm resize-none"
                       placeholder="Descreva a ocorrência… (Ctrl+Enter para adicionar)"
                       value={novaOcorrencia.descricao}
@@ -1118,6 +1240,7 @@ export default function TelaReunioes({
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-2 mb-2 w-full">
                     <input
+                      ref={refTituloTarefa}
                       type="text"
                       className="border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm"
                       placeholder="O que precisa ser feito…"
@@ -1155,6 +1278,7 @@ export default function TelaReunioes({
                   />
                   <div className="flex flex-wrap gap-2 w-full items-start">
                     <select
+                      ref={refResponsavelTarefa}
                       className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none focus:border-[#2A6377] text-sm"
                       value={novaTarefa.id_responsavel}
                       onChange={(e) =>

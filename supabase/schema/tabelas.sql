@@ -183,6 +183,7 @@ create table public.exportacao_processos (
     atualizado_por uuid,
     nome_atualizou text,
     atualizado_em timestamp with time zone default now() not null,
+    versao integer default 0 not null,
     constraint exportacao_processos_pkey PRIMARY KEY (id),
     constraint exportacao_processos_id_obra_key UNIQUE (id_obra),
     constraint exportacao_processos_situacao_check CHECK (situacao = ANY (ARRAY['rascunho'::text, 'aprovado'::text, 'gerado'::text])),
@@ -878,6 +879,23 @@ create table public.obras_valores_erp (
     constraint obras_valores_erp_id_obra_fkey FOREIGN KEY (id_obra) REFERENCES public.obras(id) ON DELETE CASCADE,
     constraint obras_valores_erp_id_solicitante_fkey FOREIGN KEY (id_solicitante) REFERENCES public.usuarios(id)
 );
+
+create table public.obras_valores_restritos (
+    id_obra uuid not null,
+    margem_prevista_erp numeric(15,2),
+    venda_sem_impostos_erp numeric(15,2),
+    margem_contribuicao_erp numeric,
+    rentabilidade_erp numeric,
+    created_at timestamp with time zone default now() not null,
+    updated_at timestamp with time zone default now() not null,
+    constraint obras_valores_restritos_pkey PRIMARY KEY (id_obra),
+    constraint obras_valores_restritos_id_obra_fkey FOREIGN KEY (id_obra) REFERENCES public.obras(id) ON DELETE CASCADE
+);
+comment on table public.obras_valores_restritos is 'Valores confidenciais da obra vindos do ERP (antes em obras). Leitura = mesma regra da rentabilidade. Gravacao so pelo robo (fila obras_valores_erp pela RPC obra_valores_erp_solicitar).';
+comment on column public.obras_valores_restritos.margem_prevista_erp is 'Margem prevista do orcamento no ERP = cadproj.cpj_valor_proprio (contribuicao) + cpj_valor_terceiro (rentabilidade). Sincronizado pelo robo (estagio rentabilidade).';
+comment on column public.obras_valores_restritos.venda_sem_impostos_erp is 'Valor de venda sem impostos do pedido no ERP (pedven.pv_meta_venda via cadproj2). Base do % de margem. Sincronizado pelo robo.';
+comment on column public.obras_valores_restritos.margem_contribuicao_erp is 'cadproj.cpj_valor_proprio da obra.';
+comment on column public.obras_valores_restritos.rentabilidade_erp is 'cadproj.cpj_valor_terceiro da obra.';
 
 create table public.ocorrencias (
     id uuid default gen_random_uuid() not null,

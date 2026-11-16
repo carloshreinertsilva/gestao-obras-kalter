@@ -23,6 +23,8 @@ import { confirmar } from "./Dialogos";
 
 const COLUNAS_DOCUMENTO = "id, tipo, situacao, erro, nome_arquivo, tamanho, nome_pedido_por, created_at, gerado_em, hash_dados";
 const PERFIS_EXPORTACAO = ["admin", "coordenador", "fiscal"];
+// texto fixo que exportacao_salvar devolve quando outra janela/pessoa gravou antes (trava por versao)
+const TEXTO_CONFLITO = "foi alterado em outra janela";
 const msgErro = (e: unknown) => String((e as { message?: string })?.message || e || "Erro").replace(/^.*?ERROR:\s*/, "");
 
 interface Mensagem {
@@ -69,6 +71,8 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   const [sujo, setSujo] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erroSalvar, setErroSalvar] = useState("");
+  // outra janela ou pessoa gravou antes: o auto-salvar para e a tela mostra a faixa com "Recarregar"
+  const [conflito, setConflito] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [atualizandoErp, setAtualizandoErp] = useState(false);
   const [mensagem, setMensagem] = useState<Mensagem | null>(null);
@@ -78,6 +82,8 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   const hashRef = useRef("");
   const ultimoSalvo = useRef(""); // JSON do que esta no banco (carregado ou ultimo enviado)
   const fila = useRef<Promise<unknown>>(Promise.resolve());
+  const versaoRef = useRef<number | null>(null); // versao do processo no banco que esta tela conhece (null = ainda nao existe)
+  const conflitoRef = useRef(false);
 
   const podeAprovar = PERFIS_EXPORTACAO.includes(String(usuario?.perfil || ""));
 
@@ -99,7 +105,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
     setErroCarga("");
     try {
       const [p, e, c, est, d] = await Promise.all([
-        supabase.from("exportacao_processos").select("dados, hash_dados, aprovacao, atualizado_em").eq("id_obra", obra.id).maybeSingle(),
+        supabase.from("exportacao_processos").select("dados, hash_dados, aprovacao, atualizado_em, versao").eq("id_obra", obra.id).maybeSingle(),
         supabase.from("exportacao_erp").select("nr_pedido, pedido, materiais, exportador_erp, lido_em").eq("id_obra", obra.id).maybeSingle(),
         supabase.from("exportacao_config").select("exportador, banco, local_embarque").eq("id", 1).maybeSingle(),
         supabase.from("exportacao_estimativas").select("codigo_material, peso, bruto, comp, larg, alt, fonte"),
@@ -115,6 +121,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
       if (p.data) {
         const dados = p.data.dados as Processo;
         ultimoSalvo.current = JSON.stringify(dados);
+        versaoRef.current = p.data.versao as number;
         // as estimativas rodam de novo ao abrir (so preenchem o que esta vazio ou ainda era estimado)
         const normal = dados.packing ? { ...dados, packing: { ...dados.packing, materiais: aplicarEstimativas(dados.packing.materiais ?? [], tab) } } : dados;
         procRef.current = normal;
@@ -151,15 +158,22 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
     if (!atual) return hashRef.current || null;
     const json = JSON.stringify(atual);
     if (json === ultimoSalvo.current && hashRef.current) return hashRef.current;
+    if (conflitoRef.current) return null; // travado ate o usuario recarregar: nao fica tentando
     setSalvando(true);
-    const { data, error } = await supabase.rpc("exportacao_salvar", { p_id_obra: obra.id, p_dados: atual });
+    // a fila (salvarAgora) garante uma gravacao por vez, entao a versao lida aqui ja e a devolvida pela anterior
+    const { data, error } = await supabase.rpc("exportacao_salvar", { p_id_obra: obra.id, p_dados: atual, p_versao: versaoRef.current ?? 0 });
     setSalvando(false);
     if (error) {
-      setErroSalvar(msgErro(error));
+      if (String(error.message || "").includes(TEXTO_CONFLITO)) {
+        conflitoRef.current = true;
+        setConflito(true);
+        setErroSalvar("");
+      } else setErroSalvar(msgErro(error));
       return null;
     }
-    const linha = (data as { hash_dados: string; atualizado_em: string }[])[0];
+    const linha = (data as { hash_dados: string; atualizado_em: string; versao: number }[])[0];
     ultimoSalvo.current = json;
+    versaoRef.current = linha.versao;
     hashRef.current = linha.hash_dados;
     setHash(linha.hash_dados);
     setSalvoEm(linha.atualizado_em);
@@ -186,9 +200,10 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
       return;
     }
     setSujo(true);
+    if (conflito) return; // sem auto-salvar enquanto o conflito nao for resolvido
     const t = setTimeout(() => void salvarAgora(), 2000);
     return () => clearTimeout(t);
-  }, [proc, salvarAgora]);
+  }, [proc, salvarAgora, conflito]);
 
   // sair da aba ou fechar a pagina com alteracao pendente: tenta salvar e avisa
   useEffect(() => {
@@ -206,6 +221,17 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
     },
     [],
   );
+
+  // descarta o que esta so nesta tela e traz a versao que esta no banco (o usuario escolheu pelo botao da faixa)
+  const recarregarVersaoAtual = async () => {
+    conflitoRef.current = false;
+    setConflito(false);
+    setErroSalvar("");
+    setSujo(false);
+    await carregar();
+  };
+  const textoNaoSalvou = (acao: string) =>
+    conflitoRef.current ? "Este processo foi alterado em outra janela. Recarregue a versão atual (faixa no alto) e repita." : `Não foi possível salvar o processo antes de ${acao}.`;
 
   // ------------------------------------------------------------------ revisao
   const chaveNcm = useMemo(
@@ -260,7 +286,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
     setMensagem(null);
     try {
       const h = await salvarAgora();
-      if (!h) throw new Error("Não foi possível salvar o processo antes de pedir o documento.");
+      if (!h) throw new Error(textoNaoSalvou("pedir o documento"));
       const { error } = await supabase.rpc("exportacao_pedir_documento", { p_id_obra: obra.id, p_tipo: tipo });
       if (error) throw error;
       await carregarDocs();
@@ -286,7 +312,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
     setMensagem(null);
     try {
       const h = await salvarAgora();
-      if (!h) throw new Error("Não foi possível salvar o processo antes de aprovar.");
+      if (!h) throw new Error(textoNaoSalvou("aprovar"));
       const { error } = await supabase.rpc("exportacao_aprovar", { p_id_obra: obra.id, p_hash: h });
       if (error) throw error;
       const { data } = await supabase.from("exportacao_processos").select("aprovacao, hash_dados").eq("id_obra", obra.id).maybeSingle();
@@ -413,7 +439,9 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   const prontos = PASSOS_DE_PREENCHER.filter((p) => situacoes[p].tipo !== "erro").length;
   const pendente = proximaPendencia(situacoes, passo);
   const rascunho = docs.find((d) => d.tipo === "rascunho") ?? null;
-  const status = erroSalvar ? (
+  const status = conflito ? (
+    <span className="text-red-600 font-semibold" role="alert">NÃO SALVOU: alterado em outra janela</span>
+  ) : erroSalvar ? (
     <span className="text-red-600 font-semibold" role="alert">NÃO SALVOU: {erroSalvar}</span>
   ) : salvando ? (
     <span className="text-slate-500">Salvando…</span>
@@ -427,6 +455,19 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   return (
     <div className="space-y-4">
       <ListasDeSugestoes />
+      {conflito && (
+        <Aviso
+          tom="erro"
+          acao={
+            <Botao tamanho="pequeno" onClick={() => void recarregarVersaoAtual()}>
+              Recarregar a versão atual
+            </Botao>
+          }
+        >
+          Este processo foi alterado em outra janela ou por outra pessoa. As últimas alterações feitas nesta janela <b>não foram gravadas</b>. Se
+          precisar delas, anote antes de recarregar: ao recarregar, esta tela passa a mostrar o que está gravado.
+        </Aviso>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">

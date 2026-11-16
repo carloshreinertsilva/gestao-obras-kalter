@@ -2,6 +2,8 @@ import { linhaClicavel } from "./teclado";
 import { useAviso } from "./aviso";
 import { ErroCarga, useDialogos } from "./Dialogos";
 import { useEffect, useMemo, useState } from "react";
+import { lerNumero } from "./numero";
+import { CampoNumero } from "./CampoNumero";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -261,12 +263,14 @@ function ModalSolicitarFaturamento({
   };
   const porPct = (i: ItemDisponivel, txt: string) => {
     setEntrada((p) => ({ ...p, [i.sequencia]: { pct: txt } }));
-    const v = parseFloat(txt.replace(",", "."));
+    // % : ponto unico e decimal ("12.5" = 12,5%), como antes
+    const v = lerNumero(txt, { medida: true });
     definirQtd(i, Number.isFinite(v) ? (v / 100) * num(i.quantidade_pedido) : 0);
   };
   const porValor = (i: ItemDisponivel, txt: string) => {
     setEntrada((p) => ({ ...p, [i.sequencia]: { valor: txt } }));
-    const v = parseFloat(txt.replace(/\./g, "").replace(",", "."));
+    // R$: leitura unica ("850.00" = 850, antes 85.000 e cortado no saldo)
+    const v = lerNumero(txt);
     definirQtd(i, Number.isFinite(v) && num(i.valor_unitario_ipi) > 0 ? v / num(i.valor_unitario_ipi) : 0);
   };
   const saldoTotal = (lista: ItemDisponivel[]) => {
@@ -281,7 +285,7 @@ function ModalSolicitarFaturamento({
     });
   };
   const aplicarPctTodos = () => {
-    const v = parseFloat(pctTodos.replace(",", "."));
+    const v = lerNumero(pctTodos, { medida: true });
     if (!Number.isFinite(v) || v <= 0) return;
     setSujo(true);
     const q: Record<number, number> = {};
@@ -385,12 +389,7 @@ function ModalSolicitarFaturamento({
             <>
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="text-slate-500">Aplicar em todos:</span>
-                <input
-                  value={pctTodos}
-                  onChange={(e) => setPctTodos(e.target.value)}
-                  placeholder="%"
-                  className="border rounded-lg px-2 py-1 w-20 text-right"
-                />
+                <CampoNumero valor={pctTodos} onChange={setPctTodos} casas={0} medida placeholder="%" className="border rounded-lg px-2 py-1 w-20 text-right" />
                 <button onClick={aplicarPctTodos} className="px-3 py-1 rounded-lg border hover:bg-slate-50 font-semibold text-slate-600">
                   Aplicar %
                 </button>
@@ -448,20 +447,21 @@ function ModalSolicitarFaturamento({
                                 <span className="block text-xs text-slate-500 font-normal">{fmtPct((num(i.saldo) / num(i.quantidade_pedido)) * 100)}</span>
                               </td>
                               <td className="px-3 py-2">
-                                <input
-                                  value={ent.pct ?? (q > 0 ? String(Math.round(pct * 100) / 100).replace(".", ",") : "")}
-                                  onChange={(e) => porPct(i, e.target.value)}
+                                <CampoNumero
+                                  valor={ent.pct ?? (q > 0 ? String(Math.round(pct * 100) / 100).replace(".", ",") : "")}
+                                  onChange={(t) => porPct(i, t)}
+                                  casas={0}
+                                  medida
                                   className="border rounded px-2 py-1 w-full text-right"
-                                  inputMode="decimal"
                                 />
                               </td>
                               <td className="px-3 py-2">
                                 <div className="flex gap-1">
-                                  <input
-                                    value={ent.valor ?? (q > 0 ? valorDe(i).toFixed(2).replace(".", ",") : "")}
-                                    onChange={(e) => porValor(i, e.target.value)}
+                                  <CampoNumero
+                                    valor={ent.valor ?? (q > 0 ? valorDe(i).toFixed(2).replace(".", ",") : "")}
+                                    onChange={(t) => porValor(i, t)}
+                                    casasMax={2}
                                     className="border rounded px-2 py-1 w-full text-right"
-                                    inputMode="decimal"
                                   />
                                   <button
                                     title="Faturar o saldo todo deste item"
@@ -478,7 +478,7 @@ function ModalSolicitarFaturamento({
                                     {fmtQtd(q)} {i.unidade}
                                     <span className="block text-xs text-slate-500">{formatarMoeda(valorDe(i))}</span>
                                     {ent.valor !== undefined &&
-                                      Math.abs(valorDe(i) - parseFloat(ent.valor.replace(/\./g, "").replace(",", ".") || "0")) >= 0.01 && (
+                                      Math.abs(valorDe(i) - (lerNumero(ent.valor) || 0)) >= 0.01 && (
                                         <span
                                           className="block text-xs text-amber-700"
                                           title="O ERP trabalha com 4 casas decimais na quantidade; o valor é o mais próximo possível do digitado"
@@ -630,9 +630,11 @@ function ModalConferencia({
         });
   }, [produto]);
 
-  const n = (t: string) => parseFloat((t || "").replace(/\./g, "").replace(",", "."));
+  // leitura unica (src/numero.ts): peso "850.5" e 850,5 (antes virava 8505 no romaneio)
+  const n = (t: string) => lerNumero(t);
+  // quantidade: ponto unico e decimal (como antes), e o campo mostra a leitura ao sair
   const qtdNum = (i: ItemSolicitacao) => {
-    const v = parseFloat((qtd[i.sequencia] || "0").replace(",", "."));
+    const v = lerNumero(qtd[i.sequencia] || "0", { medida: true });
     return Number.isFinite(v) ? arred4(v) : 0;
   };
   const total = itens.reduce((a, i) => a + Math.round(qtdNum(i) * num(i.valor_unitario_ipi) * 100) / 100, 0);
@@ -653,7 +655,12 @@ function ModalConferencia({
       const semVolume = itens.find((i) => qtdNum(i) > 0 && (volNum(i) === null || !Number.isInteger(volNum(i)) || (volNum(i) as number) < 0));
       if (semVolume) return setErro(`Informe os volumes do item ${semVolume.sequencia} (0 se vai junto com outro item).`);
       if (totalVolumes <= 0) return setErro("Informe ao menos 1 volume.");
+      // peso digitado que nao da para entender nao some em silencio
+      if ([pesoBruto, pesoLiquido].some((t) => t.trim() !== "" && Number.isNaN(n(t))))
+        return setErro("Peso inválido: use só números (ex.: 850,5).");
     }
+    const qtdInvalida = itens.find((i) => (qtd[i.sequencia] ?? "").trim() !== "" && Number.isNaN(lerNumero(qtd[i.sequencia], { medida: true })));
+    if (qtdInvalida) return setErro(`Quantidade inválida no item ${qtdInvalida.sequencia}: use só números (ex.: 1,5).`);
     if (
       !(await confirmar({
         titulo: `Aprovar o faturamento SF ${solicitacao.numero}?`,
@@ -734,11 +741,13 @@ function ModalConferencia({
                     <span className="block text-xs text-slate-500">{formatarMoeda(i.valor_solicitado)}</span>
                   </td>
                   <td className="px-3 py-2">
-                    <input
-                      value={qtd[i.sequencia] ?? ""}
-                      onChange={(e) => setQtd((p) => ({ ...p, [i.sequencia]: e.target.value }))}
+                    <CampoNumero
+                      valor={qtd[i.sequencia] ?? ""}
+                      onChange={(t) => setQtd((p) => ({ ...p, [i.sequencia]: t }))}
+                      casas={0}
+                      casasMax={4}
+                      medida
                       className="border rounded px-2 py-1 w-full text-right"
-                      inputMode="decimal"
                     />
                   </td>
                   {produto && (
@@ -763,8 +772,8 @@ function ModalConferencia({
 
           {produto ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Campo rotulo="Peso bruto (kg) *" valor={pesoBruto} onChange={setPesoBruto} />
-              <Campo rotulo="Peso líquido (kg) *" valor={pesoLiquido} onChange={setPesoLiquido} />
+              <Campo rotulo="Peso bruto (kg) *" valor={pesoBruto} onChange={setPesoBruto} numero />
+              <Campo rotulo="Peso líquido (kg) *" valor={pesoLiquido} onChange={setPesoLiquido} numero />
               <div>
                 <label className="block text-xs font-semibold mb-1">Volumes (soma dos itens)</label>
                 <p className="border rounded-lg px-2 py-2 w-full text-sm bg-slate-50 font-semibold">{totalVolumes}</p>
@@ -798,10 +807,27 @@ function ModalConferencia({
   );
 }
 
-const Campo = ({ rotulo, valor, onChange, placeholder }: { rotulo: string; valor: string; onChange: (v: string) => void; placeholder?: string }) => (
+const Campo = ({
+  rotulo,
+  valor,
+  onChange,
+  placeholder,
+  numero,
+}: {
+  rotulo: string;
+  valor: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  numero?: boolean;
+}) => (
   <div>
     <label className="block text-xs font-semibold mb-1">{rotulo}</label>
-    <input value={valor} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="border rounded-lg px-2 py-2 w-full text-sm" />
+    {numero ? (
+      // peso vai para o romaneio do ERP: ao sair do campo mostra como foi lido ("850.5" -> "850,50", nao 8505)
+      <CampoNumero valor={valor} onChange={onChange} placeholder={placeholder} className="border rounded-lg px-2 py-2 w-full text-sm" />
+    ) : (
+      <input value={valor} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="border rounded-lg px-2 py-2 w-full text-sm" />
+    )}
   </div>
 );
 

@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- 170 funcoes/procedures do schema public, ordenadas por nome + argumentos
+-- 177 funcoes/procedures do schema public, ordenadas por nome + argumentos
 
 -- public.after_insert_obras_criar_pmis_padrao()
 CREATE OR REPLACE FUNCTION public.after_insert_obras_criar_pmis_padrao()
@@ -62,6 +62,61 @@ begin
   if not found then
     raise exception 'A solicitacao mudou (nova simulacao ou ja decidida). Atualize a tela e confira de novo.';
   end if;
+end;
+$function$
+;
+
+-- public.ata_json(p_id_reuniao uuid)
+CREATE OR REPLACE FUNCTION public.ata_json(p_id_reuniao uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select jsonb_build_object(
+    'id_reuniao', r.id,
+    'id_obra', r.id_obra,
+    'id_sessao', r.id_sessao,
+    -- o formulario usa AAAA-MM-DD (o app grava a data como meia-noite UTC)
+    'data_reuniao', to_char(r.data_reuniao at time zone 'UTC', 'YYYY-MM-DD'),
+    'resumo_geral', coalesce(r.resumo_geral, ''),
+    'ocorrencias', coalesce((
+      select jsonb_agg(jsonb_build_object('id', o.id, 'tipo', o.tipo, 'descricao', o.descricao)
+                       order by o.created_at, o.id)
+        from public.ocorrencias o where o.id_reuniao = r.id), '[]'::jsonb),
+    'tarefas', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', t.id, 'titulo', t.titulo, 'descricao', t.descricao, 'data_vencimento', t.data_vencimento,
+               'id_responsavel', t.id_responsavel, 'prioridade', t.prioridade,
+               'nome_responsavel', coalesce(u.nome, 'Geral'))
+             order by t.created_at, t.id)
+        from public.tarefas t left join public.usuarios u on u.id = t.id_responsavel
+       where t.id_reuniao_origem = r.id), '[]'::jsonb),
+    'versao', public.versao_ata(r.id))
+  from public.reunioes r
+  where r.id = p_id_reuniao;
+$function$
+;
+
+-- public.ata_para_edicao(p_id_reuniao uuid)
+CREATE OR REPLACE FUNCTION public.ata_para_edicao(p_id_reuniao uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_obra uuid;
+begin
+  select r.id_obra into v_obra from public.reunioes r where r.id = p_id_reuniao;
+  if not found then
+    raise exception 'Esta obra não está mais na ata (pode ter sido reaberta em outra tela). Atualize a página.'
+      using errcode = 'P0002';
+  end if;
+  if not coalesce(public.pode_gerenciar_obra(v_obra), false) then
+    raise exception 'Sem permissão para editar a ata desta obra.' using errcode = '42501';
+  end if;
+  return public.ata_json(p_id_reuniao);
 end;
 $function$
 ;
@@ -985,9 +1040,9 @@ begin
 end $function$
 ;
 
--- public.exportacao_salvar(p_id_obra uuid, p_dados jsonb)
-CREATE OR REPLACE FUNCTION public.exportacao_salvar(p_id_obra uuid, p_dados jsonb)
- RETURNS TABLE(hash_dados text, situacao text, atualizado_em timestamp with time zone)
+-- public.exportacao_salvar(p_id_obra uuid, p_dados jsonb, p_versao integer)
+CREATE OR REPLACE FUNCTION public.exportacao_salvar(p_id_obra uuid, p_dados jsonb, p_versao integer DEFAULT NULL::integer)
+ RETURNS TABLE(hash_dados text, situacao text, atualizado_em timestamp with time zone, versao integer)
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
@@ -1005,13 +1060,21 @@ begin
 
   select * into v_p from public.exportacao_processos p where p.id_obra = p_id_obra for update;
   if v_p.id is null then
-    insert into public.exportacao_processos (id_obra, dados, criado_por, atualizado_por, nome_atualizou)
-    values (p_id_obra, v_dados, v_u.id, v_u.id, v_u.nome);
-  elsif v_p.dados is distinct from v_dados then   -- igual ao que ja esta: nao grava (Disk IO)
-    update public.exportacao_processos p set dados = v_dados, atualizado_por = v_u.id, nome_atualizou = v_u.nome, atualizado_em = now()
+    -- p_versao > 0 com a linha ainda inexistente: a tela carregou uma versao que nao existe mais; trata como conflito
+    if p_versao is not null and p_versao > 0 then
+      raise exception 'Este processo foi alterado em outra janela ou por outra pessoa.';
+    end if;
+    insert into public.exportacao_processos (id_obra, dados, criado_por, atualizado_por, nome_atualizou, versao)
+    values (p_id_obra, v_dados, v_u.id, v_u.id, v_u.nome, 1);
+  elsif v_p.dados is distinct from v_dados then   -- igual ao que ja esta: nao grava (Disk IO) e nao e conflito
+    if p_versao is not null and p_versao <> v_p.versao then
+      raise exception 'Este processo foi alterado em outra janela ou por outra pessoa.';
+    end if;
+    update public.exportacao_processos p
+       set dados = v_dados, atualizado_por = v_u.id, nome_atualizou = v_u.nome, atualizado_em = now(), versao = p.versao + 1
      where p.id = v_p.id;
   end if;
-  return query select p.hash_dados, p.situacao, p.atualizado_em from public.exportacao_processos p where p.id_obra = p_id_obra;
+  return query select p.hash_dados, p.situacao, p.atualizado_em, p.versao from public.exportacao_processos p where p.id_obra = p_id_obra;
 end $function$
 ;
 
@@ -1244,10 +1307,12 @@ begin
   if f.valor_cotado is null then
     v_novo := 'aguardando_cotacao';
   else
-    v_saldo := public.frete_saldo(f.id_obra, f.id);
+    v_saldo := public.frete_saldo_interno(f.id_obra, f.id);
     v_novo := case when f.valor_cotado <= v_saldo + 0.005 then 'liberado' else 'bloqueado' end;
   end if;
-  update public.fretes set status = v_novo, saldo_verificado = v_saldo, updated_at = now(),
+  -- updated_at e a versao usada pela trava do frete_salvar: so avanca quando o status muda
+  update public.fretes set status = v_novo, saldo_verificado = v_saldo,
+         updated_at = case when v_novo is distinct from f.status then now() else updated_at end,
          liberado_em = case when v_novo = 'liberado' and f.status <> 'liberado' then now() else liberado_em end,
          bloqueado_em = case when v_novo = 'bloqueado' and f.status <> 'bloqueado' then now() else bloqueado_em end
    where id = p_id;
@@ -1285,7 +1350,7 @@ AS $function$
 declare f public.fretes; d uuid; v_para text[]; v_cc text[]; v_saldo numeric;
 begin
   select * into f from public.fretes where id = p_id;
-  v_saldo := public.frete_saldo(f.id_obra, f.id);
+  v_saldo := public.frete_saldo_interno(f.id_obra, f.id);
   foreach d in array coalesce(p_para, '{}') loop
     if d is distinct from public.usuario_atual_id() then
       perform public.notificar_usuario(d, 'frete', p_titulo_push,
@@ -1536,6 +1601,24 @@ end $function$
 -- public.frete_saldo(p_id_obra uuid, p_excluir uuid)
 CREATE OR REPLACE FUNCTION public.frete_saldo(p_id_obra uuid, p_excluir uuid DEFAULT NULL::uuid)
  RETURNS numeric
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if not (coalesce(auth.role(), '') not in ('authenticated', 'anon')  -- robo / conexao direta / service_role
+          or (public.eh_usuario_ativo()
+              and (public.eh_admin_ou_coordenador() or public.eh_logistica()
+                   or coalesce(public.pode_gerenciar_obra(p_id_obra), false)))) then
+    raise exception 'Você não tem acesso à verba de frete desta obra.';
+  end if;
+  return public.frete_saldo_interno(p_id_obra, p_excluir);
+end $function$
+;
+
+-- public.frete_saldo_interno(p_id_obra uuid, p_excluir uuid)
+CREATE OR REPLACE FUNCTION public.frete_saldo_interno(p_id_obra uuid, p_excluir uuid DEFAULT NULL::uuid)
+ RETURNS numeric
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
@@ -1549,8 +1632,8 @@ AS $function$
 $function$
 ;
 
--- public.frete_salvar(p_id uuid, p_id_obra uuid, p_data date, p_operacao text, p_tipo_documento text, p_numero_documento text, p_origem_tipo text, p_origem_ibge integer, p_origem_nome text, p_destino_tipo text, p_destino_ibge integer, p_destino_nome text, p_cod_fornecedor integer, p_tipo_veiculo text, p_km numeric, p_valor_km numeric, p_valor_cotado numeric, p_transportadora_codigo integer, p_observacao text, p_carga jsonb, p_peso_kg numeric, p_volumes integer, p_altura_m numeric, p_largura_m numeric, p_comprimento_m numeric, p_cubagem_m3 numeric)
-CREATE OR REPLACE FUNCTION public.frete_salvar(p_id uuid, p_id_obra uuid, p_data date, p_operacao text, p_tipo_documento text, p_numero_documento text, p_origem_tipo text, p_origem_ibge integer, p_origem_nome text, p_destino_tipo text, p_destino_ibge integer, p_destino_nome text, p_cod_fornecedor integer, p_tipo_veiculo text, p_km numeric, p_valor_km numeric, p_valor_cotado numeric, p_transportadora_codigo integer, p_observacao text, p_carga jsonb DEFAULT NULL::jsonb, p_peso_kg numeric DEFAULT NULL::numeric, p_volumes integer DEFAULT NULL::integer, p_altura_m numeric DEFAULT NULL::numeric, p_largura_m numeric DEFAULT NULL::numeric, p_comprimento_m numeric DEFAULT NULL::numeric, p_cubagem_m3 numeric DEFAULT NULL::numeric)
+-- public.frete_salvar(p_id uuid, p_id_obra uuid, p_data date, p_operacao text, p_tipo_documento text, p_numero_documento text, p_origem_tipo text, p_origem_ibge integer, p_origem_nome text, p_destino_tipo text, p_destino_ibge integer, p_destino_nome text, p_cod_fornecedor integer, p_tipo_veiculo text, p_km numeric, p_valor_km numeric, p_valor_cotado numeric, p_transportadora_codigo integer, p_observacao text, p_carga jsonb, p_peso_kg numeric, p_volumes integer, p_altura_m numeric, p_largura_m numeric, p_comprimento_m numeric, p_cubagem_m3 numeric, p_versao timestamp with time zone)
+CREATE OR REPLACE FUNCTION public.frete_salvar(p_id uuid, p_id_obra uuid, p_data date, p_operacao text, p_tipo_documento text, p_numero_documento text, p_origem_tipo text, p_origem_ibge integer, p_origem_nome text, p_destino_tipo text, p_destino_ibge integer, p_destino_nome text, p_cod_fornecedor integer, p_tipo_veiculo text, p_km numeric, p_valor_km numeric, p_valor_cotado numeric, p_transportadora_codigo integer, p_observacao text, p_carga jsonb DEFAULT NULL::jsonb, p_peso_kg numeric DEFAULT NULL::numeric, p_volumes integer DEFAULT NULL::integer, p_altura_m numeric DEFAULT NULL::numeric, p_largura_m numeric DEFAULT NULL::numeric, p_comprimento_m numeric DEFAULT NULL::numeric, p_cubagem_m3 numeric DEFAULT NULL::numeric, p_versao timestamp with time zone DEFAULT NULL::timestamp with time zone)
  RETURNS uuid
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -1575,6 +1658,15 @@ begin
   select nome into v_transp from public.fornecedores_erp where codigo = p_transportadora_codigo;
   v_est := case when p_origem_ibge is not null and p_destino_ibge is not null then public.frete_distancia(p_origem_ibge, p_destino_ibge) end;
 
+  -- trava otimista: confere a versao ANTES de gravar qualquer coisa (inclusive o km da rota abaixo)
+  if v_id is not null then
+    select * into v_f from public.fretes where id = v_id for update;
+    if v_f.id is null or v_f.id_obra <> p_id_obra then raise exception 'Frete não encontrado.'; end if;
+    if p_versao is not null and v_f.updated_at is distinct from p_versao then
+      raise exception 'Este frete foi alterado por outra pessoa enquanto você editava. Feche e abra de novo para ver a versão atual.';
+    end if;
+  end if;
+
   -- km corrigido pela logistica vira o km da rota para as proximas vezes
   if v_logistica and p_km is not null and v_est is not null and abs(p_km - v_est) >= 1 and p_origem_ibge <> p_destino_ibge then
     insert into public.fretes_rotas (origem_ibge, destino_ibge, km, ajustado_por)
@@ -1596,8 +1688,6 @@ begin
     returning id into v_id;
     perform public.frete_evento(v_id, 'criado', coalesce('Cotado ' || formatar_brl(round(p_valor_cotado, 2)), 'Sem cotação'));
   else
-    select * into v_f from public.fretes where id = v_id for update;
-    if v_f.id is null or v_f.id_obra <> p_id_obra then raise exception 'Frete não encontrado.'; end if;
     if v_f.status in ('realizado', 'cancelado') then raise exception 'Frete já realizado ou cancelado não pode ser alterado.'; end if;
     if not (v_logistica or v_f.id_solicitante = v_usuario.id or coalesce(public.pode_gerenciar_obra(p_id_obra), false)) then
       raise exception 'Você não pode alterar este frete.';
@@ -1631,7 +1721,8 @@ CREATE OR REPLACE FUNCTION public.frete_sem_verba_email_ligado()
  RETURNS boolean
  LANGUAGE sql
  IMMUTABLE
-AS $function$ select false $function$
+ SET search_path TO 'public'
+AS $function$ select true $function$
 ;
 
 -- public.frete_sugestoes(p_origem integer, p_destino integer, p_tipo_veiculo text)
@@ -1848,6 +1939,7 @@ CREATE OR REPLACE FUNCTION public.mat_criacao_erp_ligada()
  RETURNS boolean
  LANGUAGE sql
  IMMUTABLE
+ SET search_path TO 'public'
 AS $function$ select false $function$
 ;
 
@@ -2041,6 +2133,7 @@ CREATE OR REPLACE FUNCTION public.mat_prefixo_codigo(p_classe_tipo integer)
  RETURNS text
  LANGUAGE sql
  IMMUTABLE
+ SET search_path TO 'public'
 AS $function$
   select (p_classe_tipo / 10000)::text || '.' || lpad((p_classe_tipo % 10000)::text, greatest(3, length((p_classe_tipo % 10000)::text)), '0') || '.'
 $function$
@@ -2055,7 +2148,7 @@ CREATE OR REPLACE FUNCTION public.mat_proximo_codigo_edit(p_classe_tipo integer,
 AS $function$
 declare v_pre text := public.mat_prefixo_codigo(p_classe_tipo); v_re text; v_n integer; v_cod text;
 begin
-  if not (public.eh_usuario_ativo() or public.usuario_atual_id() is null) then raise exception 'Sem acesso.'; end if;
+  if not (public.eh_usuario_ativo() or coalesce(auth.role(), '') not in ('authenticated', 'anon')) then raise exception 'Sem acesso.'; end if;
   v_re := '^' || replace(v_pre, '.', '\.') || '\d{4}$';
   select substr(trim(codigo_edit), length(v_pre) + 1)::integer into v_n from public.materiais_erp
    where left(codigo_edit, length(v_pre)) = v_pre and trim(codigo_edit) ~ v_re order by codigo desc limit 1;
@@ -2147,7 +2240,7 @@ CREATE OR REPLACE FUNCTION public.mat_similares(p_texto text, p_limite integer D
 AS $function$
 declare v text := public.mat_normalizar(p_texto);
 begin
-  if not (public.eh_usuario_ativo() or public.usuario_atual_id() is null) then raise exception 'Sem acesso.'; end if;
+  if not (public.eh_usuario_ativo() or coalesce(auth.role(), '') not in ('authenticated', 'anon')) then raise exception 'Sem acesso.'; end if;
   if length(v) < 3 then return; end if;
   return query
   select x.o, x.cod, x.ced, x.d, x.u, x.n, public.mat_classe_rotulo(x.ct), x.ids, x.nums, x.sit, x.s, x.tp from (
@@ -2286,6 +2379,7 @@ CREATE OR REPLACE FUNCTION public.nft_avisar(p_id uuid, p_para uuid[], p_cc uuid
  SET search_path TO 'public'
 AS $function$
 declare n public.nfs_terceiros; d uuid; v_para text[]; v_cc text[]; v_url text; v_anexos jsonb;
+        v_link text := 'https://pnnhyzdbknzhsyyhhgbk.supabase.co/storage/v1/object/sign/nf-terceiros/';
 begin
   select * into n from public.nfs_terceiros where id = p_id;
   v_url := 'https://gestaoobraskalter.vercel.app/nfs-terceiros/' || n.id;
@@ -2303,10 +2397,14 @@ begin
   if cardinality(v_para) = 0 then return; end if;
   v_anexos := '[]'::jsonb;
   if p_anexar then
-    select coalesce(jsonb_agg(jsonb_build_object('nome', a->>'nome', 'url', a->>'url')), '[]'::jsonb) into v_anexos
-      from jsonb_array_elements(n.anexos) a where coalesce(a->>'url', '') <> '';
-    if v_anexos = '[]'::jsonb and n.arquivo_url_email is not null then
-      v_anexos := jsonb_build_array(jsonb_build_object('nome', n.arquivo_nome, 'url', n.arquivo_url_email));
+    -- caminho + bucket: o robo baixa pelo Storage quando tiver a chave (o link vale 7 dias); url so a do proprio Storage
+    select coalesce(jsonb_agg(jsonb_build_object('nome', a->>'nome', 'caminho', a->>'caminho', 'bucket', 'nf-terceiros',
+                                                 'url', case when starts_with(a->>'url', v_link) then a->>'url' end)), '[]'::jsonb)
+      into v_anexos
+      from jsonb_array_elements(n.anexos) a where coalesce(a->>'url', '') <> '' or coalesce(a->>'caminho', '') <> '';
+    if v_anexos = '[]'::jsonb and (n.arquivo_url_email is not null or n.arquivo_caminho is not null) then
+      v_anexos := jsonb_build_array(jsonb_build_object('nome', n.arquivo_nome, 'caminho', n.arquivo_caminho, 'bucket', 'nf-terceiros',
+                                                       'url', case when starts_with(n.arquivo_url_email, v_link) then n.arquivo_url_email end));
     end if;
   end if;
   insert into public.fila_email (para, cc, assunto, html, origem, anexos)
@@ -2375,6 +2473,7 @@ CREATE OR REPLACE FUNCTION public.nft_encaminhar(p_id uuid, p_id_obra uuid, p_nr
 AS $function$
 declare v_usuario record; v_obra record; v_ped record; v_nf record; v_id uuid := p_id; v_num text := upper(trim(coalesce(p_numero_nf, '')));
         v_anexos jsonb; v_primeiro jsonb; v_forma text := nullif(trim(coalesce(p_forma_pagamento, '')), ''); v_dados jsonb;
+        v_link text := 'https://pnnhyzdbknzhsyyhhgbk.supabase.co/storage/v1/object/sign/nf-terceiros/';
 begin
   select * into v_usuario from public.usuarios where id = public.usuario_atual_id();
   if v_usuario.id is null then raise exception 'Usuário não identificado.'; end if;
@@ -2396,7 +2495,7 @@ begin
   if p_anexos is not null and jsonb_typeof(p_anexos) = 'array' and jsonb_array_length(p_anexos) > 0 then
     if jsonb_array_length(p_anexos) > 10 then raise exception 'No máximo 10 anexos por NF.'; end if;
     if exists (select 1 from jsonb_array_elements(p_anexos) a
-                where coalesce(trim(a->>'caminho'), '') = '' or coalesce(trim(a->>'nome'), '') = '') then
+                where jsonb_typeof(a) <> 'object' or coalesce(trim(a->>'caminho'), '') = '' or coalesce(trim(a->>'nome'), '') = '') then
       raise exception 'Anexo inválido.';
     end if;
     v_anexos := p_anexos;
@@ -2404,6 +2503,18 @@ begin
     v_anexos := jsonb_build_array(jsonb_build_object('caminho', p_arquivo_caminho, 'nome', p_arquivo_nome, 'url', p_arquivo_url));
   else
     raise exception 'Anexe a NF.';
+  end if;
+  -- so arquivo enviado pelo app para a pasta desta obra; o link (se vier) tem que ser o link assinado desse mesmo arquivo
+  -- no Storage do app - o robo baixa esse endereco e manda por e-mail (16/11/2026)
+  if exists (select 1 from jsonb_array_elements(v_anexos) a
+              where a->>'caminho' !~ ('^nf/' || p_id_obra::text || '/[A-Za-z0-9_-][A-Za-z0-9._-]{0,250}$')) then
+    raise exception 'Anexo inválido: envie o arquivo pela tela da NF desta obra.';
+  end if;
+  if exists (select 1 from jsonb_array_elements(v_anexos) a
+              where coalesce(a->>'url', '') <> ''
+                and not (starts_with(a->>'url', v_link || (a->>'caminho') || '?')
+                         and substr(a->>'url', length(v_link || (a->>'caminho') || '?') + 1) ~ '^token=[A-Za-z0-9._-]+$')) then
+    raise exception 'Anexo inválido: o link do arquivo não é do sistema. Envie o arquivo novamente pela tela da NF.';
   end if;
   v_primeiro := v_anexos->0;
 
@@ -2646,7 +2757,7 @@ CREATE OR REPLACE FUNCTION public.obra_valores_erp_solicitar(p_id_obra uuid, p_m
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare v_usuario record; v_obra record; v_id uuid;
+declare v_usuario record; v_obra record; v_atual record; v_id uuid;
 begin
   if not public.eh_admin() then raise exception 'Só administradores alteram margem, rentabilidade e faturamento no ERP.'; end if;
   select * into v_usuario from public.usuarios where id = public.usuario_atual_id();
@@ -2662,9 +2773,10 @@ begin
   end if;
   -- pedido anterior ainda nao gravado vale menos que este
   update public.obras_valores_erp set situacao = 'substituido' where id_obra = p_id_obra and situacao in ('pendente', 'erro');
-  -- igual ao que ja esta no ERP: nada a gravar
-  if round(p_margem_contribuicao, 2) = round(v_obra.margem_contribuicao_erp, 2) and round(p_rentabilidade, 2) = round(v_obra.rentabilidade_erp, 2)
-     and round(p_venda_sem_impostos, 2) = round(v_obra.venda_sem_impostos_erp, 2) then
+  -- igual ao que ja esta no ERP: nada a gravar (valores confidenciais ficam em obras_valores_restritos)
+  select * into v_atual from public.obras_valores_restritos where id_obra = p_id_obra;
+  if round(p_margem_contribuicao, 2) = round(v_atual.margem_contribuicao_erp, 2) and round(p_rentabilidade, 2) = round(v_atual.rentabilidade_erp, 2)
+     and round(p_venda_sem_impostos, 2) = round(v_atual.venda_sem_impostos_erp, 2) then
     return null;
   end if;
   insert into public.obras_valores_erp (id_obra, codigo_obra, margem_contribuicao, rentabilidade, venda_sem_impostos,
@@ -2839,7 +2951,8 @@ AS $function$
     from public.obra_rentabilidade_familias f
     left join public.obra_familia_alerta a on a.id_obra = f.id_obra and a.codigo_projeto = f.codigo_projeto
    where f.id_obra = p_id_obra
-     and public.perfil_atual() in ('admin', 'coordenador', 'engenheiro', 'assistente', 'logistica');
+     and (public.perfil_atual() in ('admin', 'coordenador', 'logistica')
+          or (public.perfil_atual() in ('engenheiro', 'assistente') and coalesce(public.pode_gerenciar_obra(p_id_obra), false)));
 $function$
 ;
 
@@ -3153,6 +3266,146 @@ BEGIN
      END IF;
   END LOOP;
 END;
+$function$
+;
+
+-- public.salvar_ata(p_ata jsonb)
+CREATE OR REPLACE FUNCTION public.salvar_ata(p_ata jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_id uuid := nullif(p_ata->>'id_reuniao', '')::uuid;
+  v_obra uuid := nullif(p_ata->>'id_obra', '')::uuid;
+  v_sessao uuid := nullif(p_ata->>'id_sessao', '')::uuid;
+  v_data timestamptz := nullif(p_ata->>'data_reuniao', '')::timestamptz;
+  v_resumo text := p_ata->>'resumo_geral';
+  v_ocorrencias jsonb := coalesce(p_ata->'ocorrencias', '[]'::jsonb);
+  v_tarefas jsonb := coalesce(p_ata->'tarefas', '[]'::jsonb);
+  v_usuario uuid := public.usuario_atual_id();
+  v_obra_gravada uuid;
+  v_ids_oc uuid[];
+  v_ids_tar uuid[];
+  v_novas uuid[];
+  v_nao_religadas int;
+begin
+  if v_usuario is null then
+    raise exception 'Sem permissão para gravar a ata.' using errcode = '42501';
+  end if;
+  if v_obra is null then
+    raise exception 'Selecione uma obra.' using errcode = '22023';
+  end if;
+  if not coalesce(public.pode_gerenciar_obra(v_obra), false) then
+    raise exception 'Sem permissão para gravar a ata desta obra.' using errcode = '42501';
+  end if;
+  if jsonb_typeof(v_ocorrencias) <> 'array' or jsonb_typeof(v_tarefas) <> 'array' then
+    raise exception 'Dados da ata inválidos.' using errcode = '22023';
+  end if;
+  if exists (select 1 from jsonb_array_elements(v_ocorrencias) e
+              where coalesce(btrim(e->>'descricao'), '') = '') then
+    raise exception 'Há uma ocorrência sem descrição.' using errcode = '22023';
+  end if;
+  if exists (select 1 from jsonb_array_elements(v_tarefas) e
+              where nullif(e->>'id', '') is null
+                and (coalesce(btrim(e->>'titulo'), '') = '' or nullif(e->>'id_responsavel', '') is null)) then
+    raise exception 'Há uma tarefa sem título ou sem responsável.' using errcode = '22023';
+  end if;
+
+  if v_id is null then
+    -- obra nova na ata
+    if v_sessao is null then
+      insert into public.reunioes_sessoes (data_reuniao, id_criador)
+      values (coalesce(v_data::date, current_date), v_usuario)
+      returning id into v_sessao;
+    else
+      -- trava a sessao: duas gravacoes da mesma obra ao mesmo tempo nao viram duas reunioes
+      perform 1 from public.reunioes_sessoes s where s.id = v_sessao for update;
+      if not found then
+        raise exception 'A reunião em andamento não existe mais. Atualize a página.' using errcode = 'P0002';
+      end if;
+      if exists (select 1 from public.reunioes r where r.id_sessao = v_sessao and r.id_obra = v_obra) then
+        raise exception 'Esta obra já foi registrada nesta ata. Para alterar, reabra a obra pela etiqueta dela.'
+          using errcode = '23505';
+      end if;
+    end if;
+    insert into public.reunioes (id_obra, id_sessao, data_reuniao, resumo_geral, id_criador)
+    values (v_obra, v_sessao, coalesce(v_data, now()), v_resumo, v_usuario)
+    returning id into v_id;
+  else
+    -- edicao de ata ja gravada: trava a reuniao (quem chegar depois espera e cai na conferencia da versao)
+    select r.id_obra, r.id_sessao into v_obra_gravada, v_sessao
+      from public.reunioes r where r.id = v_id for update;
+    if not found then
+      raise exception 'Esta obra não está mais na ata (pode ter sido reaberta em outra tela). O que você digitou continua na tela.'
+        using errcode = 'P0002';
+    end if;
+    if not coalesce(public.pode_gerenciar_obra(v_obra_gravada), false) then
+      raise exception 'Sem permissão para gravar a ata desta obra.' using errcode = '42501';
+    end if;
+    if v_obra_gravada is distinct from v_obra then
+      raise exception 'Não é possível trocar a obra de uma ata já gravada.' using errcode = '22023';
+    end if;
+    if (p_ata->>'versao') is distinct from public.versao_ata(v_id) then
+      raise exception 'Outra pessoa alterou esta obra na ata depois que você a abriu. Reabra a obra para ver a versão atual (o que você digitou continua na tela).'
+        using errcode = '40001';
+    end if;
+    update public.reunioes r
+       set resumo_geral = v_resumo, data_reuniao = coalesce(v_data, r.data_reuniao)
+     where r.id = v_id
+       and (r.resumo_geral is distinct from v_resumo or r.data_reuniao is distinct from coalesce(v_data, r.data_reuniao));
+  end if;
+
+  -- ocorrencias: as que continuam ficam (com status e resolucao), as tiradas saem, as novas entram
+  v_ids_oc := array(select (e->>'id')::uuid from jsonb_array_elements(v_ocorrencias) e
+                     where nullif(e->>'id', '') is not null);
+  delete from public.ocorrencias o where o.id_reuniao = v_id and not (o.id = any(v_ids_oc));
+  update public.ocorrencias o
+     set tipo = (e->>'tipo')::public.tipo_ocorrencia, descricao = e->>'descricao'
+    from jsonb_array_elements(v_ocorrencias) e
+   where nullif(e->>'id', '') is not null and o.id = (e->>'id')::uuid and o.id_reuniao = v_id
+     and (o.tipo::text is distinct from e->>'tipo' or o.descricao is distinct from e->>'descricao');
+  -- created_at pelo relogio (e nao o horario da transacao): guarda a ordem em que foram digitadas
+  insert into public.ocorrencias (id_reuniao, id_obra, tipo, descricao, created_at)
+  select v_id, v_obra, (x.e->>'tipo')::public.tipo_ocorrencia, x.e->>'descricao', clock_timestamp()
+    from jsonb_array_elements(v_ocorrencias) with ordinality as x(e, n)
+   where nullif(x.e->>'id', '') is null
+      or not exists (select 1 from public.ocorrencias o where o.id = (x.e->>'id')::uuid and o.id_reuniao = v_id)
+   order by x.n;
+
+  -- tarefas: nunca sao excluidas aqui (decisao 06/11). Tirada da ata = continua ativa, so desligada
+  -- (origem guardada em id_reuniao_reaberta); as que voltam sao religadas; as novas sao criadas.
+  v_ids_tar := array(select (e->>'id')::uuid from jsonb_array_elements(v_tarefas) e
+                      where nullif(e->>'id', '') is not null);
+  update public.tarefas t
+     set id_reuniao_origem = null, id_reuniao_reaberta = v_id
+   where t.id_reuniao_origem = v_id and not (t.id = any(v_ids_tar));
+  -- desligadas antes (ata reaberta pelo app antigo, ou tirada e recolocada): voltam para esta reuniao
+  update public.tarefas t
+     set id_reuniao_origem = v_id, id_reuniao_reaberta = null
+   where t.id = any(v_ids_tar) and t.id_obra = v_obra
+     and t.id_reuniao_origem is null and t.id_reuniao_reaberta is not null;
+  select count(*) into v_nao_religadas
+    from unnest(v_ids_tar) i
+   where not exists (select 1 from public.tarefas t where t.id = i and t.id_reuniao_origem = v_id);
+
+  with novas as (
+    insert into public.tarefas (id_obra, id_reuniao_origem, titulo, descricao, data_vencimento, id_responsavel,
+                                prioridade, origem, status, created_at)
+    select v_obra, v_id, x.e->>'titulo', nullif(x.e->>'descricao', ''),
+           nullif(x.e->>'data_vencimento', '')::timestamptz, (x.e->>'id_responsavel')::uuid,
+           coalesce(nullif(x.e->>'prioridade', ''), 'normal'), 'reuniao', 'pendente', clock_timestamp()
+      from jsonb_array_elements(v_tarefas) with ordinality as x(e, n)
+     where nullif(x.e->>'id', '') is null
+     order by x.n
+    returning id
+  )
+  select coalesce(array_agg(id), '{}'::uuid[]) into v_novas from novas;
+
+  return public.ata_json(v_id)
+    || jsonb_build_object('tarefas_novas', to_jsonb(v_novas), 'tarefas_nao_religadas', v_nao_religadas);
+end;
 $function$
 ;
 
@@ -3745,6 +3998,50 @@ begin
 end $function$
 ;
 
+-- public.trg_obras_espelha_valores_restritos()
+CREATE OR REPLACE FUNCTION public.trg_obras_espelha_valores_restritos()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if tg_op = 'INSERT' and num_nonnulls(new.margem_prevista_erp, new.venda_sem_impostos_erp,
+                                        new.margem_contribuicao_erp, new.rentabilidade_erp) = 0 then
+    return null;
+  end if;
+  insert into public.obras_valores_restritos (id_obra, margem_prevista_erp, venda_sem_impostos_erp, margem_contribuicao_erp, rentabilidade_erp)
+  values (new.id, new.margem_prevista_erp, new.venda_sem_impostos_erp, new.margem_contribuicao_erp, new.rentabilidade_erp)
+  on conflict (id_obra) do update
+     set margem_prevista_erp = excluded.margem_prevista_erp,
+         venda_sem_impostos_erp = excluded.venda_sem_impostos_erp,
+         margem_contribuicao_erp = excluded.margem_contribuicao_erp,
+         rentabilidade_erp = excluded.rentabilidade_erp
+   where (obras_valores_restritos.margem_prevista_erp, obras_valores_restritos.venda_sem_impostos_erp,
+          obras_valores_restritos.margem_contribuicao_erp, obras_valores_restritos.rentabilidade_erp)
+         is distinct from
+         (excluded.margem_prevista_erp, excluded.venda_sem_impostos_erp, excluded.margem_contribuicao_erp, excluded.rentabilidade_erp);
+  return null;
+end
+$function$
+;
+
+-- public.trg_obras_protege_codigo()
+CREATE OR REPLACE FUNCTION public.trg_obras_protege_codigo()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+begin
+  if new.codigo_externo is distinct from old.codigo_externo
+     and coalesce(auth.role(), '') in ('authenticated', 'anon')
+     and not public.eh_admin_ou_coordenador() then
+    raise exception 'Somente administradores ou coordenadores podem alterar o código da obra no ERP.';
+  end if;
+  return new;
+end $function$
+;
+
 -- public.trg_sf_romaneio_avisos()
 CREATE OR REPLACE FUNCTION public.trg_sf_romaneio_avisos()
  RETURNS trigger
@@ -4189,6 +4486,9 @@ begin
     new.cadastra_materiais := false;
     new.revisa_fiscal_material := false;
     new.recebe_copia_material := false;
+    new.login_erp := null;
+    new.recebe_nf_terceiros := false;
+    new.recebe_alerta_sistema := false;
     new.ativo := false;  -- 06/11: aguarda o admin liberar
     return new;
   end if;
@@ -4200,6 +4500,9 @@ begin
     or new.cadastra_materiais is distinct from old.cadastra_materiais
     or new.revisa_fiscal_material is distinct from old.revisa_fiscal_material
     or new.recebe_copia_material is distinct from old.recebe_copia_material
+    or new.login_erp is distinct from old.login_erp
+    or new.recebe_nf_terceiros is distinct from old.recebe_nf_terceiros
+    or new.recebe_alerta_sistema is distinct from old.recebe_alerta_sistema
     or new.perfil is distinct from old.perfil
     or new.ativo is distinct from old.ativo) then
     raise exception 'Somente administradores podem alterar perfil, situação ou permissões.';
@@ -4443,4 +4746,23 @@ begin
   end loop;
   return n;
 end $function$
+;
+
+-- public.versao_ata(p_id_reuniao uuid)
+CREATE OR REPLACE FUNCTION public.versao_ata(p_id_reuniao uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select md5(
+    coalesce(r.resumo_geral, '') || '|' || coalesce(extract(epoch from r.data_reuniao)::text, '') || '|'
+    || coalesce(r.id_obra::text, '') || '|'
+    || coalesce((select string_agg(o.id::text || ':' || o.tipo::text || ':' || o.descricao, '|' order by o.id)
+                   from public.ocorrencias o where o.id_reuniao = r.id), '') || '|'
+    || coalesce((select string_agg(t.id::text, ',' order by t.id)
+                   from public.tarefas t where t.id_reuniao_origem = r.id), ''))
+  from public.reunioes r
+  where r.id = p_id_reuniao;
+$function$
 ;

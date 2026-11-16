@@ -22,8 +22,9 @@ interface Props {
 }
 
 const PRIORIDADE: Record<string, { rotulo: string; classe: string }> = {
-  alta: { rotulo: "Alta", classe: "bg-red-50 text-red-700 border-red-200" },
-  urgente: { rotulo: "Urgente", classe: "bg-red-100 text-red-800 border-red-300" },
+  // o banco aceita baixa / normal / alta / critica; "normal" fica sem selo. Cores iguais as do detalhe da tarefa (App.tsx)
+  critica: { rotulo: "Crítica", classe: "bg-red-100 text-red-700 border-red-300 font-bold" },
+  alta: { rotulo: "Alta", classe: "bg-amber-100 text-amber-700 border-amber-200" },
   baixa: { rotulo: "Baixa", classe: "bg-slate-50 text-slate-600 border-slate-200" },
 };
 

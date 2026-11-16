@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowRight, CheckCircle2, ChevronRight, Loader2, Pencil, Plus, Search, Trash2, Truck, XCircle } from "lucide-react";
 import { supabase } from "./supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda } from "./utils";
@@ -8,6 +8,8 @@ import { ErroCarga, useDialogos } from "./Dialogos";
 import { Modal } from "./Modal";
 import { BotaoExportar, numCsv, useFiltroSalvo } from "./modulos_lista";
 import type { Usuario } from "./types";
+import { lerNumero } from "./numero";
+import { CampoNumero } from "./CampoNumero";
 
 // Fretes (2026-10-20): solicitacao de frete com controle da verba da familia <obra>.510.
 // Quem pede: logistica, gestor e assistente; a logistica cota.
@@ -60,6 +62,7 @@ export interface Frete {
   nr_ad: number | null;
   valor_realizado: number | null;
   created_at: string;
+  updated_at: string; // versao para a trava do frete_salvar (p_versao)
 }
 
 // item da carga: medidas e peso de CADA volume; quantidade = volumes iguais
@@ -210,9 +213,11 @@ const EVENTO: Record<string, string> = {
 };
 
 const hojeISO = () => new Date().toLocaleDateString("sv-SE");
-const num = (v: string) => parseFloat(v.replace(/\./g, "").replace(",", ".")) || 0;
+// leitura unica do app (src/numero.ts); aqui vazio/invalido vale 0, como antes (o salvar confere os invalidos)
+const num = (v: string) => lerNumero(v) || 0;
 // medidas: "1,20" e "1.20" valem 1,2 (ponto aqui e decimal, nao milhar)
-const numMedida = (v: string) => (v.includes(",") ? num(v) : parseFloat(v) || 0);
+const numMedida = (v: string) => lerNumero(v, { medida: true }) || 0;
+const invalido = (v: string, medida = false) => v.trim() !== "" && Number.isNaN(lerNumero(v, { medida }));
 const txtPeso = (v: number) => txtNum(v, v % 1 ? 2 : 0);
 
 type LinhaCarga = { descricao: string; quantidade: string; peso: string; altura: string; largura: string; comprimento: string };
@@ -876,15 +881,25 @@ function ModalFrete({
     });
   }, [idObra, frete?.id]);
 
-  // distancia estimada quando a rota muda
+  // distancia estimada quando a rota muda. Abrindo um frete com km gravado, a rota inicial so mostra a estimativa:
+  // o km salvo so e trocado quando a pessoa muda a rota (antes a estimativa sobrescrevia o km ao abrir a edicao).
+  const rotaComKmSalvo = useRef(frete?.km != null ? `${frete.origem_ibge}|${frete.destino_ibge}` : "");
   useEffect(() => {
     if (!origem.ibge || !destino.ibge) return setKmEstimado(null);
+    const rota = `${origem.ibge}|${destino.ibge}`;
+    const trocarKm = rota !== rotaComKmSalvo.current;
+    if (trocarKm) rotaComKmSalvo.current = "";
+    let atual = true; // resposta de uma rota antiga (fora de ordem) e ignorada
     supabase.rpc("frete_distancia", { p_origem: origem.ibge, p_destino: destino.ibge }).then(({ data: d, error }) => {
+      if (!atual) return;
       if (error) aviso.erro("Não foi possível estimar a distância da rota: " + msgErro(error));
       const v = d === null ? null : Number(d);
       setKmEstimado(v);
-      if (v !== null) setKm(txtNum(v, 0));
+      if (v !== null && trocarKm) setKm(txtNum(v, 0));
     });
+    return () => {
+      atual = false;
+    };
   }, [origem.ibge, destino.ibge]);
 
   // transportadoras sugeridas para a rota + veiculo
@@ -917,6 +932,13 @@ function ModalFrete({
     if (!idObra) return setErro("Escolha a obra.");
     if (!data) return setErro("Informe a data do frete.");
     if (!origem.ibge || !destino.ibge) return setErro("Escolha a origem e o destino do frete.");
+    // numero que nao deu para entender nao vira 0 em silencio
+    if (invalido(km)) return setErro("Distância (km) inválida: use só números (ex.: 530).");
+    if (invalido(valorKm)) return setErro("R$/km inválido: use só números (ex.: 4,50).");
+    if (invalido(valor)) return setErro("Valor cotado inválido: use só números (ex.: 1.250,00).");
+    for (const [n, l] of linhas.filter((l) => !linhaVazia(l)).entries())
+      if (invalido(l.quantidade) || invalido(l.peso) || [l.altura, l.largura, l.comprimento].some((v) => invalido(v, true)))
+        return setErro(`Item ${n + 1} da carga: quantidade, peso ou medida inválida (use só números, ex.: 1,20).`);
     for (const [n, i] of itensCarga.entries()) {
       const d = [i.altura_m, i.largura_m, i.comprimento_m];
       if (d.some((x) => x !== null) && d.some((x) => x === null))
@@ -945,7 +967,9 @@ function ModalFrete({
       p_transportadora_codigo: transp ? Number(transp) : null,
       p_observacao: obs,
       p_carga: itensCarga,
-    });
+      // trava otimista: se outra pessoa gravou o frete depois que esta janela abriu, o banco recusa
+      p_versao: frete?.updated_at ?? null,
+    } as any);
     setSalvando(false);
     if (error) return setErro(msgErro(error));
     const quem = obra ? ` da obra ${obra.codigo_externo}` : "";
@@ -1051,7 +1075,7 @@ function ModalFrete({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 border rounded-lg p-3">
             <div>
               <Rotulo texto="Distância (km)" />
-              <input value={km} onChange={(e) => setKm(e.target.value)} inputMode="decimal" className="border rounded-lg px-2 py-2 w-full text-sm bg-white" />
+              <CampoNumero valor={km} onChange={setKm} casas={0} casasMax={1} aria-label="Distância (km)" className="border rounded-lg px-2 py-2 w-full text-sm bg-white" />
               <p className="text-xs text-slate-500 mt-1">
                 {kmEstimado != null ? `Estimada: ${txtNum(kmEstimado, 0)} km.` : "Escolha origem e destino."}
                 {ehLogistica && " Corrigindo, vale para as próximas vezes."}
@@ -1070,20 +1094,20 @@ function ModalFrete({
             </div>
             <div>
               <Rotulo texto="R$/km" />
-              <input
-                value={valorKm}
-                onChange={(e) => {
-                  setValorKm(e.target.value);
-                  const v = num(e.target.value) * (kmNum || 0);
+              <CampoNumero
+                valor={valorKm}
+                onChange={(t) => {
+                  setValorKm(t);
+                  const v = num(t) * (kmNum || 0);
                   if (v > 0) setValor(txtNum(v));
                 }}
-                inputMode="decimal"
+                casasMax={2}
                 className="border rounded-lg px-2 py-2 w-full text-sm bg-white"
               />
             </div>
             <div>
               <Rotulo texto={ehLogistica ? "Valor cotado (R$) *" : "Valor cotado (R$)"} />
-              <input value={valor} onChange={(e) => setValor(e.target.value)} inputMode="decimal" placeholder="0,00" className="border rounded-lg px-2 py-2 w-full text-sm bg-white font-semibold" />
+              <CampoNumero valor={valor} onChange={setValor} casasMax={2} placeholder="0,00" className="border rounded-lg px-2 py-2 w-full text-sm bg-white font-semibold" />
             </div>
           </div>
 
@@ -1176,17 +1200,30 @@ function CargaLista({ linhas, onChange }: { linhas: LinhaCarga[]; onChange: (l: 
   const itens = linhas.filter((l) => !linhaVazia(l)).map(paraItem);
   const totais = totaisCarga(itens);
   const campo = "border rounded px-1.5 py-1.5 w-full text-sm tabular-nums";
-  const entrada = (i: number, c: keyof LinhaCarga, rotulo: string, placeholder: string, modo: "decimal" | "numeric" | "text" = "decimal") => (
-    <input
-      value={linhas[i][c]}
-      onChange={(e) => mudar(i, c, e.target.value)}
-      inputMode={modo}
-      placeholder={placeholder}
-      aria-label={`${rotulo} do item ${i + 1}`}
-      className={campo}
-      autoComplete="off"
-    />
-  );
+  const entrada = (i: number, c: keyof LinhaCarga, rotulo: string, placeholder: string, modo: "decimal" | "numeric" | "text" = "decimal") =>
+    modo === "text" ? (
+      <input
+        value={linhas[i][c]}
+        onChange={(e) => mudar(i, c, e.target.value)}
+        inputMode={modo}
+        placeholder={placeholder}
+        aria-label={`${rotulo} do item ${i + 1}`}
+        className={campo}
+        autoComplete="off"
+      />
+    ) : (
+      // ao sair, mostra como foi lido: quantidade inteira, peso com regra geral, medidas com ponto decimal
+      <CampoNumero
+        valor={linhas[i][c]}
+        onChange={(t) => mudar(i, c, t)}
+        casas={c === "quantidade" ? 0 : 2}
+        casasMax={c === "quantidade" ? 0 : c === "peso" ? 2 : 3}
+        medida={c === "altura" || c === "largura" || c === "comprimento"}
+        placeholder={placeholder}
+        aria-label={`${rotulo} do item ${i + 1}`}
+        className={campo}
+      />
+    );
   return (
     <div className="border rounded-lg">
       <p className="px-3 py-2 text-xs font-bold uppercase text-slate-500 border-b">Carga</p>
@@ -1635,6 +1672,36 @@ function CadastroTransportadoras({ transportadorasErp, onMudou }: { transportado
   );
 }
 
+// valor de tarifa que grava ao sair do campo: grava exatamente o numero que o campo passa a mostrar.
+// Vazio vale 0 (como antes); texto que nao e numero nao grava e volta o valor gravado.
+function CampoTarifa({
+  inicial,
+  rotulo,
+  className,
+  onConfirmar,
+}: {
+  inicial: number | null;
+  rotulo: string;
+  className: string;
+  onConfirmar: (v: number) => boolean | void;
+}) {
+  const [texto, setTexto] = useState(txtNum(inicial));
+  return (
+    <CampoNumero
+      valor={texto}
+      onChange={setTexto}
+      casasMax={2} // coluna numeric(.., 2): mostra o que o banco guarda
+      aria-label={rotulo}
+      className={className}
+      onConfirmar={(v) => {
+        const n = Number.isNaN(v) && !texto.trim() ? 0 : v;
+        if (Number.isNaN(n) || onConfirmar(n) === false) return setTexto(txtNum(inicial));
+        if (!texto.trim()) setTexto(txtNum(0));
+      }}
+    />
+  );
+}
+
 function TarifasTransportadora({
   codigo,
   tarifas,
@@ -1659,24 +1726,21 @@ function TarifasTransportadora({
         {tarifas.map((t) => (
           <li key={t.id} className="px-3 py-2 text-sm flex items-center gap-2">
             <span className="flex-1 font-semibold">{t.tipo_veiculo}</span>
-            <input
-              defaultValue={txtNum(t.valor_km)}
-              aria-label={`R$/km ${t.tipo_veiculo}`}
-              inputMode="decimal"
+            <CampoTarifa
+              inicial={t.valor_km}
+              rotulo={`R$/km ${t.tipo_veiculo}`}
               className="border rounded px-2 py-1 w-20 text-right text-sm tabular-nums"
-              onBlur={(e) => {
-                const v = num(e.target.value);
-                if (v > 0 && v !== Number(t.valor_km)) gravar(supabase.from("fretes_transp_tarifas").update({ valor_km: v, atualizado_em: new Date().toISOString() }).eq("id", t.id));
+              onConfirmar={(v) => {
+                if (!(v > 0)) return false; // R$/km zerado nao grava: volta o valor gravado
+                if (v !== Number(t.valor_km)) gravar(supabase.from("fretes_transp_tarifas").update({ valor_km: v, atualizado_em: new Date().toISOString() }).eq("id", t.id));
               }}
             />
             <span className="text-xs text-slate-500">R$/km · mín.</span>
-            <input
-              defaultValue={txtNum(t.valor_minimo)}
-              aria-label={`Valor mínimo ${t.tipo_veiculo}`}
-              inputMode="decimal"
+            <CampoTarifa
+              inicial={t.valor_minimo}
+              rotulo={`Valor mínimo ${t.tipo_veiculo}`}
               className="border rounded px-2 py-1 w-24 text-right text-sm tabular-nums"
-              onBlur={(e) => {
-                const v = num(e.target.value);
+              onConfirmar={(v) => {
                 if (v !== Number(t.valor_minimo)) gravar(supabase.from("fretes_transp_tarifas").update({ valor_minimo: v, atualizado_em: new Date().toISOString() }).eq("id", t.id));
               }}
             />
@@ -1710,11 +1774,11 @@ function TarifasTransportadora({
               </option>
             ))}
           </select>
-          <input value={rsKm} onChange={(e) => setRsKm(e.target.value)} placeholder="R$/km" aria-label="R$ por km" inputMode="decimal" className="border rounded-lg px-2 py-1.5 text-sm w-20" />
-          <input value={minimo} onChange={(e) => setMinimo(e.target.value)} placeholder="Mínimo R$" aria-label="Valor mínimo" inputMode="decimal" className="border rounded-lg px-2 py-1.5 text-sm w-28" />
+          <CampoNumero valor={rsKm} onChange={setRsKm} casasMax={2} placeholder="R$/km" aria-label="R$ por km" className="border rounded-lg px-2 py-1.5 text-sm w-20" />
+          <CampoNumero valor={minimo} onChange={setMinimo} casasMax={2} placeholder="Mínimo R$" aria-label="Valor mínimo" className="border rounded-lg px-2 py-1.5 text-sm w-28" />
           <button
             type="button"
-            disabled={!veiculo || num(rsKm) <= 0}
+            disabled={!veiculo || num(rsKm) <= 0 || invalido(minimo)}
             onClick={() => {
               gravar(
                 supabase.from("fretes_transp_tarifas").insert({ transportadora_codigo: codigo, tipo_veiculo: veiculo, valor_km: num(rsKm), valor_minimo: num(minimo) }),

@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { idDoCampo } from "./navegacao";
 import { num } from "./numeros";
+import { lerNumero as lerNumeroApp } from "../numero";
 import { ler } from "./processo";
 import type { Processo } from "./tipos";
 
@@ -115,11 +116,13 @@ export function Botao({
   );
 }
 
-/** "1,5" ou "1.234,5" ou "1234.5" -> numero (virgula = decimal; sem virgula, o ponto e decimal), como no programa local. */
-export function lerNumero(texto: string): number {
-  let s = texto.trim();
-  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
-  const x = parseFloat(s);
+/**
+ * "1,5" ou "1.234,5" ou "1234.5" -> numero (virgula = decimal; sem virgula, ponto unico e decimal), como no programa
+ * local. Usa a leitura unica do app (src/numero.ts) em modo medida; `dinheiro` usa a regra geral ("15.000" = 15 mil).
+ * Vazio/invalido -> 0 (assinatura mantida: PassoPacking usa).
+ */
+export function lerNumero(texto: string, dinheiro = false): number {
+  const x = lerNumeroApp(texto, { medida: !dinheiro });
   return Number.isNaN(x) ? 0 : x;
 }
 
@@ -175,7 +178,8 @@ export function CampoNumero({
       }}
       onChange={(e) => {
         setTexto(e.target.value);
-        onChange(lerNumero(e.target.value));
+        // casas = 2: valor em dinheiro (preco, frete, seguro) -> regra geral; pesos, quantidades e cambio: ponto e decimal
+        onChange(lerNumero(e.target.value, casas === 2));
       }}
       onBlur={() => setFoco(false)}
       className={`${classe} text-right tabular-nums ${estimado ? classeEstimado : ""}`}

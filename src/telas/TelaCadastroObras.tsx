@@ -23,6 +23,23 @@ interface Props {
   onAviso: (mensagem: string, tipo?: string) => void;
 }
 
+// Campos de obras que este formulario edita (status nao: finalizar/cancelar/reabrir tem tela propria)
+const CAMPOS_FORMULARIO =
+  "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, exportacao";
+
+const dadosDoFormulario = (o: any, idResponsavel: any) => ({
+  codigo_externo: o.codigo_externo,
+  nome: o.nome,
+  descricao: o.descricao || null,
+  fase_atual: o.fase_atual || "processo_inicial",
+  observacoes: o.observacoes || null,
+  data_inicio: o.data_inicio,
+  data_previsao_fim: o.data_previsao_fim,
+  id_responsavel: idResponsavel,
+  valor_produto: o.valor_produto || 0,
+  valor_servico: o.valor_servico || 0,
+});
+
 type ValoresErp = { contribuicao: string; rentabilidade: string; venda: string };
 const VALORES_ERP_VAZIOS: ValoresErp = { contribuicao: "", rentabilidade: "", venda: "" };
 
@@ -122,6 +139,8 @@ export default function TelaCadastroObras({
     valor_servico: "",
     observacoes: "",
   });
+  // como a obra estava no banco ao abrir a edicao: o update manda so o que mudou em relacao a isto
+  const [obraOriginal, setObraOriginal] = useState<any>(null);
   const [erroObra, setErroObra] = useState<string>("");
   const [obrasCadastroLista, setObrasCadastroLista] = useState<Obra[]>([]);
   const [filtroStatusCadastroObras, setFiltroStatusCadastroObras] = useState<
@@ -142,11 +161,13 @@ export default function TelaCadastroObras({
       return;
     }
     const [{ data: o }, { data: pedidos }] = await Promise.all([
-      supabase
-        .from("obras")
+      // valores confidenciais ficam em obras_valores_restritos (mesma regra de leitura da rentabilidade);
+      // cast: tabela nova ainda fora do database.types.ts gerado
+      (supabase as any)
+        .from("obras_valores_restritos")
         .select("margem_contribuicao_erp, rentabilidade_erp, venda_sem_impostos_erp")
-        .eq("id", idObra)
-        .single(),
+        .eq("id_obra", idObra)
+        .maybeSingle() as Promise<{ data: { margem_contribuicao_erp: any; rentabilidade_erp: any; venda_sem_impostos_erp: any } | null }>,
       supabase
         .from("obras_valores_erp")
         .select("situacao, erro, created_at, gravado_em, nome_solicitante, margem_contribuicao, rentabilidade, venda_sem_impostos")
@@ -234,54 +255,68 @@ export default function TelaCadastroObras({
     }
     setCarregando(true);
     try {
-      const dadosObra = {
-        codigo_externo: novaObra.codigo_externo,
-        nome: novaObra.nome,
-        descricao: novaObra.descricao || null,
-        fase_atual: novaObra.fase_atual || "processo_inicial",
-        observacoes: novaObra.observacoes || null,
-        data_inicio: novaObra.data_inicio,
-        data_previsao_fim: novaObra.data_previsao_fim,
-        id_responsavel: responsavelObra,
-        valor_produto: novaObra.valor_produto || 0,
-        valor_servico: novaObra.valor_servico || 0,
-        status: "em_andamento",
-      };
+      const dadosObra = dadosDoFormulario(novaObra, responsavelObra);
 
       let idObraSalva: string | null = novaObra.id;
       if (novaObra.id) {
-        const { error } = await supabase
-          .from("obras")
-          .update(dadosObra)
-          .eq("id", novaObra.id);
-        if (error) throw error;
-        onAviso("Obra atualizada!");
+        // so os campos que a pessoa mudou: sem status (editar obra finalizada/cancelada nao pode reabri-la) e sem
+        // regravar o que outra tela mudou depois que o formulario foi aberto (ex.: fase avancada no painel)
+        const original = obraOriginal ? dadosDoFormulario(obraOriginal, obraOriginal.id_responsavel) : null;
+        const mudancas = Object.fromEntries(
+          Object.entries(dadosObra).filter(
+            ([k, v]) => !original || String(v ?? "") !== String((original as any)[k] ?? ""),
+          ),
+        );
+        if (Object.keys(mudancas).length > 0) {
+          const { error } = await supabase
+            .from("obras")
+            .update(mudancas)
+            .eq("id", novaObra.id);
+          if (error) throw error;
+          onAviso("Obra atualizada!");
+        } else if (!valoresErpMudaram) {
+          onAviso("Nenhuma alteração para salvar.", "info");
+        }
       } else {
         const { data: obraCriada, error } = await supabase
           .from("obras")
-          .insert([dadosObra])
+          .insert([{ ...dadosObra, status: "em_andamento" }])
           .select()
           .single();
         if (error) throw error;
         idObraSalva = obraCriada?.id || null;
 
+        const faltou: string[] = [];
         if (obraCriada?.id) {
           const { error: erroCronograma } = await supabase.rpc(
             "criar_cronograma_padrao_obra",
             { p_id_obra: obraCriada.id },
           );
-          if (erroCronograma)
+          if (erroCronograma) {
             console.warn("Cronograma padrão não criado:", erroCronograma);
+            faltou.push("o cronograma padrão");
+          }
 
           const { error: erroDocumentos } = await supabase.rpc(
             "criar_documentos_padrao_obra",
             { p_id_obra: obraCriada.id },
           );
-          if (erroDocumentos)
+          if (erroDocumentos) {
             console.warn("Documentos padrão não criados:", erroDocumentos);
+            faltou.push("os documentos padrão");
+          }
         }
 
-        onAviso("Obra salva com cronograma e documentos padrão!");
+        if (faltou.length > 0) {
+          // a obra existe; so o que falhou precisa ser refeito - o aviso diz a verdade em vez de "salva com cronograma"
+          onAviso(
+            `Obra salva, mas ${faltou.join(" e ")} não ${faltou.length > 1 ? "foram criados" : "foi criado"}. ` +
+              "Abra o painel da obra para conferir e, se faltar, avise o administrador do sistema.",
+            "erro",
+          );
+        } else {
+          onAviso("Obra salva com cronograma e documentos padrão!");
+        }
       }
 
       if (valoresErpMudaram && idObraSalva) {
@@ -309,6 +344,7 @@ export default function TelaCadastroObras({
       setValoresErp(VALORES_ERP_VAZIOS);
       setValoresErpOriginais(VALORES_ERP_VAZIOS);
       setUltimoPedidoErp(null);
+      setObraOriginal(null);
       setNovaObra({
         id: null,
         codigo_externo: "",
@@ -325,14 +361,23 @@ export default function TelaCadastroObras({
       onObrasAlteradas();
       buscarObrasCadastro();
     } catch (error: any) {
-      setErroObra("Erro: " + error.message);
+      // codigo repetido chega como erro tecnico do banco (unique de codigo_externo): traduz
+      const msg = String(error?.message || "");
+      setErroObra(
+        error?.code === "23505" || msg.includes("duplicate key value")
+          ? `Já existe uma obra com o código ${novaObra.codigo_externo}. Confira o código ou edite a obra existente.`
+          : "Erro: " + msg,
+      );
     } finally {
       setCarregando(false);
     }
   }
 
-  const editarObra = (obra: any) => {
-    setNovaObra({
+  const editarObra = async (obraDaLista: any) => {
+    // rele do banco: a copia da lista (ou a que veio do painel, as vezes sem descricao/observacoes) pode estar velha
+    const { data: atual } = await supabase.from("obras").select(CAMPOS_FORMULARIO).eq("id", obraDaLista.id).maybeSingle();
+    const obra: any = atual || obraDaLista;
+    const noFormulario = {
       id: obra.id,
       codigo_externo: obra.codigo_externo || "",
       nome: obra.nome || "",
@@ -345,7 +390,11 @@ export default function TelaCadastroObras({
       valor_servico: obra.valor_servico ?? "",
       observacoes: obra.observacoes || "",
       exportacao: Boolean(obra.exportacao),
-    });
+    };
+    setNovaObra(noFormulario);
+    // sem a releitura nao da para saber o que a pessoa mudou: entao manda todos os campos do formulario (sem status)
+    setObraOriginal(atual ? noFormulario : null);
+    setErroObra("");
     carregarValoresErp(obra.id);
     setTimeout(() => {
       document
@@ -385,6 +434,7 @@ export default function TelaCadastroObras({
     setValoresErp(VALORES_ERP_VAZIOS);
     setValoresErpOriginais(VALORES_ERP_VAZIOS);
     setUltimoPedidoErp(null);
+    setObraOriginal(null);
     setErroObra("");
   };
 

@@ -8,6 +8,8 @@ import { BotaoExportar, SeloDiasParados, diasUteisDesde, numCsv, useFiltroSalvo 
 import { supabase } from "./supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda, normalizarNomeArquivo } from "./utils";
 import type { Usuario } from "./types";
+import { lerNumero } from "./numero";
+import { CampoNumero } from "./CampoNumero";
 import {
   FORMAS_PAGAMENTO,
   TIPOS_CHAVE_PIX,
@@ -630,7 +632,8 @@ function ModalEncaminharNf({
     ...mantidos.map((a) => ({ chave: a.caminho, nome: a.nome, tamanho: a.tamanho, remover: () => (setSujo(true), setMantidos((l) => l.filter((x) => x !== a))) })),
     ...novos.map((f, i) => ({ chave: `novo-${i}-${f.name}`, nome: f.name, tamanho: f.size, remover: () => (setSujo(true), setNovos((l) => l.filter((x) => x !== f))) })),
   ];
-  const valorNum = parseFloat(valor.replace(/\./g, "").replace(",", ".")) || 0;
+  // leitura unica (src/numero.ts): "850.00" e 850, nao 85.000; invalido vale 0 e cai no "Informe o valor"
+  const valorNum = lerNumero(valor) || 0;
   const acimaDoSaldo = valorNum > pedido.saldo + 0.005;
   const hoje = hojeISO();
   const vencePerto = Boolean(vencimento) && vencimento <= new Date(Date.now() + 3 * 86400000).toLocaleDateString("sv-SE");
@@ -934,16 +937,20 @@ const Campo = ({
 }) => (
   <div>
     <label className="block text-xs font-semibold mb-1">{rotulo}</label>
-    <input
-      type={tipo}
-      value={valor}
-      min={min}
-      max={max}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      inputMode={decimal ? "decimal" : undefined}
-      className="border rounded-lg px-2 py-2 w-full text-sm"
-    />
+    {decimal ? (
+      // valor em reais: ao sair do campo mostra como foi lido ("850.00" -> "850,00")
+      <CampoNumero valor={valor} onChange={onChange} casasMax={2} placeholder={placeholder} className="border rounded-lg px-2 py-2 w-full text-sm" />
+    ) : (
+      <input
+        type={tipo}
+        value={valor}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="border rounded-lg px-2 py-2 w-full text-sm"
+      />
+    )}
   </div>
 );
 

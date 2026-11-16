@@ -22,6 +22,8 @@ import { useAviso } from "./aviso";
 import { ErroCarga, useDialogos } from "./Dialogos";
 import { Modal } from "./Modal";
 import { BotaoExportar, SeloDiasParados, diasUteisDesde, maisRecente, numCsv, useFiltroSalvo } from "./modulos_lista";
+import { lerNumero } from "./numero";
+import { CampoNumero } from "./CampoNumero";
 
 // Familia da obra como vem de obra_rentabilidade_familias (saldo de previsoes em aberto sincronizado do ERP)
 export interface FamiliaPrevisao {
@@ -41,10 +43,9 @@ interface ObraBasica {
 
 // ---------------------------------------------------------------- utilitarios
 
+// leitura unica do app (src/numero.ts): "15.000" e 15 mil (antes virava 15,00); vazio/invalido -> NaN
 const parseValorBR = (texto: string): number => {
-  let t = (texto || "").replace(/R\$|\s/g, "");
-  if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
-  const v = Number(t);
+  const v = lerNumero(texto);
   return isNaN(v) ? NaN : Math.round(v * 100) / 100;
 };
 
@@ -335,27 +336,30 @@ export function ModalSolicitarPrevisao({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Disponível (opcional)</label>
-                <input
-                  value={disponivel}
-                  onChange={(e) => setDisponivel(e.target.value)}
+                <CampoNumero
+                  valor={disponivel}
+                  onChange={setDisponivel}
+                  casasMax={2}
                   placeholder="0,00"
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Necessário (opcional)</label>
-                <input
-                  value={necessario}
-                  onChange={(e) => setNecessario(e.target.value)}
+                <CampoNumero
+                  valor={necessario}
+                  onChange={setNecessario}
+                  casasMax={2}
                   placeholder="0,00"
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Valor do aumento *</label>
-                <input
-                  value={valorAumento}
-                  onChange={(e) => setValorAumento(e.target.value)}
+                <CampoNumero
+                  valor={valorAumento}
+                  onChange={setValorAumento}
+                  casasMax={2}
                   placeholder="0,00"
                   className="w-full border rounded-lg px-3 py-2 text-sm font-semibold"
                 />
@@ -387,11 +391,10 @@ export function ModalSolicitarPrevisao({
                           {listaOrigens.filter((f) => f.codigo_projeto !== destino).map(opcaoFamilia)}
                         </select>
                       </div>
-                      <input
-                        value={o.valor}
-                        onChange={(e) =>
-                          setOrigens((prev) => prev.map((x, k) => (k === i ? { ...x, valor: e.target.value } : x)))
-                        }
+                      <CampoNumero
+                        valor={o.valor}
+                        onChange={(t) => setOrigens((prev) => prev.map((x, k) => (k === i ? { ...x, valor: t } : x)))}
+                        casasMax={2}
                         placeholder="Valor"
                         disabled={semSaldo}
                         className={`w-32 border rounded-lg px-3 py-2 text-sm disabled:bg-slate-100 ${problema && !semSaldo ? "border-red-400 bg-red-50 text-red-700" : ""}`}

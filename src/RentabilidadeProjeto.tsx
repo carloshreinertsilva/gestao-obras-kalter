@@ -90,20 +90,21 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
       direcao: atual.coluna === coluna && atual.direcao === "asc" ? "desc" : "asc",
     }));
 
-  // Margem prevista do orcamento e venda sem impostos, vindas do ERP pelo robo (obras.margem_prevista_erp /
-  // venda_sem_impostos_erp). E a mesma base do BI "Analise Margem e Rentabilidade" e da calculadora de
-  // orcamento: % = margem / venda sem impostos (ex.: obra 2182 = 32,1%).
+  // Margem prevista do orcamento e venda sem impostos, vindas do ERP pelo robo (obras_valores_restritos: tabela
+  // com a mesma regra de leitura da rentabilidade; em obras qualquer usuario ativo leria). E a mesma base do BI
+  // "Analise Margem e Rentabilidade" e da calculadora de orcamento: % = margem / venda sem impostos (ex.: obra 2182 = 32,1%).
   const [margemErp, setMargemErp] = useState<{ margem: number; vendaSemImpostos: number } | null>(null);
   useEffect(() => {
     let ativo = true;
     setMargemErp(null);
     if (!obra?.id) return;
-    supabase
-      .from("obras")
+    // cast: tabela nova ainda fora do database.types.ts gerado
+    (supabase as any)
+      .from("obras_valores_restritos")
       .select("margem_prevista_erp, venda_sem_impostos_erp")
-      .eq("id", obra.id)
+      .eq("id_obra", obra.id)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data }: { data: { margem_prevista_erp: number | null; venda_sem_impostos_erp: number | null } | null }) => {
         if (!ativo || !data) return;
         const margem = Number(data.margem_prevista_erp || 0);
         const vendaSemImpostos = Number(data.venda_sem_impostos_erp || 0);
