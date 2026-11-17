@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowRight, CheckCircle2, ChevronRight, Loader2, Pencil, Plus, Search, Trash2, Truck, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, ChevronRight, ClipboardPaste, Copy, Loader2, Pencil, Plus, Search, Trash2, Truck, XCircle } from "lucide-react";
 import { supabase } from "./supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda } from "./utils";
 import { linhaClicavel } from "./teclado";
@@ -10,6 +10,8 @@ import { BotaoExportar, numCsv, useFiltroSalvo } from "./modulos_lista";
 import type { Usuario } from "./types";
 import { lerNumero } from "./numero";
 import { CampoNumero } from "./CampoNumero";
+import { mensagemErro } from "./erros";
+import { dadosDaCopia, fretesParaCopiar, lerCargaColada, LIMITE_LINHAS, pareceTabela, ROTULO_CAMPO, type ItemLido } from "./calculoCargaFrete";
 
 // Fretes (2026-10-20): solicitacao de frete com controle da verba da familia <obra>.510.
 // Quem pede: logistica, gestor e assistente; a logistica cota.
@@ -260,7 +262,7 @@ const txtNum = (v: number | null | undefined, casas = 2) =>
   v === null || v === undefined
     ? ""
     : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
-const msgErro = (e: any) => String(e?.message || e || "Erro").replace(/^.*?ERROR:\s*/, "");
+const msgErro = (e: any) => mensagemErro(e, "Tente de novo em instantes.");
 const rota = (f: Pick<Frete, "origem_nome" | "destino_nome">) =>
   f.origem_nome || f.destino_nome ? `${f.origem_nome || "?"} → ${f.destino_nome || "?"}` : "-";
 
@@ -299,6 +301,8 @@ export function TelaFretes({
   const [filtro, setFiltro] = useFiltroSalvo<string>("fretes.filtro", "abertos", (v) => FILTROS_FRETE.includes(String(v)));
   const [busca, setBusca] = useFiltroSalvo<string>("fretes.busca", "", (v) => typeof v === "string" && v.length <= 100);
   const [editando, setEditando] = useState<Frete | "novo" | null>(null);
+  // frete que serve de modelo quando o formulario de novo frete abre preenchido ("Duplicar")
+  const [copiaInicial, setCopiaInicial] = useState<Frete | null>(null);
   const [erro, setErro] = useState("");
   const [erroCarga, setErroCarga] = useState("");
 
@@ -447,7 +451,7 @@ export function TelaFretes({
           )}
           {aba === "fretes" && (
             <button
-              onClick={() => setEditando("novo")}
+              onClick={() => (setCopiaInicial(null), setEditando("novo"))}
               className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-2 text-sm"
             >
               <Plus size={16} /> Novo frete
@@ -605,12 +609,15 @@ export function TelaFretes({
       {editando && (
         <ModalFrete
           frete={editando === "novo" ? null : editando}
+          copiarDe={editando === "novo" ? copiaInicial : null}
+          fretesAnteriores={fretes}
           usuario={usuario}
           obras={obras}
           transportadoras={transportadoras}
-          onFechar={() => setEditando(null)}
+          onFechar={() => (setEditando(null), setCopiaInicial(null))}
           onSalvo={async (id) => {
             setEditando(null);
+            setCopiaInicial(null);
             // so a lista de fretes muda ao salvar (fornecedores e obras continuam os mesmos)
             await carregarFretes();
             onAbrir(id);
@@ -625,6 +632,7 @@ export function TelaFretes({
           podeGerir={ehLogistica || verTodasObras || aberto.id_solicitante === usuario?.id || obras.some((o) => o.id === aberto.id_obra)}
           onFechar={() => onAbrir(null)}
           onEditar={() => setEditando(aberto)}
+          onDuplicar={() => (setCopiaInicial(aberto), setEditando("novo"))}
           onMudou={carregarFretes}
           onPedirVerba={onPedirVerba}
         />
@@ -773,6 +781,8 @@ function EscolhaPonto({
 
 function ModalFrete({
   frete,
+  copiarDe,
+  fretesAnteriores,
   usuario,
   obras,
   transportadoras: transportadorasErp,
@@ -780,6 +790,10 @@ function ModalFrete({
   onSalvo,
 }: {
   frete: Frete | null;
+  /** frete novo que ja abre preenchido com rota, carga e observacao deste (nunca cotacao, status, datas nem versao) */
+  copiarDe?: Frete | null;
+  /** fretes que a pessoa pode ver, para o "Copiar de um frete anterior" */
+  fretesAnteriores?: Frete[];
   usuario: Usuario | null;
   obras: ObraOpcao[];
   transportadoras: Fornecedor[];
@@ -798,20 +812,28 @@ function ModalFrete({
   );
   // alteracoes feitas pela pessoa (efeitos automaticos, como a distancia estimada, nao contam)
   const [sujo, setSujo] = useState(false);
-  const [idObra, setIdObra] = useState(frete?.id_obra || (obras.length === 1 ? obras[0].id : ""));
+  // copia (so frete novo): rota, carga e observacao do frete escolhido; a data fica de hoje para a pessoa conferir
+  const copia = !frete && copiarDe ? dadosDaCopia(copiarDe) : null;
+  const [idObra, setIdObra] = useState(
+    frete?.id_obra || (copia && obras.some((o) => o.id === copia.idObra) ? copia.idObra : obras.length === 1 ? obras[0].id : ""),
+  );
   const [data, setData] = useState(frete?.data_frete || hojeISO());
-  const [operacao, setOperacao] = useState<"compra" | "venda">(frete?.operacao || "compra");
+  const [operacao, setOperacao] = useState<"compra" | "venda">(frete?.operacao || copia?.operacao || "compra");
   const [tipoDoc, setTipoDoc] = useState(frete?.tipo_documento || "");
   const [numDoc, setNumDoc] = useState(frete?.numero_documento || "");
   const [origem, setOrigem] = useState<Ponto>(
     frete
       ? { tipo: frete.origem_tipo || "outro", ibge: frete.origem_ibge, nome: frete.origem_nome || "", codFornecedor: frete.origem_tipo === "fornecedor" ? frete.cod_fornecedor : null }
-      : { tipo: "fornecedor", ibge: null, nome: "", codFornecedor: null },
+      : copia
+        ? (copia.origem as Ponto)
+        : { tipo: "fornecedor", ibge: null, nome: "", codFornecedor: null },
   );
   const [destino, setDestino] = useState<Ponto>(
     frete
       ? { tipo: frete.destino_tipo || "outro", ibge: frete.destino_ibge, nome: frete.destino_nome || "", codFornecedor: frete.destino_tipo === "fornecedor" ? frete.cod_fornecedor : null }
-      : pontoKalter(),
+      : copia
+        ? (copia.destino as Ponto)
+        : pontoKalter(),
   );
   const [veiculo, setVeiculo] = useState(frete?.tipo_veiculo || "");
   const [km, setKm] = useState(frete?.km != null ? txtNum(frete.km, 0) : "");
@@ -819,8 +841,12 @@ function ModalFrete({
   const [valorKm, setValorKm] = useState(txtNum(frete?.valor_km));
   const [valor, setValor] = useState(txtNum(frete?.valor_cotado));
   const [transp, setTransp] = useState(frete?.transportadora_codigo ? String(frete.transportadora_codigo) : "");
-  const [obs, setObs] = useState(frete?.observacao || "");
-  const [linhas, setLinhas] = useState<LinhaCarga[]>(frete?.carga?.length ? frete.carga.map(paraLinha) : [{ ...LINHA_VAZIA }]);
+  const [obs, setObs] = useState(frete?.observacao || copia?.observacao || "");
+  const [linhas, setLinhas] = useState<LinhaCarga[]>(
+    frete?.carga?.length ? frete.carga.map(paraLinha) : copia?.carga.length ? copia.carga.map(paraLinha) : [{ ...LINHA_VAZIA }],
+  );
+  const [copiando, setCopiando] = useState(false);
+  const { confirmar } = useDialogos();
   const [saldo, setSaldo] = useState<number | null>(null);
   const [sugestoes, setSugestoes] = useState<Sugestao[] | null>(null);
   const [cidadeObra, setCidadeObra] = useState<Municipio | null>(null);
@@ -829,6 +855,37 @@ function ModalFrete({
   const aviso = useAviso();
 
   const obra = obras.find((o) => o.id === idObra) || null;
+
+  // "Copiar de um frete anterior": troca rota, carga e observacao pelas do frete escolhido
+  const aplicarCopia = (f: Frete) => {
+    const c = dadosDaCopia(f);
+    // ponto "obra" de outra obra vira a obra deste formulario (o texto guardado era da obra do modelo)
+    const daObra = (p: Ponto): Ponto =>
+      p.tipo === "obra" && obra && obra.id !== c.idObra
+        ? { tipo: "obra", ibge: obra.cidade_ibge, nome: cidadeObra ? `Obra ${obra.codigo_externo} - ${cidadeObra.nome}/${cidadeObra.uf}` : `Obra ${obra.codigo_externo} (cidade não cadastrada)`, codFornecedor: null }
+        : p;
+    setOperacao(c.operacao);
+    setOrigem(daObra(c.origem as Ponto));
+    setDestino(daObra(c.destino as Ponto));
+    setLinhas(c.carga.length ? c.carga.map(paraLinha) : [{ ...LINHA_VAZIA }]);
+    setObs(c.observacao);
+    if (!idObra && obras.some((o) => o.id === c.idObra)) setIdObra(c.idObra);
+    setSujo(true);
+    setCopiando(false);
+  };
+  const escolherCopia = async (f: Frete) => {
+    // ja tem algo no formulario (digitado ou vindo de outra copia): confirma antes de substituir
+    if (sujo || copia) {
+      const ok = await confirmar({
+        titulo: `Copiar o frete ${f.numero}?`,
+        texto: "A origem, o destino, a carga e a observação que estão no formulário serão substituídos pelos do frete escolhido. A data, a cotação e a transportadora não são copiadas.",
+        rotuloConfirmar: "Substituir",
+        rotuloCancelar: "Voltar",
+      });
+      if (!ok) return;
+    }
+    aplicarCopia(f);
+  };
 
   // cidade da obra (destino padrao da venda)
   useEffect(() => {
@@ -990,6 +1047,11 @@ function ModalFrete({
       sujo={sujo && !salvando}
       largura="3xl"
       rodape={
+        copiando ? (
+          <button type="button" onClick={() => setCopiando(false)} className="px-4 py-2 rounded-lg border text-slate-600 font-semibold">
+            Voltar ao formulário
+          </button>
+        ) : (
         <>
           {erro && (
             <p className="text-sm text-red-600 md:mr-auto self-center" role="alert">
@@ -1004,9 +1066,25 @@ function ModalFrete({
             {salvando ? <Loader2 className="animate-spin" size={16} /> : <Truck size={16} />} {frete ? "Salvar" : "Pedir frete"}
           </button>
         </>
+        )
       }
     >
+      {copiando ? (
+        <PainelCopiarFrete fretes={fretesAnteriores || []} idObra={idObra} onEscolher={escolherCopia} />
+      ) : (
         <div className="space-y-4" onChange={() => setSujo(true)}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-slate-500">* obrigatório</p>
+            {!frete && (fretesAnteriores?.length ?? 0) > 0 && (
+              <button
+                type="button"
+                onClick={() => setCopiando(true)}
+                className="text-xs px-2.5 py-1.5 rounded-lg border text-[#2A6377] font-semibold hover:bg-slate-50 inline-flex items-center gap-1"
+              >
+                <Copy size={13} aria-hidden="true" /> Copiar de um frete anterior
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="col-span-2">
               <Rotulo texto="Obra *" />
@@ -1182,7 +1260,66 @@ function ModalFrete({
             </div>
           )}
         </div>
+      )}
     </Modal>
+  );
+}
+
+// Lista de fretes para copiar: busca por numero, obra ou cidade; os da mesma obra do formulario vem primeiro.
+// Painel no lugar do formulario (nao uma segunda janela: a janela do app nao empilha com o Esc e o Tab).
+function PainelCopiarFrete({ fretes, idObra, onEscolher }: { fretes: Frete[]; idObra: string; onEscolher: (f: Frete) => void }) {
+  const [busca, setBusca] = useState("");
+  const lista = useMemo(() => fretesParaCopiar(fretes, idObra, busca), [fretes, idObra, busca]);
+  const mostrados = lista.slice(0, 50);
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="font-bold text-slate-800">Copiar de um frete anterior</p>
+        <p className="text-xs text-slate-500">
+          Leva a origem, o destino, a carga e a observação. Não leva a data, a cotação, a transportadora nem o CT-e. Os fretes da mesma obra aparecem primeiro.
+        </p>
+      </div>
+      <div className="relative">
+        <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" aria-hidden="true" />
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Número, obra ou cidade…"
+          aria-label="Buscar frete para copiar"
+          autoComplete="off"
+          className="border rounded-lg pl-8 pr-3 py-2 text-sm w-full"
+        />
+      </div>
+      {mostrados.length === 0 ? (
+        <p className="text-sm text-slate-500 py-4 text-center">Nenhum frete encontrado.</p>
+      ) : (
+        <ul className="border rounded-lg divide-y">
+          {mostrados.map((f) => (
+            <li key={f.id}>
+              <button type="button" onClick={() => onEscolher(f)} className="w-full text-left px-3 py-2 hover:bg-slate-50">
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <b className="text-[#2A6377]">Frete {f.numero}</b>
+                  <span className="text-slate-700 font-semibold">obra {f.codigo_obra}</span>
+                  {idObra && f.id_obra === idObra && (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">mesma obra</span>
+                  )}
+                  <BadgeStatusFrete status={f.status} />
+                </span>
+                <span className="block text-sm text-slate-600 line-clamp-2">{rota(f)}</span>
+                <span className="block text-xs text-slate-500">
+                  {formatarDataSegura(f.data_frete)} · {f.operacao === "compra" ? "Compra" : "Venda"}
+                  {f.carga?.length ? ` · ${f.carga.length} item(ns)` : " · sem carga"}
+                  {resumoCarga(f) ? ` · ${resumoCarga(f)}` : ""}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {lista.length > mostrados.length && (
+        <p className="text-xs text-slate-500">Mostrando {mostrados.length} de {lista.length}: use a busca para achar o frete.</p>
+      )}
+    </div>
   );
 }
 
@@ -1195,6 +1332,37 @@ const resumoCarga = (f: Frete) =>
     .join(" · ");
 
 function CargaLista({ linhas, onChange }: { linhas: LinhaCarga[]; onChange: (l: LinhaCarga[]) => void }) {
+  // texto da planilha colado: null = painel fechado
+  const [colando, setColando] = useState<string | null>(null);
+  const { confirmar } = useDialogos();
+  // Ctrl+V com o foco fora de qualquer campo abre a previa (dentro de um campo o colar segue normal)
+  useEffect(() => {
+    const aoColar = (e: ClipboardEvent) => {
+      const alvo = e.target as HTMLElement | null;
+      if (alvo?.closest?.("input, textarea, select, [contenteditable='true']")) return;
+      const texto = e.clipboardData?.getData("text") || "";
+      if (!pareceTabela(texto)) return;
+      e.preventDefault();
+      setColando(texto);
+    };
+    document.addEventListener("paste", aoColar);
+    return () => document.removeEventListener("paste", aoColar);
+  }, []);
+  const aplicarColada = async (novos: ItemLido[], modo: "acrescentar" | "substituir") => {
+    const atuais = linhas.filter((l) => !linhaVazia(l));
+    if (modo === "substituir" && atuais.length) {
+      const ok = await confirmar({
+        titulo: "Substituir os itens da carga?",
+        texto: `Os ${atuais.length} item(ns) que estão na carga serão trocados pelos ${novos.length} item(ns) colados.`,
+        rotuloConfirmar: "Substituir itens",
+        rotuloCancelar: "Voltar",
+      });
+      if (!ok) return;
+    }
+    const todas = [...(modo === "acrescentar" ? atuais : []), ...novos.map(paraLinha)];
+    onChange(todas.length ? todas : [{ ...LINHA_VAZIA }]);
+    setColando(null);
+  };
   const mudar = (i: number, campo: keyof LinhaCarga, v: string) => onChange(linhas.map((l, j) => (j === i ? { ...l, [campo]: v } : l)));
   const remover = (i: number) => onChange(linhas.length > 1 ? linhas.filter((_, j) => j !== i) : [{ ...LINHA_VAZIA }]);
   const itens = linhas.filter((l) => !linhaVazia(l)).map(paraItem);
@@ -1226,7 +1394,23 @@ function CargaLista({ linhas, onChange }: { linhas: LinhaCarga[]; onChange: (l: 
     );
   return (
     <div className="border rounded-lg">
-      <p className="px-3 py-2 text-xs font-bold uppercase text-slate-500 border-b">Carga</p>
+      <div className="px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-bold uppercase text-slate-500">Carga</p>
+        {colando === null && (
+          <button
+            type="button"
+            onClick={() => setColando("")}
+            title="Copie as células da planilha e cole aqui (ou use Ctrl+V com o cursor fora dos campos)"
+            className="text-xs px-2 py-1 rounded border text-[#2A6377] font-semibold hover:bg-slate-50 inline-flex items-center gap-1"
+          >
+            <ClipboardPaste size={13} aria-hidden="true" /> Colar do Excel
+          </button>
+        )}
+      </div>
+      {colando !== null ? (
+        <PainelColarCarga textoInicial={colando} itensAtuais={linhas.filter((l) => !linhaVazia(l)).length} onAplicar={aplicarColada} onCancelar={() => setColando(null)} />
+      ) : (
+      <>
       <div className="overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
           <thead className="text-xs text-slate-500 uppercase">
@@ -1293,6 +1477,134 @@ function CargaLista({ linhas, onChange }: { linhas: LinhaCarga[]; onChange: (l: 
       <p className="px-3 py-2 text-xs text-slate-500 border-t">
         Cada linha são volumes iguais: informe a quantidade, o peso e as medidas de <b>um</b> volume. Peso e m³ da linha = quantidade × cada um.
       </p>
+      </>
+      )}
+    </div>
+  );
+}
+
+// Previa da carga colada do Excel: mostra o que foi entendido (colunas, itens, problemas) antes de aplicar.
+function PainelColarCarga({
+  textoInicial,
+  itensAtuais,
+  onAplicar,
+  onCancelar,
+}: {
+  textoInicial: string;
+  itensAtuais: number;
+  onAplicar: (itens: ItemLido[], modo: "acrescentar" | "substituir") => void;
+  onCancelar: () => void;
+}) {
+  const [texto, setTexto] = useState(textoInicial);
+  const r = useMemo(() => lerCargaColada(texto), [texto]);
+  const usadas = r.colunas.filter((c) => c.campo);
+  const ignoradas = r.colunas.filter((c) => !c.campo && c.obs);
+  return (
+    <div className="p-3 space-y-3">
+      <div>
+        <label className="block text-xs font-semibold mb-1" htmlFor="carga-colada">
+          Cole aqui as células copiadas do Excel
+        </label>
+        <textarea
+          id="carga-colada"
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          rows={4}
+          placeholder={"Descrição\tQtd.\tPeso un. (kg)\tAlt. (m)\tLarg. (m)\tComp. (m)"}
+          className="border rounded-lg px-3 py-2 w-full text-sm font-mono"
+          data-foco-inicial
+          spellCheck={false}
+        />
+        <p className="text-xs text-slate-500 mt-1">
+          Pode vir com a linha de títulos (as colunas são reconhecidas pelo nome) ou só com os dados, na ordem da tabela: descrição, quantidade, peso de
+          cada volume, altura, largura e comprimento. Aceita também separador “;”. Até {LIMITE_LINHAS} linhas.
+        </p>
+      </div>
+
+      {texto.trim() && (
+        <div className="space-y-2" aria-live="polite">
+          <p className="text-sm">
+            <b>{r.itens.length}</b> item(ns) lido(s)
+            {r.problemas.length > 0 && <span className="text-red-600"> · {r.problemas.length} linha(s) com problema</span>}
+            {r.temCabecalho ? " · títulos reconhecidos na primeira linha" : " · sem títulos: usando a ordem das colunas da tabela"}
+          </p>
+          {usadas.length > 0 && (
+            <p className="text-xs text-slate-600">
+              <b>Colunas usadas:</b>{" "}
+              {usadas.map((c) => `${r.temCabecalho ? c.titulo : `coluna ${c.indice + 1}`} → ${ROTULO_CAMPO[c.campo!]}`).join(" · ")}
+            </p>
+          )}
+          {ignoradas.length > 0 && (
+            <p className="text-xs text-slate-500">
+              <b>Não usadas:</b> {ignoradas.map((c) => `${c.titulo || `coluna ${c.indice + 1}`} (${c.obs})`).join(" · ")}
+            </p>
+          )}
+          {r.limiteExcedido && (
+            <p className="text-xs text-amber-700 flex items-start gap-1">
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" aria-hidden="true" /> A planilha tem mais de {LIMITE_LINHAS} linhas: só as {LIMITE_LINHAS} primeiras foram lidas. Cole o resto em outra vez.
+            </p>
+          )}
+          {r.problemas.length > 0 && (
+            <ul className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 space-y-0.5 max-h-32 overflow-y-auto">
+              {r.problemas.map((p) => (
+                <li key={p.linha}>{p.mensagem}</li>
+              ))}
+              <li className="text-red-600">Essas linhas não entram: corrija na planilha e cole de novo, ou digite depois.</li>
+            </ul>
+          )}
+          {r.itens.length > 0 && (
+            <div className="border rounded-lg overflow-auto max-h-64">
+              <table className="w-full text-xs min-w-[520px]">
+                <thead className="text-slate-500 uppercase bg-slate-50 sticky top-0">
+                  <tr className="text-left">
+                    <th className="px-2 py-1 font-semibold">Linha</th>
+                    <th className="px-2 py-1 font-semibold">Descrição</th>
+                    <th className="px-2 py-1 font-semibold text-right">Qtd.</th>
+                    <th className="px-2 py-1 font-semibold text-right">Peso un. (kg)</th>
+                    <th className="px-2 py-1 font-semibold text-right">A × L × C (m)</th>
+                  </tr>
+                </thead>
+                <tbody className="tabular-nums">
+                  {r.itens.map((i, n) => (
+                    <tr key={n} className="border-t">
+                      <td className="px-2 py-1 text-slate-500">{r.linhasDosItens[n]}</td>
+                      <td className="px-2 py-1">{i.descricao || <span className="text-slate-400">sem descrição</span>}</td>
+                      <td className="px-2 py-1 text-right">{i.quantidade}</td>
+                      <td className="px-2 py-1 text-right">{i.peso_kg != null ? txtPeso(i.peso_kg) : "-"}</td>
+                      <td className="px-2 py-1 text-right">
+                        {i.altura_m != null ? `${txtNum(i.altura_m)} × ${txtNum(i.largura_m)} × ${txtNum(i.comprimento_m)}` : "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+        <button type="button" onClick={onCancelar} className="px-3 py-2 rounded-lg border text-slate-600 font-semibold text-sm">
+          Cancelar
+        </button>
+        <button
+          type="button"
+          disabled={!r.itens.length || itensAtuais === 0}
+          onClick={() => onAplicar(r.itens, "substituir")}
+          className="px-3 py-2 rounded-lg border text-[#2A6377] font-semibold text-sm disabled:opacity-50"
+          title={itensAtuais === 0 ? "Não há itens na carga para substituir" : undefined}
+        >
+          Substituir os itens{itensAtuais > 0 ? ` (${itensAtuais} atuais)` : ""}
+        </button>
+        <button
+          type="button"
+          disabled={!r.itens.length}
+          onClick={() => onAplicar(r.itens, "acrescentar")}
+          className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold text-sm disabled:opacity-50"
+        >
+          Acrescentar aos itens
+        </button>
+      </div>
     </div>
   );
 }
@@ -1353,6 +1665,7 @@ function DetalheFrete({
   podeGerir,
   onFechar,
   onEditar,
+  onDuplicar,
   onMudou,
   onPedirVerba,
 }: {
@@ -1361,6 +1674,8 @@ function DetalheFrete({
   podeGerir: boolean;
   onFechar: () => void;
   onEditar: () => void;
+  /** abre o formulario de novo frete ja preenchido com a rota, a carga e a observacao deste */
+  onDuplicar: () => void;
   onMudou: () => void;
   onPedirVerba: (codigoObra: string) => void;
 }) {
@@ -1417,9 +1732,18 @@ function DetalheFrete({
       onFechar={onFechar}
       largura="2xl"
       rodape={
-        aberto && podeGerir ? (
           <>
-            {erro && <p className="text-sm text-red-600 md:mr-auto self-center">{erro}</p>}
+            {aberto && podeGerir && erro && <p className="text-sm text-red-600 md:mr-auto self-center">{erro}</p>}
+            <button
+              type="button"
+              onClick={onDuplicar}
+              title="Abre um frete novo com a rota, a carga e a observação deste"
+              className="px-3 py-2 rounded-lg border text-[#2A6377] font-semibold flex items-center justify-center gap-1 text-sm"
+            >
+              <Copy size={14} /> Duplicar
+            </button>
+            {aberto && podeGerir && (
+              <>
             <button
               disabled={ocupado}
               onClick={cancelar}
@@ -1430,8 +1754,9 @@ function DetalheFrete({
             <button onClick={onEditar} className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-1 text-sm">
               <Pencil size={14} /> {frete.status === "aguardando_cotacao" ? "Cotar" : "Editar"}
             </button>
+              </>
+            )}
           </>
-        ) : undefined
       }
     >
         <div className="space-y-4 text-sm">

@@ -11,6 +11,7 @@ import {
   Download,
 } from "lucide-react";
 import { supabase } from "./supabase";
+import { mensagemErro } from "./erros";
 import { confirmar } from "./Dialogos";
 import { exportarCsv, formatarDataSegura, labelOcorrencia } from "./utils";
 import { useFiltroSalvo } from "./telas/filtroSalvo";
@@ -343,7 +344,7 @@ export default function ReunioesHistorico({
       setSelecionada(null);
       setRefrescar((v) => v + 1);
     } catch (error: any) {
-      onAviso(error.message, "erro");
+      onAviso("Não foi possível excluir a reunião: " + mensagemErro(error), "erro");
     } finally {
       setExcluindo(false);
     }

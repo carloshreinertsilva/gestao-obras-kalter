@@ -1,4 +1,8 @@
-import type { Dispatch } from "react";
+import { useState, type Dispatch } from "react";
+import EntradaArquivos from "../../EntradaArquivos";
+import { textoProgresso } from "../../arquivosRegras";
+import { MAX_MB_ANEXO, separarPorTipo } from "../../tiposArquivoAnexo";
+import { useAviso } from "../../aviso";
 import { formatarDataSegura, labelStatusDocumento, corIndicadorDocumento, classeStatusDocumento, formatarTamanhoArquivo } from "../../utils";
 import { Plus, Save, Loader2, Trash2, FileText } from "lucide-react";
 import type { DocumentoProjeto } from "../../types";
@@ -7,7 +11,8 @@ import type { DocumentoProjeto } from "../../types";
 // (passados por props com os mesmos nomes).
 export interface PropsAbaDocumentos {
   abrirArquivoDocumento: (arquivo: any) => Promise<void>;
-  anexarArquivoDocumento: (doc: any, arquivo: File | null) => Promise<void>;
+  // devolve true quando o arquivo subiu (o aviso de sucesso/erro de cada um continua sendo dado pelo App)
+  anexarArquivoDocumento: (doc: any, arquivo: File | null) => Promise<boolean | void>;
   arquivosDocumentos: any;
   carregando: boolean;
   concluirDocumentoProjeto: (doc: any) => Promise<void>;
@@ -40,6 +45,26 @@ export default function AbaDocumentos({
   setNovoDocumentoProjeto,
   uploadDocumentoId,
 }: PropsAbaDocumentos) {
+  // varios arquivos: chama a funcao do App (um arquivo por vez) em sequencia. Ela mesma avisa sucesso/erro de cada um
+  // e nao devolve se deu certo, entao aqui so mostra o andamento.
+  const [lote, setLote] = useState<{ idDoc: string; atual: number; total: number } | null>(null);
+  const [faltaItem, setFaltaItem] = useState(false);
+  const aviso = useAviso();
+  const anexarVarios = async (doc: any, todos: File[]) => {
+    // executavel/script/pagina nao sobe (o banco tambem recusa); o resto segue
+    const { permitidos: arquivos, aviso: textoBloqueio } = separarPorTipo(todos);
+    if (textoBloqueio) aviso.erro(textoBloqueio);
+    if (!arquivos.length) return;
+    try {
+      for (const [k, arquivo] of arquivos.entries()) {
+        setLote({ idDoc: doc.id, atual: k + 1, total: arquivos.length });
+        await anexarArquivoDocumento(doc, arquivo);
+      }
+    } finally {
+      setLote(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {podeEditarObraSelecionada && (
@@ -48,17 +73,28 @@ export default function AbaDocumentos({
             <Plus size={18} /> Novo Documento
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <input
-              placeholder="Item"
-              value={novoDocumentoProjeto.item}
-              onChange={(e) =>
-                setNovoDocumentoProjeto({
-                  ...novoDocumentoProjeto,
-                  item: e.target.value,
-                })
-              }
-              className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]"
-            />
+            <div className="md:col-span-2">
+              <input
+                placeholder="Item *"
+                aria-label="Item (obrigatório)"
+                aria-invalid={faltaItem || undefined}
+                aria-describedby={faltaItem ? "doc-novo-item-erro" : undefined}
+                value={novoDocumentoProjeto.item}
+                onChange={(e) => {
+                  if (e.target.value.trim()) setFaltaItem(false);
+                  setNovoDocumentoProjeto({
+                    ...novoDocumentoProjeto,
+                    item: e.target.value,
+                  });
+                }}
+                className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] ${faltaItem ? "border-red-400" : ""}`}
+              />
+              {faltaItem && (
+                <p id="doc-novo-item-erro" className="mt-1 text-xs font-semibold text-red-600">
+                  Informe o item do documento.
+                </p>
+              )}
+            </div>
             <input
               placeholder="Detalhes"
               value={novoDocumentoProjeto.detalhes}
@@ -71,7 +107,10 @@ export default function AbaDocumentos({
               className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]"
             />
             <button
-              onClick={salvarDocumentoProjeto}
+              onClick={() => {
+                if (!String(novoDocumentoProjeto.item || "").trim()) return setFaltaItem(true);
+                salvarDocumentoProjeto();
+              }}
               disabled={carregando}
               className="bg-[#2A6377] text-white rounded-lg font-bold flex items-center justify-center gap-2"
             >
@@ -79,7 +118,7 @@ export default function AbaDocumentos({
             </button>
           </div>
           <p className="text-xs text-slate-500 mt-3">
-            Novos documentos entram como “Não Elaborado” e indicador
+            * obrigatório. Novos documentos entram como “Não Elaborado” e indicador
             vermelho. Use os botões da lista para iniciar ou concluir.
           </p>
         </div>
@@ -190,31 +229,31 @@ export default function AbaDocumentos({
                           )
                         )}
                         {podeEditarObraSelecionada && (
-                          <label
-                            className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition ${uploadDocumentoId === doc.id ? "bg-slate-200 text-slate-500" : "bg-[#2A6377]/10 text-[#2A6377] hover:bg-[#2A6377]/20"}`}
-                          >
-                            {uploadDocumentoId === doc.id ? (
-                              <Loader2
-                                className="animate-spin"
-                                size={14}
-                              />
-                            ) : (
-                              <Plus size={14} />
-                            )}{" "}
-                            Anexar arquivo
-                            <input
-                              type="file"
-                              className="hidden"
-                              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                              disabled={uploadDocumentoId === doc.id}
-                              onChange={(e) => {
-                                const arquivo =
-                                  e.target.files?.[0] || null;
-                                anexarArquivoDocumento(doc, arquivo);
-                                e.currentTarget.value = "";
-                              }}
+                          <>
+                            <EntradaArquivos
+                              rotulo="Anexar arquivos"
+                              // sem accept: a lista antiga (.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg) barrava
+                              // .xlsm e desenhos ja usados; agora so barra executavel/script/pagina
+                              maxMb={MAX_MB_ANEXO}
+                              // uma linha por documento: colar iria para a ultima linha da tabela, nao para a que a
+                              // pessoa esta olhando
+                              colar={false}
+                              desabilitado={
+                                uploadDocumentoId === doc.id ||
+                                lote?.idDoc === doc.id
+                              }
+                              onArquivos={(arquivos) => anexarVarios(doc, arquivos)}
                             />
-                          </label>
+                            {(lote?.idDoc === doc.id ||
+                              uploadDocumentoId === doc.id) && (
+                              <p className="text-xs text-slate-500 flex items-center gap-1">
+                                <Loader2 className="animate-spin" size={12} aria-hidden="true" />
+                                {lote?.idDoc === doc.id
+                                  ? textoProgresso(lote.atual, lote.total)
+                                  : "Enviando…"}
+                              </p>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>

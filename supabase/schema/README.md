@@ -18,6 +18,7 @@ Só estrutura: nenhum dado, nenhum segredo do Vault, senha ou chave (textos com 
 | `politicas.sql` | RLS ligado/desligado por tabela + `create policy` |
 | `grants.sql` | privilégios de tabela e de execução de função para `anon`, `authenticated` e `PUBLIC` |
 | `cron.sql` | jobs do `pg_cron` (nome, agenda, comando) |
+| `storage.sql` | buckets do Storage (público?, limite de tamanho, tipos aceitos) e políticas de `storage.objects` |
 
 ## Como regenerar
 

@@ -14,7 +14,13 @@ import {
   Trash2,
   Download,
   Link2,
+  Paperclip,
+  X,
 } from "lucide-react";
+import EntradaArquivos from "./EntradaArquivos";
+import { semDuplicados, textoProgresso } from "./arquivosRegras";
+import { mensagemErro } from "./erros";
+import { MAX_MB_ANEXO, separarPorTipo, tipoParaEnvio } from "./tiposArquivoAnexo";
 
 interface AnexosObraProps {
   idObra: string;
@@ -24,7 +30,7 @@ interface AnexosObraProps {
 }
 
 const BUCKET = "obra-anexos";
-const TAMANHO_MAXIMO_MB = 25;
+const TAMANHO_MAXIMO_MB = MAX_MB_ANEXO;
 
 const ehImagem = (tipo: string | null) =>
   Boolean(tipo && tipo.startsWith("image/"));
@@ -42,9 +48,9 @@ export default function AnexosObra({
     {},
   );
   const [ocorrencias, setOcorrencias] = useState<any[]>([]);
-  const [arquivoSelecionado, setArquivoSelecionado] = useState<File | null>(
-    null,
-  );
+  // varios de uma vez (cada um vira uma linha em obra_anexos, com a mesma legenda/ocorrencia)
+  const [arquivosSelecionados, setArquivosSelecionados] = useState<File[]>([]);
+  const [progresso, setProgresso] = useState("");
   const [descricao, setDescricao] = useState("");
   const [idOcorrenciaVinculada, setIdOcorrenciaVinculada] = useState("");
 
@@ -98,47 +104,80 @@ export default function AnexosObra({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idObra]);
 
+  // envia um por um; se um falhar segue com os outros, diz qual falhou e deixa so os que falharam selecionados
   const enviarAnexo = async () => {
-    if (!arquivoSelecionado || !idObra) return;
-    if (arquivoSelecionado.size > TAMANHO_MAXIMO_MB * 1024 * 1024) {
-      return avisar(`Arquivo maior que ${TAMANHO_MAXIMO_MB} MB.`, "erro");
+    if (!arquivosSelecionados.length || !idObra) return;
+    // conferido de novo antes de enviar (o banco tambem recusa estas extensoes)
+    const { bloqueados, aviso } = separarPorTipo(arquivosSelecionados);
+    if (bloqueados.length) {
+      avisar(aviso, "erro");
+      setArquivosSelecionados((atuais) => atuais.filter((a) => !bloqueados.includes(a)));
+      return;
     }
     setEnviando(true);
+    const falhas: { arquivo: File; motivo: string }[] = [];
+    let enviados = 0;
     try {
-      const nomeNormalizado = normalizarNomeArquivo(arquivoSelecionado.name);
-      const caminhoStorage = `obras/${idObra}/anexos/${Date.now()}_${nomeNormalizado}`;
+      for (const [k, arquivo] of arquivosSelecionados.entries()) {
+        setProgresso(textoProgresso(k + 1, arquivosSelecionados.length));
+        try {
+          const nomeNormalizado = normalizarNomeArquivo(arquivo.name);
+          const caminhoStorage = `obras/${idObra}/anexos/${Date.now()}_${nomeNormalizado}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET)
-        .upload(caminhoStorage, arquivoSelecionado, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-      if (uploadError) throw uploadError;
+          const { error: uploadError } = await supabase.storage
+            .from(BUCKET)
+            .upload(caminhoStorage, arquivo, {
+              cacheControl: "3600",
+              upsert: false,
+              // tipo que o bucket nao lista (ex.: desenho de programa menos comum) vai como "binario"
+              contentType: tipoParaEnvio(arquivo),
+            });
+          if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from("obra_anexos").insert([
-        {
-          id_obra: idObra,
-          id_ocorrencia: idOcorrenciaVinculada || null,
-          id_usuario: usuarioAtualId || null,
-          descricao: descricao || null,
-          nome_arquivo: arquivoSelecionado.name,
-          caminho_storage: caminhoStorage,
-          tipo_arquivo: arquivoSelecionado.type || null,
-          tamanho_bytes: arquivoSelecionado.size,
-        },
-      ]);
-      if (insertError) throw insertError;
+          const { error: insertError } = await supabase
+            .from("obra_anexos")
+            .insert([
+              {
+                id_obra: idObra,
+                id_ocorrencia: idOcorrenciaVinculada || null,
+                id_usuario: usuarioAtualId || null,
+                descricao: descricao || null,
+                nome_arquivo: arquivo.name,
+                caminho_storage: caminhoStorage,
+                tipo_arquivo: arquivo.type || null,
+                tamanho_bytes: arquivo.size,
+              },
+            ]);
+          if (insertError) {
+            // registro nao gravou: nao deixa arquivo solto no armazenamento
+            await supabase.storage.from(BUCKET).remove([caminhoStorage]);
+            throw insertError;
+          }
+          enviados += 1;
+        } catch (error) {
+          falhas.push({ arquivo, motivo: mensagemErro(error) });
+        }
+      }
 
-      avisar("Anexo enviado!");
-      setArquivoSelecionado(null);
-      setDescricao("");
-      setIdOcorrenciaVinculada("");
-      buscarAnexos();
-    } catch (error: any) {
-      avisar(error.message || "Erro ao enviar anexo.", "erro");
+      if (falhas.length) {
+        avisar(
+          (enviados ? `${enviados} de ${arquivosSelecionados.length} anexos enviados. ` : "") +
+            falhas
+              .map((f) => `Não foi possível enviar o anexo ${f.arquivo.name}: ${f.motivo}`)
+              .join(" "),
+          "erro",
+        );
+        setArquivosSelecionados(falhas.map((f) => f.arquivo));
+      } else {
+        avisar(enviados > 1 ? `${enviados} anexos enviados!` : "Anexo enviado!");
+        setArquivosSelecionados([]);
+        setDescricao("");
+        setIdOcorrenciaVinculada("");
+      }
+      if (enviados) buscarAnexos();
     } finally {
       setEnviando(false);
+      setProgresso("");
     }
   };
 
@@ -166,8 +205,11 @@ export default function AnexosObra({
 
       avisar("Anexo excluído!");
       buscarAnexos();
-    } catch (error: any) {
-      avisar(error.message || "Erro ao excluir anexo.", "erro");
+    } catch (error) {
+      avisar(
+        `Não foi possível excluir o anexo ${anexo.nome_arquivo}: ${mensagemErro(error)}`,
+        "erro",
+      );
     }
   };
 
@@ -179,13 +221,51 @@ export default function AnexosObra({
             <Upload size={16} /> Novo Anexo
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
-            <input
-              type="file"
-              onChange={(e) =>
-                setArquivoSelecionado(e.target.files?.[0] || null)
-              }
-              className="border rounded-lg p-2 text-sm outline-none focus:border-[#2A6377] md:col-span-1"
-            />
+            <div className="md:col-span-1 min-w-0">
+              {/* sem accept: aceita qualquer arquivo de trabalho; so barra executavel/script/pagina (tiposArquivoAnexo) */}
+              <EntradaArquivos
+                maxMb={TAMANHO_MAXIMO_MB}
+                desabilitado={enviando}
+                onArquivos={(novos) => {
+                  const { permitidos, aviso } = separarPorTipo(novos);
+                  if (aviso) avisar(aviso, "erro");
+                  if (permitidos.length)
+                    setArquivosSelecionados((atuais) =>
+                      semDuplicados([...atuais, ...permitidos]),
+                    );
+                }}
+              />
+              {arquivosSelecionados.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {arquivosSelecionados.map((a, i) => (
+                    <li
+                      key={`${a.name}-${a.size}-${i}`}
+                      className="text-xs text-slate-600 flex items-center gap-2 break-all"
+                    >
+                      <Paperclip size={12} aria-hidden="true" className="shrink-0" />
+                      <span className="min-w-0">{a.name}</span>
+                      <span className="text-slate-500 shrink-0">
+                        ({formatarTamanhoArquivo(a.size)})
+                      </span>
+                      <button
+                        type="button"
+                        disabled={enviando}
+                        onClick={() =>
+                          setArquivosSelecionados((prev) =>
+                            prev.filter((_, k) => k !== i),
+                          )
+                        }
+                        className="text-red-500 hover:text-red-700 shrink-0"
+                        title="Tirar da lista"
+                        aria-label={`Tirar ${a.name} da lista`}
+                      >
+                        <X size={13} aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <input
               type="text"
               placeholder="Legenda (opcional)…"
@@ -208,7 +288,7 @@ export default function AnexosObra({
           </div>
           <button
             onClick={enviarAnexo}
-            disabled={!arquivoSelecionado || enviando}
+            disabled={!arquivosSelecionados.length || enviando}
             className="mt-3 bg-[#2A6377] hover:bg-[#1e4857] text-white px-4 py-2 rounded-lg font-bold text-sm transition flex items-center gap-2 disabled:opacity-50"
           >
             {enviando ? (
@@ -216,7 +296,11 @@ export default function AnexosObra({
             ) : (
               <Upload size={14} />
             )}{" "}
-            Enviar Anexo
+            {enviando && progresso
+              ? progresso
+              : arquivosSelecionados.length > 1
+                ? `Enviar ${arquivosSelecionados.length} anexos`
+                : "Enviar Anexo"}
           </button>
         </div>
       )}

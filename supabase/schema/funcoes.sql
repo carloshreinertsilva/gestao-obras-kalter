@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- 176 funcoes/procedures do schema public, ordenadas por nome + argumentos
+-- 190 funcoes/procedures do schema public, ordenadas por nome + argumentos
 
 -- public.after_insert_obras_criar_pmis_padrao()
 CREATE OR REPLACE FUNCTION public.after_insert_obras_criar_pmis_padrao()
@@ -63,6 +63,22 @@ begin
     raise exception 'A solicitacao mudou (nova simulacao ou ja decidida). Atualize a tela e confira de novo.';
   end if;
 end;
+$function$
+;
+
+-- public.arquivo_extensao_bloqueada(p_nome text)
+CREATE OR REPLACE FUNCTION public.arquivo_extensao_bloqueada(p_nome text)
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public'
+AS $function$
+  select coalesce(lower(substring(p_nome from '\.([^./]+)$')), '') = any (array[
+    'exe', 'msi', 'msix', 'msp', 'appx', 'appxbundle', 'bat', 'cmd', 'com', 'scr', 'pif', 'cpl', 'dll', 'sys', 'drv',
+    'ps1', 'psm1', 'psd1', 'vbs', 'vbe', 'js', 'jse', 'mjs', 'wsf', 'wsh', 'hta', 'jar', 'apk', 'app', 'deb', 'rpm',
+    'sh', 'bash', 'run', 'lnk', 'url', 'reg', 'inf', 'gadget', 'application', 'msc', 'scf',
+    'html', 'htm', 'xhtml', 'shtml', 'mht', 'mhtml', 'svg', 'svgz', 'php', 'asp', 'aspx', 'jsp',
+    'iso', 'img', 'vhd', 'vhdx']);
 $function$
 ;
 
@@ -135,11 +151,27 @@ declare
   v_antes jsonb;
   v_depois jsonb;
   v_ignorar text[] := array['updated_at', 'created_at'];
+  v_fora text[] := '{}';   -- colunas que nem entram no registro (argumento 'ignorar=' do gatilho)
+  v_chave text[];
   k text;
+  i int;
   v_usuario record;
 begin
   if auth.uid() is null then
     return null;
+  end if;
+
+  for i in 0 .. coalesce(tg_nargs, 0) - 1 loop
+    if tg_argv[i] like 'ignorar=%' then
+      v_fora := v_fora || string_to_array(substr(tg_argv[i], 9), ',');
+    elsif tg_argv[i] like 'chave=%' then
+      v_chave := string_to_array(substr(tg_argv[i], 7), ',');
+    end if;
+  end loop;
+  if cardinality(v_fora) > 0 then
+    v_old := v_old - v_fora;
+    v_new := v_new - v_fora;
+    v_ignorar := v_ignorar || v_fora;
   end if;
 
   if tg_op = 'UPDATE' then
@@ -167,7 +199,7 @@ begin
   values (
     v_usuario.id, auth.email(), v_usuario.nome, tg_table_name,
     case tg_op when 'INSERT' then 'inclusao' when 'UPDATE' then 'alteracao' else 'exclusao' end,
-    v_reg ->> 'id',
+    coalesce(v_reg ->> 'id', (select string_agg(v_reg ->> c, '-') from unnest(v_chave) c)),
     case when tg_table_name = 'obras' then (v_reg ->> 'id')::uuid else nullif(v_reg ->> 'id_obra', '')::uuid end,
     v_antes, v_depois
   );
@@ -897,21 +929,53 @@ CREATE OR REPLACE FUNCTION public.enfileirar_email(p_para text[], p_assunto text
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-declare v_usuario uuid := public.usuario_atual_id(); v_para text[]; v_invalidos text[]; v_id uuid;
+declare
+  v_usuario uuid := public.usuario_atual_id();
+  v_para text[];
+  v_invalidos text[];
+  v_id uuid;
+  v_origem text := coalesce(nullif(trim(p_origem), ''), 'app');
+  v_assunto text;
+  v_recentes int;
 begin
-  if v_usuario is null then raise exception 'Usuario nao identificado'; end if;
+  if v_usuario is null or not public.eh_usuario_ativo() then
+    raise exception 'Usuário não identificado.';
+  end if;
+  if v_origem not in ('app', 'tarefa_atribuida', 'ata') then
+    raise exception 'Tipo de e-mail não permitido: %.', v_origem;
+  end if;
+
   select array_agg(distinct lower(trim(e))) into v_para from unnest(p_para) e where coalesce(trim(e), '') <> '';
-  if v_para is null then raise exception 'Nenhum destinatario informado'; end if;
-  if array_length(v_para, 1) > 50 then raise exception 'Destinatarios demais'; end if;
+  if v_para is null then raise exception 'Nenhum destinatário informado.'; end if;
+  if array_length(v_para, 1) > 40 then
+    raise exception 'Destinatários demais (%); o limite é 40 por envio.', array_length(v_para, 1);
+  end if;
   select array_agg(e) into v_invalidos from unnest(v_para) e
    where not exists (select 1 from public.usuarios u where lower(u.email) = e and u.ativo);
   if v_invalidos is not null then
-    raise exception 'Destinatario fora do cadastro de usuarios: %', array_to_string(v_invalidos, ', ');
+    raise exception 'Destinatário fora do cadastro de usuários ativos do app: %', array_to_string(v_invalidos, ', ');
   end if;
-  if coalesce(trim(p_assunto), '') = '' or coalesce(p_html, '') = '' then raise exception 'Assunto e corpo sao obrigatorios'; end if;
-  if length(p_html) > 500000 then raise exception 'E-mail grande demais'; end if;
+
+  -- assunto vira cabecalho do e-mail: sem quebra de linha nem caractere de controle
+  v_assunto := left(btrim(regexp_replace(coalesce(p_assunto, ''), '[[:cntrl:]]+', ' ', 'g')), 250);
+  if v_assunto = '' or coalesce(p_html, '') = '' then raise exception 'Assunto e corpo do e-mail são obrigatórios.'; end if;
+  if length(p_html) > 300000 then raise exception 'E-mail grande demais (limite de 300 mil caracteres).'; end if;
+  if p_html ~* '<\s*/?\s*(script|iframe|frame|frameset|object|embed|form|base|meta|applet)\M'
+     or p_html ~* '<[^>]*[\s/"''](on[a-z]+)\s*='
+     or p_html ~* '<[^>]*(javascript|vbscript)\s*:'
+     or p_html ~* '<[^>]*data\s*:\s*text/html' then
+    raise exception 'O conteúdo do e-mail tem código não permitido (script, formulário ou link executável).';
+  end if;
+
+  -- limite por usuario: protege o endereco oficial contra disparo em massa por conta roubada
+  select count(*) into v_recentes from public.fila_email f
+   where f.criado_por = v_usuario and f.created_at > now() - interval '1 hour';
+  if v_recentes >= 40 then
+    raise exception 'Limite de 40 e-mails por hora atingido. Tente de novo mais tarde.';
+  end if;
+
   insert into public.fila_email (para, assunto, html, origem, id_tarefa, criado_por)
-  values (v_para, left(p_assunto, 250), p_html, left(coalesce(p_origem, 'app'), 40), p_id_tarefa, v_usuario)
+  values (v_para, v_assunto, p_html, v_origem, p_id_tarefa, v_usuario)
   returning id into v_id;
   return v_id;
 end $function$
@@ -2337,6 +2401,214 @@ begin
 end $function$
 ;
 
+-- public.meus_pedidos_andamento()
+CREATE OR REPLACE FUNCTION public.meus_pedidos_andamento()
+ RETURNS TABLE(modulo text, id uuid, id_obra uuid, codigo_obra text, titulo text, status text, status_rotulo text, com_quem text, desde timestamp with time zone, aberto_em timestamp with time zone, prazo date)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  with eu as (select public.usuario_atual_id() as id)
+  select * from (
+    -- previsoes: simulando (robo) -> aguardando aprovacao (aprovador) -> aprovada (robo grava no ERP); erro volta ao solicitante
+    select 'solicitacoes_previsao'::text, p.id, p.id_obra, p.codigo_obra,
+           (case p.tipo when 'aumento' then 'Aumento' else 'Transferência' end) || ' · família '
+             || coalesce(nullif(split_part(p.familia_destino, '.', 2), ''), p.familia_destino) || ' · ' || public.formatar_brl(p.valor),
+           p.status,
+           case p.status when 'simulando' then 'Simulando no ERP' when 'aguardando_aprovacao' then 'Aguardando aprovação'
+                         when 'aprovada' then 'Aprovada · gravando no ERP' else 'Não foi possível' end,
+           case p.status when 'simulando' then 'Robô (simulando no ERP)' when 'aguardando_aprovacao' then 'Aprovador'
+                         when 'aprovada' then 'Robô (gravando no ERP)' else 'Com você' end,
+           case when p.status = 'aprovada' then coalesce(p.decidido_em, greatest(p.simulado_em, p.created_at))
+                else greatest(p.simulado_em, p.created_at) end,
+           p.created_at, null::date
+      from public.solicitacoes_previsao p, eu
+     where p.id_solicitante = eu.id and p.status in ('simulando', 'aguardando_aprovacao', 'aprovada', 'erro')
+    union all
+    -- faturamento: logistica -> fiscal -> NF (parcial continua com o fiscal); devolvida volta ao solicitante.
+    -- rascunho fica de fora: ainda nao foi pedido a ninguem.
+    select 'faturamento', s.id, s.id_obra, s.codigo_obra,
+           'Faturamento nº ' || s.numero || ' · ' || (case s.tipo when 'produto' then 'Produto' else 'Serviço' end)
+             || ' · ' || public.formatar_brl(s.valor_solicitado),
+           s.status,
+           case s.status when 'aguardando_logistica' then 'Aguardando logística' when 'devolvida' then 'Devolvida para ajuste'
+                         when 'aguardando_fiscal' then 'Aguardando fiscal' else 'Faturada em parte' end,
+           case s.status when 'aguardando_logistica' then 'Logística' when 'devolvida' then 'Com você' else 'Fiscal' end,
+           case s.status when 'aguardando_logistica' then coalesce(greatest(s.enviado_em, s.devolvido_em), s.created_at)
+                         when 'devolvida' then coalesce(s.devolvido_em, s.enviado_em, s.created_at)
+                         when 'aguardando_fiscal' then coalesce(s.aprovado_em, s.enviado_em, s.created_at)
+                         else coalesce(greatest(s.faturado_em, s.aprovado_em), s.created_at) end,
+           coalesce(s.enviado_em, s.created_at), null::date
+      from public.solicitacoes_faturamento s, eu
+     where s.id_solicitante = eu.id and s.status in ('aguardando_logistica', 'devolvida', 'aguardando_fiscal', 'faturada_parcial')
+    union all
+    -- NF de terceiros: encaminhada (fiscal/financeiro lancam) -> lancada (financeiro paga no vencimento); devolvida volta
+    select 'nfs_terceiros', n.id, n.id_obra, n.codigo_obra,
+           'NF ' || n.numero_nf || ' · ' || n.fornecedor,
+           n.status,
+           case n.status when 'encaminhada' then 'Encaminhada' when 'devolvida' then 'Devolvida' else 'Lançada no ERP' end,
+           case n.status when 'encaminhada' then 'Fiscal / Financeiro' when 'devolvida' then 'Com você' else 'Financeiro (pagamento)' end,
+           case n.status when 'devolvida' then coalesce(n.devolvido_em, n.encaminhado_em)
+                         when 'lancada' then coalesce((n.data_lancamento + time '12:00') at time zone 'America/Sao_Paulo', n.encaminhado_em)
+                         else n.encaminhado_em end,
+           n.encaminhado_em,
+           case when n.status = 'lancada' then n.vencimento end
+      from public.nfs_terceiros n, eu
+     where n.id_encaminhou = eu.id and n.status in ('encaminhada', 'devolvida', 'lancada')
+    union all
+    -- material novo: cadastro -> fiscal -> criar no ERP (robo; com erro volta ao fiscal); devolvida volta ao solicitante.
+    -- nao tem obra.
+    select 'materiais', m.id, null::uuid, null::text,
+           'Material nº ' || m.numero || ' · ' || m.descricao_solicitada,
+           m.status,
+           case m.status when 'cadastro' then 'Com o cadastro' when 'fiscal' then 'Com o fiscal'
+                         when 'erp' then 'Criar no ERP' else 'Devolvida' end,
+           case m.status when 'cadastro' then 'Cadastro' when 'fiscal' then 'Fiscal' when 'devolvida' then 'Com você'
+                         else case when m.erp_erro is not null then 'Fiscal' else 'Robô (criando no ERP)' end end,
+           case m.status when 'fiscal' then coalesce(m.updated_at, m.cadastro_em, m.created_at)
+                         when 'erp' then coalesce(m.fiscal_em, m.updated_at, m.created_at)
+                         else coalesce(m.updated_at, m.created_at) end,
+           m.created_at, null::date
+      from public.solicitacoes_material m, eu
+     where m.id_solicitante = eu.id and m.status in ('cadastro', 'fiscal', 'erp', 'devolvida')
+    union all
+    -- frete: aguardando cotacao (logistica) -> liberado (aguarda o CT-e) ou bloqueado (sem verba na .510)
+    select 'fretes', f.id, f.id_obra, f.codigo_obra,
+           'Frete nº ' || f.numero || ' · ' || (case f.operacao when 'compra' then 'compra' else 'venda' end)
+             || coalesce(' · ' || nullif(concat_ws(' → ', f.origem_nome, f.destino_nome), ''), ''),
+           f.status,
+           case f.status when 'aguardando_cotacao' then 'Aguardando cotação' when 'liberado' then 'Liberado'
+                         else 'Bloqueado – sem verba' end,
+           case f.status when 'aguardando_cotacao' then 'Logística' when 'liberado' then 'Transportadora (aguardando CT-e)'
+                         else 'Aguardando verba (previsão de fretes)' end,
+           case f.status when 'liberado' then coalesce(f.liberado_em, f.cotado_em, f.created_at)
+                         when 'bloqueado' then coalesce(f.bloqueado_em, f.cotado_em, f.created_at)
+                         else f.created_at end,
+           f.created_at, null::date
+      from public.fretes f, eu
+     where f.id_solicitante = eu.id and f.status in ('aguardando_cotacao', 'liberado', 'bloqueado')
+  ) t (modulo, id, id_obra, codigo_obra, titulo, status, status_rotulo, com_quem, desde, aberto_em, prazo)
+  order by (t.com_quem = 'Com você') desc, t.desde;
+$function$
+;
+
+-- public.mfa_exigido_para_mim()
+CREATE OR REPLACE FUNCTION public.mfa_exigido_para_mim()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select public.mfa_obrigatorio_ligado()
+     and exists (
+       select 1 from public.usuarios u
+       where u.id = public.usuario_atual_id() and u.ativo
+         and (u.perfil::text in ('admin', 'coordenador', 'financeiro', 'fiscal')
+              or coalesce(u.aprova_previsao, false)
+              or coalesce(u.aprova_faturamento, false)
+              or coalesce(u.cadastra_materiais, false)
+              or coalesce(u.revisa_fiscal_material, false)));
+$function$
+;
+
+-- public.mfa_exigir_aal2()
+CREATE OR REPLACE FUNCTION public.mfa_exigir_aal2()
+ RETURNS void
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if public.mfa_exigido_para_mim() and coalesce(auth.jwt() ->> 'aal', '') <> 'aal2' then
+    raise exception 'Esta ação exige a verificação em duas etapas. Saia do sistema e entre de novo digitando o código do aplicativo autenticador.';
+  end if;
+end;
+$function$
+;
+
+-- public.mfa_obrigatorio_ligado()
+CREATE OR REPLACE FUNCTION public.mfa_obrigatorio_ligado()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public'
+AS $function$ select false $function$
+;
+
+-- public.mfa_redefinir_usuario(p_id_usuario uuid)
+CREATE OR REPLACE FUNCTION public.mfa_redefinir_usuario(p_id_usuario uuid)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_alvo record;
+  v_eu record;
+  v_uid uuid;
+  v_antes jsonb;
+  v_n integer;
+begin
+  if not public.eh_admin() then
+    raise exception 'Só o administrador pode redefinir a verificação em duas etapas de outra pessoa.';
+  end if;
+  -- admin que tem a verificacao ligada precisa ter passado pelo codigo (senha de admin vazada nao basta)
+  if exists (select 1 from auth.mfa_factors f where f.user_id = auth.uid() and f.status = 'verified')
+     and coalesce(auth.jwt() ->> 'aal', '') <> 'aal2' then
+    raise exception 'Para redefinir, entre de novo no sistema digitando o código do seu aplicativo autenticador.';
+  end if;
+  perform public.mfa_exigir_aal2();
+
+  select u.id, u.nome, u.email into v_alvo from public.usuarios u where u.id = p_id_usuario;
+  if v_alvo.id is null then
+    raise exception 'Usuário não encontrado.';
+  end if;
+  if v_alvo.id = public.usuario_atual_id() then
+    raise exception 'Por aqui não dá para redefinir a sua própria verificação. Use "Verificação em duas etapas" no seu menu.';
+  end if;
+
+  select a.id into v_uid from auth.users a where lower(a.email) = lower(v_alvo.email) limit 1;
+  if v_uid is null or v_uid = auth.uid() then
+    return 0;
+  end if;
+
+  -- o que sai vai para a auditoria (sem o segredo do fator)
+  select jsonb_agg(jsonb_build_object('id', f.id, 'tipo', f.factor_type, 'situacao', f.status,
+                                      'nome', f.friendly_name, 'criado_em', f.created_at) order by f.created_at)
+    into v_antes
+    from auth.mfa_factors f where f.user_id = v_uid;
+  if v_antes is null then
+    return 0;
+  end if;
+
+  delete from auth.mfa_factors where user_id = v_uid;
+  get diagnostics v_n = row_count;
+
+  select u.id, u.nome into v_eu from public.usuarios u where u.id = public.usuario_atual_id();
+  insert into public.auditoria (id_usuario, email, nome_usuario, tabela, operacao, id_registro, id_obra, antes, depois)
+  values (v_eu.id, auth.email(), v_eu.nome, 'mfa_fatores', 'exclusao', v_alvo.id::text, null,
+          jsonb_build_object('usuario', v_alvo.email, 'nome', v_alvo.nome, 'fatores', v_antes),
+          jsonb_build_object('acao', 'verificação em duas etapas redefinida pelo administrador'));
+  return v_n;
+end;
+$function$
+;
+
+-- public.mfa_usuarios_com_fator()
+CREATE OR REPLACE FUNCTION public.mfa_usuarios_com_fator()
+ RETURNS TABLE(id_usuario uuid)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select distinct u.id
+    from public.usuarios u
+    join auth.users a on lower(a.email) = lower(u.email)
+    join auth.mfa_factors f on f.user_id = a.id and f.status = 'verified'
+   where public.eh_admin();
+$function$
+;
+
 -- public.minhas_pendencias()
 CREATE OR REPLACE FUNCTION public.minhas_pendencias()
  RETURNS jsonb
@@ -2750,6 +3022,89 @@ end;
 $function$
 ;
 
+-- public.obra_avanco_registrar(p_id_obra uuid, p_percentual numeric, p_data date, p_observacao text)
+CREATE OR REPLACE FUNCTION public.obra_avanco_registrar(p_id_obra uuid, p_percentual numeric, p_data date DEFAULT NULL::date, p_observacao text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
+  v_data date := coalesce(p_data, (now() at time zone 'America/Sao_Paulo')::date);
+  v_percentual numeric(5,2);
+  v_status text;
+  v_data_anterior date;
+  v_pct_anterior numeric(5,2);
+  v_id uuid;
+  v_substituiu boolean;
+  v_aviso text;
+begin
+  if not public.eh_usuario_ativo() then
+    raise exception 'Usuário sem acesso ao sistema.' using errcode = '42501';
+  end if;
+
+  select o.status::text into v_status from public.obras o where o.id = p_id_obra;
+  if not found then
+    raise exception 'Obra não encontrada.' using errcode = 'P0002';
+  end if;
+
+  -- pode_gerenciar_obra ja inclui admin e coordenador
+  if not coalesce(public.pode_gerenciar_obra(p_id_obra), false) then
+    raise exception 'Você não pode informar o avanço desta obra.' using errcode = '42501';
+  end if;
+
+  if p_percentual is null or p_percentual < 0 or p_percentual > 100 then
+    raise exception 'Informe um avanço entre 0%% e 100%%.' using errcode = '22023';
+  end if;
+  v_percentual := round(p_percentual, 2);
+
+  if v_data > v_hoje then
+    raise exception 'A data do avanço não pode ser futura.' using errcode = '22023';
+  end if;
+
+  if v_status is distinct from 'em_andamento' then
+    raise exception 'Só é possível informar o avanço de obra em andamento.' using errcode = '22023';
+  end if;
+
+  -- comparacao com o ponto anterior no tempo (o do mesmo dia e substituido, nao conta)
+  select a.data_referencia, a.percentual into v_data_anterior, v_pct_anterior
+  from public.obra_avancos a
+  where a.id_obra = p_id_obra and a.data_referencia < v_data
+  order by a.data_referencia desc
+  limit 1;
+
+  if v_data_anterior is not null and v_percentual < v_pct_anterior then
+    v_aviso := format('O avanço informado (%s%%) é menor que o anterior (%s%% em %s).',
+                      replace(v_percentual::text, '.', ','),
+                      replace(v_pct_anterior::text, '.', ','),
+                      to_char(v_data_anterior, 'DD/MM/YYYY'));
+  end if;
+
+  insert into public.obra_avancos (id_obra, data_referencia, percentual, observacao, id_usuario)
+  values (p_id_obra, v_data, v_percentual, nullif(btrim(p_observacao), ''), public.usuario_atual_id())
+  on conflict (id_obra, data_referencia) do update
+    set percentual = excluded.percentual,
+        observacao = excluded.observacao,
+        id_usuario = excluded.id_usuario,
+        updated_at = now()
+  returning id, (xmax <> 0) into v_id, v_substituiu;
+
+  return jsonb_build_object(
+    'id', v_id,
+    'id_obra', p_id_obra,
+    'data_referencia', v_data,
+    'percentual', v_percentual,
+    'substituiu', v_substituiu,
+    'aviso', v_aviso,
+    'anterior', case when v_data_anterior is null then null
+                     else jsonb_build_object('data_referencia', v_data_anterior,
+                                             'percentual', v_pct_anterior) end
+  );
+end;
+$function$
+;
+
 -- public.obra_valores_erp_solicitar(p_id_obra uuid, p_margem_contribuicao numeric, p_rentabilidade numeric, p_venda_sem_impostos numeric)
 CREATE OR REPLACE FUNCTION public.obra_valores_erp_solicitar(p_id_obra uuid, p_margem_contribuicao numeric, p_rentabilidade numeric, p_venda_sem_impostos numeric)
  RETURNS uuid
@@ -2795,7 +3150,13 @@ CREATE OR REPLACE FUNCTION public.obras_resumo_cartao(p_ids uuid[])
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-  with hoje as (select (now() at time zone 'America/Sao_Paulo')::date d)
+  with hoje as (select (now() at time zone 'America/Sao_Paulo')::date d),
+  eu as (
+    select u.id, u.perfil::text perfil, u.id_engenheiro_vinculado
+    from public.usuarios u
+    where lower(u.email) = lower(auth.email()) and u.ativo
+    limit 1
+  )
   select o.id,
     (select count(*)::int from public.tarefas t, hoje where t.id_obra = o.id and t.status in ('pendente', 'em_andamento') and t.data_vencimento < hoje.d),
     (select count(*)::int from public.parcelas_cliente p, hoje where p.id_obra = o.id and p.data_realizada is null and p.data_prevista < hoje.d),
@@ -2803,8 +3164,68 @@ AS $function$
     (select count(*)::int from public.documentos_projeto dp, hoje where dp.id_obra = o.id and dp.data_conclusao is null and dp.data_prevista < hoje.d),
     (select count(*)::int from public.obra_alertas a where a.id_obra = o.id and a.resolvido_em is null),
     (select count(*)::int from public.obra_alertas a where a.id_obra = o.id and a.resolvido_em is null and a.gravidade = 'critico')
-  from public.obras o
-  where o.id = any(p_ids) and public.eh_usuario_ativo();
+  from public.obras o, eu
+  where o.id = any(p_ids)
+    and (eu.perfil in ('admin', 'coordenador', 'logistica', 'fiscal', 'financeiro')
+         or o.id_responsavel = eu.id
+         or (eu.perfil = 'assistente' and o.id_responsavel = eu.id_engenheiro_vinculado));
+$function$
+;
+
+-- public.obras_saude(p_ids uuid[])
+CREATE OR REPLACE FUNCTION public.obras_saude(p_ids uuid[])
+ RETURNS TABLE(id_obra uuid, parcelas_vencidas integer, valor_vencido numeric, tarefas_atrasadas integer, tarefas_7dias integer, fases_atrasadas integer, fases_7dias integer, documentos_atrasados integer, documentos_7dias integer, alertas_abertos integer, alertas_criticos integer, fases_proximas jsonb)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  with hoje as (select (now() at time zone 'America/Sao_Paulo')::date d),
+  eu as (
+    select u.id, u.perfil::text perfil, u.id_engenheiro_vinculado
+    from public.usuarios u
+    where lower(u.email) = lower(auth.email()) and u.ativo
+    limit 1
+  ),
+  visiveis as (
+    select o.id
+    from public.obras o, eu
+    where o.id = any(p_ids)
+      and (eu.perfil in ('admin', 'coordenador', 'logistica', 'fiscal', 'financeiro')
+           or o.id_responsavel = eu.id
+           or (eu.perfil = 'assistente' and o.id_responsavel = eu.id_engenheiro_vinculado))
+  )
+  select v.id,
+    (select count(*)::int from public.parcelas_cliente p, hoje
+      where p.id_obra = v.id and p.data_prevista < hoje.d
+        and coalesce(p.valor_previsto, 0) - coalesce(p.valor_realizado, 0) > 0),
+    (select coalesce(sum(coalesce(p.valor_previsto, 0) - coalesce(p.valor_realizado, 0)), 0) from public.parcelas_cliente p, hoje
+      where p.id_obra = v.id and p.data_prevista < hoje.d
+        and coalesce(p.valor_previsto, 0) - coalesce(p.valor_realizado, 0) > 0),
+    (select count(*)::int from public.tarefas t, hoje
+      where t.id_obra = v.id and t.status in ('pendente', 'em_andamento')
+        and (t.data_vencimento at time zone 'UTC')::date < hoje.d),
+    (select count(*)::int from public.tarefas t, hoje
+      where t.id_obra = v.id and t.status in ('pendente', 'em_andamento')
+        and (t.data_vencimento at time zone 'UTC')::date between hoje.d and hoje.d + 7),
+    (select count(*)::int from public.cronograma_obra c, hoje
+      where c.id_obra = v.id and c.fim_real is null and coalesce(c.status, '') not in ('concluido', 'cancelado')
+        and c.fim_previsto < hoje.d),
+    (select count(*)::int from public.cronograma_obra c, hoje
+      where c.id_obra = v.id and c.fim_real is null and coalesce(c.status, '') not in ('concluido', 'cancelado')
+        and c.fim_previsto between hoje.d and hoje.d + 7),
+    (select count(*)::int from public.documentos_projeto dp, hoje
+      where dp.id_obra = v.id and dp.data_conclusao is null and coalesce(dp.status, '') not in ('concluido', 'nao_aplicavel')
+        and dp.data_prevista < hoje.d),
+    (select count(*)::int from public.documentos_projeto dp, hoje
+      where dp.id_obra = v.id and dp.data_conclusao is null and coalesce(dp.status, '') not in ('concluido', 'nao_aplicavel')
+        and dp.data_prevista between hoje.d and hoje.d + 7),
+    (select count(*)::int from public.obra_alertas a where a.id_obra = v.id and a.resolvido_em is null),
+    (select count(*)::int from public.obra_alertas a where a.id_obra = v.id and a.resolvido_em is null and a.gravidade = 'critico'),
+    (select coalesce(jsonb_agg(jsonb_build_object('fase', c.fase, 'fim_previsto', c.fim_previsto) order by c.fim_previsto, c.ordem), '[]'::jsonb)
+       from public.cronograma_obra c, hoje
+      where c.id_obra = v.id and c.fim_real is null and coalesce(c.status, '') not in ('concluido', 'cancelado')
+        and c.fim_previsto between hoje.d and hoje.d + 7)
+  from visiveis v;
 $function$
 ;
 
@@ -2936,6 +3357,59 @@ AS $function$
     or public.eh_fiscal()
     or public.eh_logistica()
     or public.eh_admin_ou_coordenador());
+$function$
+;
+
+-- public.previsao_chave_origens(p_origens jsonb)
+CREATE OR REPLACE FUNCTION public.previsao_chave_origens(p_origens jsonb)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public'
+AS $function$
+  select coalesce(string_agg(x.k, '|' order by x.k), '')
+    from (select trim(o->>'familia') || '=' || round(coalesce(nullif(trim(o->>'valor'), '')::numeric, 0), 2)::text as k
+            from jsonb_array_elements(case when jsonb_typeof(p_origens) = 'array' then p_origens else '[]'::jsonb end) o) x
+$function$
+;
+
+-- public.previsao_checar_duplicada(p_id uuid, p_id_obra uuid, p_tipo text, p_familia text, p_origens jsonb, p_valor numeric)
+CREATE OR REPLACE FUNCTION public.previsao_checar_duplicada(p_id uuid, p_id_obra uuid, p_tipo text, p_familia text, p_origens jsonb, p_valor numeric)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  r record;
+  v_familia text := trim(coalesce(p_familia, ''));
+  v_chave text := case when p_tipo = 'transferencia' then public.previsao_chave_origens(p_origens) else '' end;
+begin
+  -- serializa pedidos da mesma obra+familia (duas pessoas/dois cliques ao mesmo tempo)
+  perform pg_advisory_xact_lock(hashtextextended('solicitacao_previsao:' || coalesce(p_id_obra::text, '') || ':' || v_familia, 0));
+
+  select s.nome_solicitante, s.created_at, s.status into r
+    from public.solicitacoes_previsao s
+   where s.id_obra = p_id_obra
+     and s.familia_destino = v_familia
+     and s.tipo = p_tipo
+     and round(s.valor, 2) = round(p_valor, 2)
+     and s.status in ('simulando', 'aguardando_aprovacao', 'aprovada')
+     and s.id is distinct from p_id
+     and (p_tipo <> 'transferencia' or public.previsao_chave_origens(s.origens) = v_chave)
+   order by s.created_at
+   limit 1;
+
+  if found then
+    raise exception 'Já existe uma solicitação igual em aberto (mesma família, mesmo tipo e mesmo valor), pedida por % em % (situação: %). Acompanhe a que já existe ou cancele-a antes de pedir de novo.',
+      coalesce(nullif(trim(r.nome_solicitante), ''), 'outra pessoa'),
+      to_char(r.created_at at time zone 'America/Sao_Paulo', 'DD/MM "às" HH24:MI'),
+      case r.status when 'simulando' then 'simulando no ERP'
+                    when 'aguardando_aprovacao' then 'aguardando aprovação'
+                    else 'aprovada, gravando no ERP' end
+      using errcode = 'P0001';
+  end if;
+end;
 $function$
 ;
 
@@ -3632,6 +4106,79 @@ AS $function$
 $function$
 ;
 
+-- public.sf_sugestao_conferencia(p_id uuid)
+CREATE OR REPLACE FUNCTION public.sf_sugestao_conferencia(p_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_sol record;
+  v_sfs jsonb;
+  v_exp jsonb;
+begin
+  select s.id, s.id_obra, s.id_solicitante, s.tipo into v_sol
+    from public.solicitacoes_faturamento s where s.id = p_id;
+  -- mesma regra de quem ve a solicitacao (RLS de solicitacoes_faturamento)
+  if v_sol.id is null or not coalesce(public.pode_ver_solicitacao_faturamento(v_sol.id_obra, v_sol.id_solicitante), false) then
+    raise exception 'Solicitação não encontrada ou sem acesso.';
+  end if;
+  if v_sol.tipo <> 'produto' then
+    return jsonb_build_object('sfs', '[]'::jsonb, 'exportacao', null);
+  end if;
+
+  -- conferencias ja aprovadas pela logistica na mesma obra (os codigos dos itens do pedido levam o numero da obra,
+  -- entao outra obra nunca tem o mesmo item). Cancelada fica de fora (teste/erro).
+  select coalesce(jsonb_agg(t.base order by t.aprovado_em desc), '[]'::jsonb) into v_sfs
+    from (
+      select s.aprovado_em,
+             jsonb_build_object(
+               'numero', s.numero,
+               'aprovado_em', s.aprovado_em,
+               'peso_bruto', s.peso_bruto,
+               'peso_liquido', s.peso_liquido,
+               'volumes', s.volumes,
+               'especie', s.especie_volumes,
+               'itens', (select coalesce(jsonb_agg(jsonb_build_object(
+                                   'codigo_material', i.codigo_material,
+                                   'quantidade', i.quantidade_aprovada,
+                                   'volumes', i.volumes) order by i.sequencia), '[]'::jsonb)
+                           from public.solicitacoes_faturamento_itens i
+                          where i.id_solicitacao = s.id and i.quantidade_aprovada > 0)) as base
+        from public.solicitacoes_faturamento s
+       where s.id_obra = v_sol.id_obra
+         and s.id <> p_id
+         and s.tipo = 'produto'
+         and s.aprovado_em is not null
+         and s.status in ('aguardando_fiscal', 'faturada_parcial', 'faturada')
+         and s.peso_bruto > 0
+       order by s.aprovado_em desc
+       limit 10
+    ) t;
+
+  -- packing list do modulo de exportacao (pesos por item do pedido e n. de volumes do embarque)
+  select jsonb_build_object(
+           'atualizado_em', p.atualizado_em,
+           'qtd_volumes', p.dados -> 'embarque' -> 'qtd_volumes',
+           'itens', (select coalesce(jsonb_agg(jsonb_build_object(
+                               'codigo', e ->> 'codigo',
+                               'quantidade', e -> 'quantidade',
+                               'peso_bruto', e -> 'peso_bruto',
+                               'peso_liq', e -> 'peso_liq')), '[]'::jsonb)
+                       from jsonb_array_elements(p.dados -> 'itens') e))
+    into v_exp
+    from public.exportacao_processos p
+   where p.id_obra = v_sol.id_obra
+     and jsonb_typeof(p.dados -> 'itens') = 'array'
+   order by p.atualizado_em desc nulls last
+   limit 1;
+
+  return jsonb_build_object('sfs', v_sfs, 'exportacao', v_exp);
+end
+$function$
+;
+
 -- public.sincronizar_grupo_faturamento_familia()
 CREATE OR REPLACE FUNCTION public.sincronizar_grupo_faturamento_familia()
  RETURNS trigger
@@ -4014,6 +4561,22 @@ begin
 end $function$
 ;
 
+-- public.trg_projetos_erp_obra_criada()
+CREATE OR REPLACE FUNCTION public.trg_projetos_erp_obra_criada()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if new.codigo_externo is not null then
+    delete from public.projetos_erp where codigo = trim(new.codigo_externo);
+  end if;
+  return null;
+end;
+$function$
+;
+
 -- public.trg_sf_romaneio_avisos()
 CREATE OR REPLACE FUNCTION public.trg_sf_romaneio_avisos()
  RETURNS trigger
@@ -4096,6 +4659,20 @@ exception when others then
   raise warning 'avisos faturamento: %', sqlerrm;
   return new;
 end $function$
+;
+
+-- public.trg_solicitacao_previsao_duplicada()
+CREATE OR REPLACE FUNCTION public.trg_solicitacao_previsao_duplicada()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  perform public.previsao_checar_duplicada(new.id, new.id_obra, new.tipo, new.familia_destino, new.origens, new.valor);
+  return new;
+end;
+$function$
 ;
 
 -- public.trg_solicitacao_previsao_email()

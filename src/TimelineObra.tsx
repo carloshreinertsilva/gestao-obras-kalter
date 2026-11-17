@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { formatarDataSegura, labelOcorrencia } from "./utils";
+import { mensagemErro } from "./erros";
 import {
   BookOpen,
   Clock,
@@ -157,7 +158,7 @@ export default function TimelineObra({
       setDiarioEmEdicao(null);
       buscarTimeline();
     } catch (error: any) {
-      avisar(error.message || "Erro ao salvar diário.", "erro");
+      avisar(mensagemErro(error, "Erro ao salvar diário."), "erro");
     } finally {
       setCarregando(false);
     }
@@ -180,7 +181,7 @@ export default function TimelineObra({
       setNovaOcorrenciaDescricao("");
       buscarTimeline();
     } catch (error: any) {
-      avisar(error.message || "Erro ao registrar ocorrência.", "erro");
+      avisar(mensagemErro(error, "Erro ao registrar ocorrência."), "erro");
     } finally {
       setCarregando(false);
     }
@@ -197,7 +198,7 @@ export default function TimelineObra({
       avisar("Ocorrência marcada como resolvida!");
       buscarTimeline();
     } catch (error: any) {
-      avisar(error.message || "Erro ao resolver ocorrência.", "erro");
+      avisar(mensagemErro(error, "Erro ao resolver ocorrência."), "erro");
     } finally {
       setCarregando(false);
     }

@@ -1,9 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabase";
 import { fasesProjeto } from "../constants";
 import type { Obra, Usuario } from "../types";
 import { formatarDataSegura, formatarMoeda, labelFase, labelStatusObra, classeStatusObra } from "../utils";
-import { Save, AlertTriangle, Edit2, X, FolderOpen, Loader2, CheckCircle2, Clock } from "lucide-react";
+import { Save, AlertTriangle, Edit2, X, FolderOpen, Loader2, CheckCircle2, Clock, Search, List } from "lucide-react";
+import { mensagemErro } from "../erros";
+import { useDialogos } from "../Dialogos";
+import {
+  COLUNAS_PROJETO_ERP,
+  localDoCliente,
+  normalizarCodigoErp,
+  planejarPreenchimento,
+  resumoGravacaoErp,
+  type CampoPreenchivel,
+  type LinhaResumoErp,
+  type ProjetoErp,
+} from "../calculoObraErp";
 
 // Cadastros -> Obras: lista (filtro por situacao), cadastro de obra nova (com
 // cronograma e documentos padrao) e edicao. "Editar cadastro" de dentro da obra
@@ -47,12 +59,38 @@ const VALORES_ERP_VAZIOS: ValoresErp = { contribuicao: "", rentabilidade: "", ve
 const classeCampo =
   "w-full h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-[#2A6377] focus:ring-2 focus:ring-[#2A6377]/15 disabled:bg-slate-50";
 
+// atributos de acessibilidade + texto de erro de um campo obrigatorio (erro so aparece enquanto o campo segue vazio)
+function propsErroCampo(erros: Record<string, string>, id: string, vazio: boolean) {
+  const msg = vazio ? erros[id] : undefined;
+  return {
+    msg,
+    attrs: {
+      "aria-required": true as const,
+      "aria-invalid": msg ? (true as const) : undefined,
+      "aria-describedby": msg ? `${id}-erro` : undefined,
+    },
+    classe: msg ? " !border-red-500 focus:!border-red-500 focus:!ring-red-500/20" : "",
+  };
+}
+
+function TextoErroCampo({ id, msg }: { id: string; msg?: string }) {
+  return msg ? (
+    <p id={`${id}-erro`} className="mt-1 text-xs text-red-600">
+      {msg}
+    </p>
+  ) : null;
+}
+
 function Rotulo({ htmlFor, texto, obrigatorio, dica }: { htmlFor?: string; texto: string; obrigatorio?: boolean; dica?: string }) {
   return (
     <label htmlFor={htmlFor} className="flex items-baseline justify-between gap-2 mb-1">
       <span className="text-xs font-semibold text-slate-600">
         {texto}
-        {obrigatorio && <span className="text-red-500 ml-0.5">*</span>}
+        {obrigatorio && (
+          <span className="text-red-500 ml-0.5" aria-hidden="true">
+            *
+          </span>
+        )}
       </span>
       {dica && <span className="text-xs text-slate-500 truncate">{dica}</span>}
     </label>
@@ -142,6 +180,8 @@ export default function TelaCadastroObras({
   // como a obra estava no banco ao abrir a edicao: o update manda so o que mudou em relacao a isto
   const [obraOriginal, setObraOriginal] = useState<any>(null);
   const [erroObra, setErroObra] = useState<string>("");
+  // erro junto do campo obrigatorio vazio (id do campo -> texto); some quando a pessoa preenche
+  const [errosCampo, setErrosCampo] = useState<Record<string, string>>({});
   const [obrasCadastroLista, setObrasCadastroLista] = useState<Obra[]>([]);
   const [filtroStatusCadastroObras, setFiltroStatusCadastroObras] = useState<
     "em_andamento" | "finalizada" | "cancelada" | "todas"
@@ -152,6 +192,97 @@ export default function TelaCadastroObras({
   const [valoresErp, setValoresErp] = useState(VALORES_ERP_VAZIOS);
   const [valoresErpOriginais, setValoresErpOriginais] = useState(VALORES_ERP_VAZIOS);
   const [ultimoPedidoErp, setUltimoPedidoErp] = useState<any>(null);
+  const { confirmar } = useDialogos();
+
+  // C4: projetos do ERP ainda sem obra no app (tabela projetos_erp, gravada pelo robo). Enquanto o robo novo nao roda
+  // a tabela fica vazia (ou nem existe): a tela so nao mostra nada e o cadastro segue manual.
+  const podeCadastrar = isAdmin || usuarioAtual?.perfil === "engenheiro" || usuarioAtual?.perfil === "assistente";
+  const [projetosErp, setProjetosErp] = useState<ProjetoErp[]>([]);
+  const [buscaErp, setBuscaErp] = useState<{ codigo: string; estado: "buscando" | "achou" | "nao_achou"; projeto?: ProjetoErp } | null>(null);
+  const [verListaErp, setVerListaErp] = useState(false);
+  const [filtroListaErp, setFiltroListaErp] = useState("");
+  const codigoBuscadoRef = useRef("");
+
+  const carregarProjetosErp = async () => {
+    if (!podeCadastrar) return;
+    // cast: tabela nova ainda fora do database.types.ts gerado
+    const { data, error } = await (supabase as any)
+      .from("projetos_erp")
+      .select(COLUNAS_PROJETO_ERP)
+      .order("data_aprovacao", { ascending: false, nullsFirst: false })
+      .limit(300);
+    // erro (ex.: tabela ainda nao criada) = sem lista; nao atrapalha o cadastro manual
+    setProjetosErp(error ? [] : ((data as ProjetoErp[]) || []));
+  };
+
+  const buscarProjetoErp = async (texto: string) => {
+    const codigo = normalizarCodigoErp(texto);
+    codigoBuscadoRef.current = codigo;
+    if (!codigo || novaObra.id || !podeCadastrar) {
+      setBuscaErp(null);
+      return;
+    }
+    setBuscaErp({ codigo, estado: "buscando" });
+    const { data, error } = await (supabase as any).from("projetos_erp").select(COLUNAS_PROJETO_ERP).eq("codigo", codigo).maybeSingle();
+    if (codigoBuscadoRef.current !== codigo) return; // a pessoa ja trocou o codigo
+    if (error) {
+      setBuscaErp(null);
+      return;
+    }
+    if (data) setBuscaErp({ codigo, estado: "achou", projeto: data as ProjetoErp });
+    // lista vazia = robo ainda nao sincronizou nada: nao mostra "nao encontrei"
+    else setBuscaErp(projetosErp.length > 0 ? { codigo, estado: "nao_achou" } : null);
+  };
+
+  const escolherProjetoErp = (p: ProjetoErp) => {
+    codigoBuscadoRef.current = p.codigo;
+    setNovaObra((o: any) => ({ ...o, codigo_externo: p.codigo }));
+    setBuscaErp({ codigo: p.codigo, estado: "achou", projeto: p });
+    setVerListaErp(false);
+    setFiltroListaErp("");
+  };
+
+  const mostrarCampoObra = (campo: CampoPreenchivel, v: string) =>
+    campo === "valor_produto" || campo === "valor_servico"
+      ? formatarMoeda(Number(v || 0))
+      : campo === "data_inicio" || campo === "data_previsao_fim"
+        ? formatarDataSegura(v)
+        : v;
+
+  const preencherComErp = async (p: ProjetoErp) => {
+    const { preencher, diferencas } = planejarPreenchimento(novaObra, p);
+    let trocar: Record<string, string> = {};
+    if (diferencas.length > 0) {
+      const ok = await confirmar({
+        titulo: "Trocar o que já foi digitado?",
+        texto: (
+          <div className="space-y-2">
+            <p>Estes campos já têm valor diferente do ERP:</p>
+            <ul className="space-y-1.5">
+              {diferencas.map((d) => (
+                <li key={d.campo} className="rounded-lg border border-slate-200 px-3 py-2">
+                  <span className="block text-xs font-semibold text-slate-500">{d.rotulo}</span>
+                  <span className="block break-words">Digitado: {mostrarCampoObra(d.campo, d.digitado)}</span>
+                  <span className="block break-words text-[#2A6377] font-semibold">ERP: {mostrarCampoObra(d.campo, d.erp)}</span>
+                </li>
+              ))}
+            </ul>
+            <p>Os campos vazios são preenchidos de qualquer forma.</p>
+          </div>
+        ),
+        rotuloConfirmar: "Usar os dados do ERP",
+        rotuloCancelar: "Manter o que digitei",
+      });
+      if (ok) trocar = Object.fromEntries(diferencas.map((d) => [d.campo, d.erp]));
+    }
+    const mudou = Object.keys(preencher).length + Object.keys(trocar).length;
+    if (mudou === 0) {
+      onAviso(diferencas.length > 0 ? "Mantido o que foi digitado." : "Os campos já estão iguais aos do ERP.", "info");
+      return;
+    }
+    setNovaObra((o: any) => ({ ...o, ...preencher, ...trocar }));
+    onAviso("Campos preenchidos com os dados do ERP. Confira e escolha o responsável antes de cadastrar.", "info");
+  };
 
   const carregarValoresErp = async (idObra: string | null) => {
     setUltimoPedidoErp(null);
@@ -218,6 +349,7 @@ export default function TelaCadastroObras({
   async function salvarObra(e: any) {
     e.preventDefault();
     setErroObra("");
+    setErrosCampo({});
 
     if (
       !isAdmin &&
@@ -241,7 +373,17 @@ export default function TelaCadastroObras({
       !novaObra.data_previsao_fim ||
       !responsavelObra
     ) {
-      setErroObra("Todos os campos obrigatórios.");
+      const faltando: Record<string, string> = {};
+      if (!novaObra.codigo_externo) faltando["obra-codigo"] = "Informe o código.";
+      if (!novaObra.nome) faltando["obra-nome"] = "Informe o nome.";
+      if (!novaObra.data_inicio) faltando["obra-inicio"] = "Informe a data de início.";
+      if (!novaObra.data_previsao_fim) faltando["obra-fim"] = "Informe o prazo de entrega.";
+      if (!responsavelObra) faltando["obra-responsavel"] = "Escolha o responsável.";
+      setErrosCampo(faltando);
+      setErroObra("Preencha os campos obrigatórios (*).");
+      // foco no primeiro campo com erro (apos o React pintar o aria-invalid)
+      const primeiro = Object.keys(faltando)[0];
+      setTimeout(() => document.getElementById(primeiro)?.focus(), 0);
       return;
     }
     const valoresErpMudaram =
@@ -252,6 +394,17 @@ export default function TelaCadastroObras({
     if (valoresErpMudaram && (["contribuicao", "rentabilidade", "venda"] as const).some((k) => valoresErp[k] === "")) {
       setErroObra("Para gravar no ERP, informe a margem de contribuição, a rentabilidade e o faturamento sem impostos.");
       return;
+    }
+    // C9: o robo grava estes valores no ERP (cadastro de projetos e pedido de venda): mostra antes o que vai mudar.
+    // Nao confirmou = nada e salvo (nem a obra), para a pessoa revisar os valores.
+    if (valoresErpMudaram) {
+      const ok = await confirmar({
+        titulo: `Gravar no ERP os valores da obra ${novaObra.codigo_externo}?`,
+        texto: <ResumoGravacaoErp linhas={resumoGravacaoErp(valoresErpOriginais, valoresErp)} />,
+        rotuloConfirmar: novaObra.id ? "Salvar e enviar ao ERP" : "Cadastrar e enviar ao ERP",
+        rotuloCancelar: "Voltar e revisar",
+      });
+      if (!ok) return;
     }
     setCarregando(true);
     try {
@@ -328,7 +481,7 @@ export default function TelaCadastroObras({
         });
         if (erroErp) {
           // a obra ja foi salva; so os valores do ERP ficaram de fora
-          setErroObra("Obra salva, mas os valores do ERP não: " + erroErp.message);
+          setErroObra("Obra salva, mas os valores do ERP não: " + mensagemErro(erroErp, "Tente salvar de novo."));
           await carregarValoresErp(idObraSalva);
           onObrasAlteradas();
           buscarObrasCadastro();
@@ -358,15 +511,17 @@ export default function TelaCadastroObras({
         valor_servico: "",
         observacoes: "",
       });
+      setBuscaErp(null);
       onObrasAlteradas();
       buscarObrasCadastro();
+      carregarProjetosErp(); // a obra nova sai da lista "ainda sem obra no app"
     } catch (error: any) {
       // codigo repetido chega como erro tecnico do banco (unique de codigo_externo): traduz
       const msg = String(error?.message || "");
       setErroObra(
         error?.code === "23505" || msg.includes("duplicate key value")
           ? `Já existe uma obra com o código ${novaObra.codigo_externo}. Confira o código ou edite a obra existente.`
-          : "Erro: " + msg,
+          : mensagemErro(error, "Não foi possível salvar a obra."),
       );
     } finally {
       setCarregando(false);
@@ -395,6 +550,8 @@ export default function TelaCadastroObras({
     // sem a releitura nao da para saber o que a pessoa mudou: entao manda todos os campos do formulario (sem status)
     setObraOriginal(atual ? noFormulario : null);
     setErroObra("");
+    setBuscaErp(null);
+    setVerListaErp(false);
     carregarValoresErp(obra.id);
     setTimeout(() => {
       document
@@ -408,7 +565,7 @@ export default function TelaCadastroObras({
     if (!novaObra.id) return;
     const { error } = await supabase.rpc("exportacao_marcar_obra", { p_id_obra: novaObra.id, p_exportacao: valor });
     if (error) {
-      setErroObra("Não foi possível alterar a marca de exportação: " + error.message);
+      setErroObra("Não foi possível alterar a marca de exportação: " + mensagemErro(error, "Tente de novo."));
       return;
     }
     setNovaObra((o: any) => ({ ...o, exportacao: valor }));
@@ -436,12 +593,25 @@ export default function TelaCadastroObras({
     setUltimoPedidoErp(null);
     setObraOriginal(null);
     setErroObra("");
+    setErrosCampo({});
+    setBuscaErp(null);
   };
 
   useEffect(() => {
     buscarObrasCadastro();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuarioAtual?.id, filtroStatusCadastroObras]);
+
+  useEffect(() => {
+    carregarProjetosErp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuarioAtual?.id]);
+
+  const filtroErp = filtroListaErp.trim().toLowerCase();
+  const projetosErpFiltrados = filtroErp
+    ? projetosErp.filter((p) => [p.codigo, p.nome, p.cliente_nome, p.cidade].some((t) => (t || "").toLowerCase().includes(filtroErp)))
+    : projetosErp;
+  const mostrarErp = !novaObra.id && podeCadastrar;
 
   // "Editar cadastro" aberto de dentro da obra: preenche o formulario com ela
   useEffect(() => {
@@ -452,6 +622,12 @@ export default function TelaCadastroObras({
   }, [obraParaEditar]);
 
   const totalVenda = Number(novaObra.valor_produto || 0) + Number(novaObra.valor_servico || 0);
+
+  const pe_obra_codigo = propsErroCampo(errosCampo, "obra-codigo", !novaObra.codigo_externo);
+  const pe_obra_nome = propsErroCampo(errosCampo, "obra-nome", !novaObra.nome);
+  const pe_obra_inicio = propsErroCampo(errosCampo, "obra-inicio", !novaObra.data_inicio);
+  const pe_obra_fim = propsErroCampo(errosCampo, "obra-fim", !novaObra.data_previsao_fim);
+  const pe_obra_responsavel = propsErroCampo(errosCampo, "obra-responsavel", !novaObra.id_responsavel);
 
   return (
     <div className="animate-in fade-in dash-main-wrapper max-w-5xl">
@@ -490,49 +666,108 @@ export default function TelaCadastroObras({
             </div>
           )}
 
+          <p className="text-xs text-slate-500">
+            <span className="text-red-500" aria-hidden="true">
+              *
+            </span>{" "}
+            obrigatório
+          </p>
+
           <Secao titulo="Dados da obra">
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div>
                 <Rotulo htmlFor="obra-codigo" texto="Código" obrigatorio />
                 <input
                   id="obra-codigo"
+                  {...pe_obra_codigo.attrs}
                   value={novaObra.codigo_externo}
-                  onChange={(e) => setNovaObra({ ...novaObra, codigo_externo: e.target.value })}
+                  onChange={(e) => {
+                    setNovaObra({ ...novaObra, codigo_externo: e.target.value });
+                    // codigo mudou: o quadro do ERP era de outro codigo
+                    if (buscaErp && buscaErp.codigo !== normalizarCodigoErp(e.target.value)) {
+                      codigoBuscadoRef.current = "";
+                      setBuscaErp(null);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (mostrarErp && normalizarCodigoErp(e.target.value) !== buscaErp?.codigo) void buscarProjetoErp(e.target.value);
+                  }}
                   placeholder="ex.: 2182"
                   autoComplete="off"
-                  className={`${classeCampo} tabular-nums`}
+                  className={`${classeCampo} tabular-nums${pe_obra_codigo.classe}`}
                 />
+                <TextoErroCampo id="obra-codigo" msg={pe_obra_codigo.msg} />
+                {mostrarErp && (
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                    <button
+                      type="button"
+                      onClick={() => void buscarProjetoErp(novaObra.codigo_externo)}
+                      disabled={!normalizarCodigoErp(novaObra.codigo_externo)}
+                      className="text-xs font-semibold text-[#2A6377] hover:underline flex items-center gap-1 disabled:text-slate-400 disabled:no-underline"
+                    >
+                      <Search size={12} aria-hidden="true" /> Buscar no ERP
+                    </button>
+                    {projetosErp.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setVerListaErp((v) => !v)}
+                        aria-expanded={verListaErp}
+                        aria-controls="lista-projetos-erp"
+                        className="text-xs font-semibold text-[#2A6377] hover:underline flex items-center gap-1"
+                      >
+                        <List size={12} aria-hidden="true" /> Escolher da lista ({projetosErp.length})
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="sm:col-span-3">
                 <Rotulo htmlFor="obra-nome" texto="Nome" obrigatorio />
                 <input
                   id="obra-nome"
+                  {...pe_obra_nome.attrs}
                   value={novaObra.nome}
                   onChange={(e) => setNovaObra({ ...novaObra, nome: e.target.value })}
                   placeholder="Cliente / unidade"
                   autoComplete="off"
-                  className={classeCampo}
+                  className={`${classeCampo}${pe_obra_nome.classe}`}
                 />
+                <TextoErroCampo id="obra-nome" msg={pe_obra_nome.msg} />
               </div>
+              {mostrarErp && verListaErp && projetosErp.length > 0 && (
+                <ListaProjetosErp
+                  projetos={projetosErpFiltrados}
+                  total={projetosErp.length}
+                  filtro={filtroListaErp}
+                  onFiltro={setFiltroListaErp}
+                  onEscolher={escolherProjetoErp}
+                  onFechar={() => setVerListaErp(false)}
+                />
+              )}
+              {mostrarErp && buscaErp && <QuadroProjetoErp busca={buscaErp} onPreencher={(p) => void preencherComErp(p)} />}
               <div>
                 <Rotulo htmlFor="obra-inicio" texto="Início" obrigatorio />
                 <input
                   id="obra-inicio"
+                  {...pe_obra_inicio.attrs}
                   type="date"
                   value={novaObra.data_inicio}
                   onChange={(e) => setNovaObra({ ...novaObra, data_inicio: e.target.value })}
-                  className={classeCampo}
+                  className={`${classeCampo}${pe_obra_inicio.classe}`}
                 />
+                <TextoErroCampo id="obra-inicio" msg={pe_obra_inicio.msg} />
               </div>
               <div>
                 <Rotulo htmlFor="obra-fim" texto="Prazo de entrega" obrigatorio />
                 <input
                   id="obra-fim"
+                  {...pe_obra_fim.attrs}
                   type="date"
                   value={novaObra.data_previsao_fim}
                   onChange={(e) => setNovaObra({ ...novaObra, data_previsao_fim: e.target.value })}
-                  className={classeCampo}
+                  className={`${classeCampo}${pe_obra_fim.classe}`}
                 />
+                <TextoErroCampo id="obra-fim" msg={pe_obra_fim.msg} />
               </div>
               <div>
                 <Rotulo htmlFor="obra-fase" texto="Fase atual" />
@@ -554,9 +789,10 @@ export default function TelaCadastroObras({
                 {isAdmin ? (
                   <select
                     id="obra-responsavel"
+                    {...pe_obra_responsavel.attrs}
                     value={novaObra.id_responsavel}
                     onChange={(e) => setNovaObra({ ...novaObra, id_responsavel: e.target.value })}
-                    className={classeCampo}
+                    className={`${classeCampo}${pe_obra_responsavel.classe}`}
                   >
                     <option value="">Selecione…</option>
                     {listaUsuarios
@@ -572,6 +808,7 @@ export default function TelaCadastroObras({
                     {nomeUsuarioPorId(idResponsavelEscopo) || usuarioAtual?.nome || "Usuário atual"}
                   </div>
                 )}
+                <TextoErroCampo id="obra-responsavel" msg={pe_obra_responsavel.msg} />
               </div>
               <div className="sm:col-span-4">
                 <Rotulo htmlFor="obra-descricao" texto="Descrição da obra" />
@@ -758,6 +995,172 @@ export default function TelaCadastroObras({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const totalProjeto = (p: ProjetoErp) => Number(p.valor_produto || 0) + Number(p.valor_servico || 0);
+
+// C4: resultado da busca do codigo nos projetos do ERP sincronizados pelo robo
+function QuadroProjetoErp({
+  busca,
+  onPreencher,
+}: {
+  busca: { codigo: string; estado: "buscando" | "achou" | "nao_achou"; projeto?: ProjetoErp };
+  onPreencher: (p: ProjetoErp) => void;
+}) {
+  if (busca.estado === "buscando")
+    return (
+      <p className="sm:col-span-4 text-xs text-slate-500 flex items-center gap-1" aria-live="polite">
+        <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Procurando o código {busca.codigo} nos projetos do ERP…
+      </p>
+    );
+  if (busca.estado === "nao_achou" || !busca.projeto)
+    return (
+      <p className="sm:col-span-4 text-xs text-slate-500" aria-live="polite">
+        Não encontrei este código nos projetos do ERP sincronizados (a lista é atualizada pelo robô). Siga com o cadastro manual.
+      </p>
+    );
+  const p = busca.projeto;
+  const local = localDoCliente(p);
+  const linhas: [string, string][] = [
+    ["Nome", p.nome],
+    ["Cliente", [p.cliente_nome, local].filter(Boolean).join(" - ") || "—"],
+    ["Pedido de venda", p.pedido_venda ? `${p.pedido_venda}${p.situacao_pedido === "P" ? " (pendente)" : p.situacao_pedido === "L" ? " (liberado)" : ""}` : "—"],
+    ["Materiais", formatarMoeda(Number(p.valor_produto || 0))],
+    ["Serviço", formatarMoeda(Number(p.valor_servico || 0))],
+    ["Total da venda", formatarMoeda(totalProjeto(p))],
+    ["Aprovação do pedido", p.data_aprovacao ? formatarDataSegura(p.data_aprovacao) : p.data_pedido ? `${formatarDataSegura(p.data_pedido)} (cadastro)` : "—"],
+    ["Entrega prevista", p.data_entrega_prevista ? formatarDataSegura(p.data_entrega_prevista) : "—"],
+  ];
+  return (
+    <div className="sm:col-span-4 rounded-lg border border-[#2A6377]/25 bg-[#2A6377]/[0.04] p-3 md:p-4" aria-live="polite">
+      <p className="text-xs font-bold uppercase tracking-wide text-[#2A6377] mb-2">Dados do ERP · projeto {p.codigo}</p>
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+        {linhas.map(([rotulo, valor]) => (
+          <div key={rotulo} className="flex justify-between gap-3 min-w-0">
+            <dt className="text-slate-500 shrink-0">{rotulo}</dt>
+            <dd className="text-slate-800 font-semibold text-right break-words min-w-0">{valor}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPreencher(p)}
+          className="h-9 px-4 rounded-lg bg-[#2A6377] hover:bg-[#21505f] text-white text-sm font-bold"
+        >
+          Preencher com os dados do ERP
+        </button>
+        <p className="text-xs text-slate-500">Preenche só os campos vazios; se algo já digitado for diferente, pergunta antes.</p>
+      </div>
+    </div>
+  );
+}
+
+// C4: lista dos projetos do ERP ainda sem obra no app, para escolher em vez de digitar o codigo
+function ListaProjetosErp({
+  projetos,
+  total,
+  filtro,
+  onFiltro,
+  onEscolher,
+  onFechar,
+}: {
+  projetos: ProjetoErp[];
+  total: number;
+  filtro: string;
+  onFiltro: (v: string) => void;
+  onEscolher: (p: ProjetoErp) => void;
+  onFechar: () => void;
+}) {
+  return (
+    <div id="lista-projetos-erp" className="sm:col-span-4 rounded-lg border border-slate-200 bg-white">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 border-b bg-slate-50/70">
+        <p className="text-sm font-bold text-slate-800">
+          Projetos do ERP ainda sem obra no app <span className="text-xs font-semibold text-slate-500">({total})</span>
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            aria-label="Filtrar projetos do ERP"
+            value={filtro}
+            onChange={(e) => onFiltro(e.target.value)}
+            placeholder="Código, nome, cliente ou cidade"
+            autoComplete="off"
+            className={`${classeCampo} h-9 sm:w-64`}
+          />
+          <button
+            type="button"
+            onClick={onFechar}
+            className="shrink-0 p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white"
+            aria-label="Fechar a lista de projetos do ERP"
+            title="Fechar"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+      {projetos.length === 0 ? (
+        <p className="text-sm text-slate-500 px-3 py-4 text-center">Nenhum projeto com esse filtro.</p>
+      ) : (
+        <ul className="max-h-72 overflow-y-auto divide-y">
+          {projetos.map((p) => (
+            <li key={p.codigo}>
+              <button
+                type="button"
+                onClick={() => onEscolher(p)}
+                className="w-full text-left px-3 py-2 hover:bg-[#2A6377]/[0.05] focus:bg-[#2A6377]/[0.05] outline-none"
+              >
+                <span className="flex justify-between gap-3">
+                  <span className="min-w-0 font-semibold text-slate-800 truncate">
+                    <span className="tabular-nums text-[#2A6377]">{p.codigo}</span> · {p.nome}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold text-slate-700 tabular-nums">{formatarMoeda(totalProjeto(p))}</span>
+                </span>
+                <span className="flex justify-between gap-3 text-xs text-slate-500">
+                  <span className="min-w-0 truncate">{[p.cliente_nome, localDoCliente(p)].filter(Boolean).join(" - ") || "Cliente não informado"}</span>
+                  <span className="shrink-0 tabular-nums">
+                    {p.data_aprovacao ? `aprovado em ${formatarDataSegura(p.data_aprovacao)}` : p.data_pedido ? `pedido de ${formatarDataSegura(p.data_pedido)}` : ""}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// C9: "campo: valor atual no ERP -> valor novo" na confirmacao antes de mandar ao ERP. Valor atual = o que o robo
+// trouxe do ERP para o app (pode estar ate 5 min atrasado); sem ele, "não informado".
+function ResumoGravacaoErp({ linhas }: { linhas: LinhaResumoErp[] }) {
+  return (
+    <div className="space-y-3">
+      <p>O robô grava no ERP em até 5 minutos (cadastro de projetos e pedido de venda):</p>
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="text-xs text-slate-500 border-b">
+            <th scope="col" className="text-left font-semibold py-1.5 pr-2">Campo</th>
+            <th scope="col" className="text-right font-semibold py-1.5 px-2">Hoje no ERP</th>
+            <th scope="col" className="text-right font-semibold py-1.5 pl-2">Novo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map((l) => (
+            <tr key={l.chave} className="border-b last:border-0">
+              <th scope="row" className="text-left font-normal py-1.5 pr-2 text-slate-700">{l.rotulo}</th>
+              <td className="text-right py-1.5 px-2 tabular-nums text-slate-500 whitespace-nowrap">
+                {l.atual === null ? "não informado" : formatarMoeda(l.atual)}
+              </td>
+              <td className={`text-right py-1.5 pl-2 tabular-nums whitespace-nowrap ${l.muda ? "font-bold text-[#2A6377]" : "text-slate-500"}`}>
+                {formatarMoeda(l.novo)}
+                {!l.muda && <span className="block text-xs font-normal">sem mudança</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

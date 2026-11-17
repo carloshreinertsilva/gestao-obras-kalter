@@ -1,5 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../supabase";
+import { mensagemErro } from "../erros";
+import {
+  VERSAO_RASCUNHO,
+  apagarRascunho,
+  chaveRascunho,
+  conteudoVazio,
+  decidirRestauracao,
+  formatarMomentoRascunho,
+  gravarRascunho,
+  lerRascunho,
+  limparRascunhosVencidos,
+  listarRascunhosDoUsuario,
+  montarConteudo,
+  obterArmazenamento,
+  serializarConteudo,
+  temAlteracao,
+  type ConteudoAta,
+  type RascunhoAta,
+} from "../rascunhoAta";
 import TimelineObra from "../TimelineObra";
 import ReunioesHistorico from "../ReunioesHistorico";
 import { formatarDataSegura, formatarMoeda, dataHojeISO, labelFase, labelOcorrencia } from "../utils";
@@ -109,6 +128,96 @@ export default function TelaReunioes({
     erro?: string;
     destinatarios?: string[];
   } | null>(null);
+  // campos obrigatorios que faltaram (erro mostrado junto do campo)
+  const [errosCampos, setErrosCampos] = useState<{
+    obra?: string;
+    ocorrencia?: string;
+    tituloTarefa?: string;
+    responsavelTarefa?: string;
+  }>({});
+  const limparErroCampo = (campo: "obra" | "ocorrencia" | "tituloTarefa" | "responsavelTarefa") =>
+    setErrosCampos((prev) => (prev[campo] ? { ...prev, [campo]: undefined } : prev));
+
+  // Rascunho automatico (C3): o que foi digitado e nao salvo fica no navegador (src/rascunhoAta.ts).
+  // Os efeitos dependem so de textos (chave e conteudo serializado): o App re-renderiza a cada 60 s
+  // recriando props, e isso nao pode restaurar nada por cima do que a pessoa esta digitando.
+  type AvisoRascunho = {
+    chave: string;
+    tipo: "restaurado" | "perguntar";
+    motivo?: "alterada_no_banco" | "formulario_com_conteudo";
+    rascunho: RascunhoAta;
+    anterior: ConteudoAta; // o que estava na tela antes (para "Descartar rascunho" voltar)
+  };
+  const [avisoRascunho, setAvisoRascunho] = useState<AvisoRascunho | null>(null);
+  const avisoRascunhoRef = useRef<AvisoRascunho | null>(null);
+  const definirAvisoRascunho = (a: AvisoRascunho | null) => {
+    avisoRascunhoRef.current = a;
+    setAvisoRascunho(a);
+  };
+  const [ultimoRascunho, setUltimoRascunho] = useState<{ chave: string; em: number } | null>(null);
+  const armazenamentoRef = useRef(obterArmazenamento());
+  // conteudo da ata gravada aberta para edicao (base para saber se algo mudou); obra nova = null
+  const baseRascunhoRef = useRef<{ chave: string | null; json: string | null }>({ chave: null, json: null });
+  // gravacao agendada (debounce); null = nada a gravar
+  const pendenteRascunhoRef = useRef<{ chave: string; rascunho: RascunhoAta | null } | null>(null);
+  const chaveAnteriorRascunhoRef = useRef<string | null>(null);
+  const usuarioIdAtual = usuarioAtual?.id || null;
+  const chaveRascunhoAtual = chaveRascunho({
+    usuario: usuarioIdAtual,
+    idObra: reuniaoForm.id_obra,
+    dataReuniao: reuniaoForm.data_reuniao,
+    idReuniao: ataEmEdicao?.idReuniao || null,
+  });
+  const conteudoRascunhoAtual = montarConteudo({
+    data_reuniao: reuniaoForm.data_reuniao,
+    resumo_geral: reuniaoForm.resumo_geral,
+    ocorrencias: listaOcorrencias,
+    tarefas: listaTarefas,
+    novaOcorrencia,
+    novaTarefa,
+  });
+  const conteudoRascunhoJson = serializarConteudo(conteudoRascunhoAtual);
+  const baseRascunhoDa = (chave: string | null) =>
+    chave && baseRascunhoRef.current.chave === chave ? baseRascunhoRef.current.json : null;
+  const rascunhoPausado =
+    !!avisoRascunho && avisoRascunho.tipo === "perguntar" && avisoRascunho.chave === chaveRascunhoAtual;
+
+  // grava (ou apaga, se nao ha nada alem da base) o que esta agendado; so usa refs (chamado por eventos da pagina)
+  const gravarRascunhoPendente = () => {
+    const p = pendenteRascunhoRef.current;
+    pendenteRascunhoRef.current = null;
+    if (!p) return;
+    const aviso = avisoRascunhoRef.current;
+    // pergunta aberta sobre o rascunho desta obra: nao sobrescreve o rascunho antes da resposta
+    if (aviso && aviso.tipo === "perguntar" && aviso.chave === p.chave) return;
+    if (p.rascunho) {
+      if (gravarRascunho(armazenamentoRef.current, p.chave, p.rascunho))
+        setUltimoRascunho({ chave: p.chave, em: p.rascunho.salvoEm });
+    } else {
+      apagarRascunho(armazenamentoRef.current, p.chave);
+      setUltimoRascunho((prev) => (prev?.chave === p.chave ? null : prev));
+    }
+  };
+
+  // salvou, cancelou ou descartou: apaga o rascunho e cancela o que estava agendado
+  const descartarRascunho = (chave: string | null) => {
+    pendenteRascunhoRef.current = null;
+    apagarRascunho(armazenamentoRef.current, chave);
+    definirAvisoRascunho(null);
+    setUltimoRascunho(null);
+  };
+
+  const aplicarConteudoRascunho = (c: ConteudoAta) => {
+    setReuniaoForm((prev: any) => ({
+      ...prev,
+      data_reuniao: c.data_reuniao || prev.data_reuniao,
+      resumo_geral: c.resumo_geral,
+    }));
+    setListaOcorrencias(c.ocorrencias);
+    setListaTarefas(c.tarefas);
+    setNovaOcorrencia(c.novaOcorrencia);
+    setNovaTarefa(c.novaTarefa);
+  };
 
   // texto digitado pelos usuarios vai escapado no HTML da ata (a ata e aberta numa
   // janela do proprio app para imprimir e vai por e-mail)
@@ -361,14 +470,28 @@ export default function TelaReunioes({
   };
 
   const adicionarOcorrencia = () => {
-    if (!String(novaOcorrencia.descricao || "").trim()) return; // o banco recusa descricao em branco
+    if (!String(novaOcorrencia.descricao || "").trim()) {
+      // o banco recusa descricao em branco
+      setErrosCampos((prev) => ({ ...prev, ocorrencia: "Descreva a ocorrência." }));
+      refDescricaoOcorrencia.current?.focus();
+      return;
+    }
     setListaOcorrencias([...listaOcorrencias, novaOcorrencia]);
     setNovaOcorrencia({ tipo: "avanco", descricao: "" });
   };
 
   const adicionarTarefa = () => {
-    if (!String(novaTarefa.titulo || "").trim() || !novaTarefa.id_responsavel)
-      return onAviso("Preencha título e responsável.", "erro");
+    const faltaTitulo = !String(novaTarefa.titulo || "").trim();
+    const faltaResp = !novaTarefa.id_responsavel;
+    if (faltaTitulo || faltaResp) {
+      setErrosCampos((prev) => ({
+        ...prev,
+        tituloTarefa: faltaTitulo ? "Informe o título." : undefined,
+        responsavelTarefa: faltaResp ? "Escolha o responsável." : undefined,
+      }));
+      (faltaTitulo ? refTituloTarefa : refResponsavelTarefa).current?.focus();
+      return;
+    }
     const nomeResp =
       listaUsuarios.find((u) => u.id === novaTarefa.id_responsavel)?.nome || "";
     setListaTarefas([
@@ -401,6 +524,7 @@ export default function TelaReunioes({
     setNovaTarefa(TAREFA_VAZIA);
     setAtaEmEdicao(null);
     setContextoObraAta(null);
+    setErrosCampos({});
   };
 
   // Antes de salvar: o que ficou digitado e nao foi adicionado nao some calado (A9).
@@ -429,6 +553,11 @@ export default function TelaReunioes({
     });
     if (adicionar) {
       if (tarefaIncompleta) {
+        setErrosCampos((prev) => ({
+          ...prev,
+          tituloTarefa: faltaTitulo ? "Informe o título." : undefined,
+          responsavelTarefa: faltaResponsavel ? "Escolha o responsável." : undefined,
+        }));
         (faltaTitulo ? refTituloTarefa : refResponsavelTarefa).current?.focus();
         return null;
       }
@@ -465,11 +594,15 @@ export default function TelaReunioes({
   };
 
   async function salvarReuniaoObra() {
-    if (!reuniaoForm.id_obra)
+    if (!reuniaoForm.id_obra) {
+      setErrosCampos((prev) => ({ ...prev, obra: "Selecione a obra." }));
       return onAviso("Selecione uma obra.", "erro");
+    }
     const itens = await resolverItensPendentes();
     if (!itens) return;
     const emEdicao = ataEmEdicao;
+    // chave do rascunho desta obra (a tela muda depois de salvar)
+    const chaveRascunhoSalvando = chaveRascunhoAtual;
     setCarregando(true);
     try {
       const obraSelecionada = obrasLista.find(
@@ -510,13 +643,15 @@ export default function TelaReunioes({
           setObrasNaAtaAtual((prev: any) =>
             prev.filter((ob: any) => ob.id_reuniao !== emEdicao.idReuniao),
           );
-          onAviso(`${errSalvar.message} Clique em salvar de novo para gravar o que está na tela.`, "erro");
+          onAviso(`${mensagemErro(errSalvar)} Clique em salvar de novo para gravar o que está na tela.`, "erro");
           return;
         }
         throw errSalvar;
       }
       if (!salva?.id_reuniao) throw new Error("A gravação não retornou a reunião.");
       setIdSessaoAtaAtual(salva.id_sessao);
+      // gravado no banco: o rascunho deste navegador nao serve mais
+      descartarRascunho(chaveRascunhoSalvando);
 
       const nomeObra = obraSelecionada
         ? `${obraSelecionada.codigo_externo} - ${obraSelecionada.nome}`
@@ -571,7 +706,7 @@ export default function TelaReunioes({
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error: any) {
       // nada foi gravado (transacao unica): o que esta na tela continua para tentar de novo
-      onAviso("Não foi possível salvar: " + (error?.message || "erro desconhecido"), "erro");
+      onAviso("Não foi possível salvar: " + mensagemErro(error, "erro desconhecido."), "erro");
     } finally {
       setCarregando(false);
     }
@@ -598,6 +733,7 @@ export default function TelaReunioes({
         }))
       )
         return;
+      descartarRascunho(chaveRascunhoAtual);
     }
     setCarregando(true);
     try {
@@ -605,6 +741,26 @@ export default function TelaReunioes({
         p_id_reuniao: registro.id_reuniao,
       });
       if (error) throw error;
+
+      // base do rascunho = versao gravada (antes do setState: o efeito do rascunho le isto ao trocar a chave)
+      baseRascunhoRef.current = {
+        chave: chaveRascunho({
+          usuario: usuarioAtual?.id,
+          idObra: ata.id_obra,
+          dataReuniao: ata.data_reuniao,
+          idReuniao: ata.id_reuniao,
+        }),
+        json: serializarConteudo(
+          montarConteudo({
+            data_reuniao: ata.data_reuniao || new Date().toISOString().split("T")[0],
+            resumo_geral: ata.resumo_geral || "",
+            ocorrencias: ata.ocorrencias || [],
+            tarefas: ata.tarefas || [],
+            novaOcorrencia: { tipo: "avanco", descricao: "" },
+            novaTarefa: TAREFA_VAZIA,
+          }),
+        ),
+      };
 
       setGestorSelecionadoAta(registro.id_gestor || "");
       setReuniaoForm({
@@ -625,7 +781,7 @@ export default function TelaReunioes({
         "Obra aberta para edição. A versão gravada continua valendo até você salvar.",
       );
     } catch (error: any) {
-      onAviso("Não foi possível abrir a obra para edição: " + error.message, "erro");
+      onAviso("Não foi possível abrir a obra para edição: " + mensagemErro(error), "erro");
     } finally {
       setCarregando(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -643,6 +799,7 @@ export default function TelaReunioes({
       }))
     )
       return;
+    descartarRascunho(chaveRascunhoAtual);
     limparFormularioObra();
   };
 
@@ -698,7 +855,7 @@ export default function TelaReunioes({
     } catch (error: any) {
       return {
         ok: false,
-        erro: error.message || "Erro ao enviar e-mail.",
+        erro: mensagemErro(error, "Erro ao enviar e-mail."),
         destinatarios,
       };
     }
@@ -721,6 +878,7 @@ export default function TelaReunioes({
         }))
       )
         return;
+      descartarRascunho(chaveRascunhoAtual);
       limparFormularioObra();
     }
     const dataHj = formatarDataSegura(reuniaoForm.data_reuniao);
@@ -758,7 +916,7 @@ export default function TelaReunioes({
         .update({ status: "fechada", fechada_at: new Date().toISOString() })
         .eq("id", idSessaoAtaAtual);
       if (errFechar)
-        onAviso(`A ata foi gerada, mas a sessão da reunião não foi fechada no banco: ${errFechar.message}`, "erro");
+        onAviso(`A ata foi gerada, mas a sessão da reunião não foi fechada no banco: ${mensagemErro(errFechar)}`, "erro");
     }
 
     setEnviandoEmailAta(true);
@@ -807,6 +965,148 @@ export default function TelaReunioes({
         ]),
     ).entries(),
   ).sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+
+  // rascunho: grava ~800 ms depois da ultima mudanca; trocar de obra/data grava o que estava agendado na chave antiga
+  useEffect(() => {
+    if (!chaveRascunhoAtual || !usuarioIdAtual || rascunhoPausado) return;
+    const obra = obrasLista.find((o) => o.id === reuniaoForm.id_obra);
+    pendenteRascunhoRef.current = {
+      chave: chaveRascunhoAtual,
+      rascunho: temAlteracao(conteudoRascunhoAtual, baseRascunhoDa(chaveRascunhoAtual))
+        ? {
+            v: VERSAO_RASCUNHO,
+            usuario: usuarioIdAtual,
+            idObra: reuniaoForm.id_obra,
+            nomeObra: ataEmEdicao?.nomeObra || (obra ? `${obra.codigo_externo} - ${obra.nome}` : ""),
+            dataReuniao: reuniaoForm.data_reuniao,
+            idReuniao: ataEmEdicao?.idReuniao || null,
+            versaoBase: ataEmEdicao?.versao || null,
+            salvoEm: Date.now(),
+            conteudo: conteudoRascunhoAtual,
+          }
+        : null,
+    };
+    const t = setTimeout(gravarRascunhoPendente, 800);
+    return () => {
+      clearTimeout(t);
+      gravarRascunhoPendente();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveRascunhoAtual, conteudoRascunhoJson, rascunhoPausado]);
+
+  // Ao abrir uma obra/ata (a chave mudou): procura rascunho e decide restaurar, perguntar ou nada.
+  // Declarado DEPOIS do efeito de gravar: zera o que ele acabou de agendar quando restaura/pergunta.
+  useEffect(() => {
+    const anterior = chaveAnteriorRascunhoRef.current;
+    if (chaveRascunhoAtual) chaveAnteriorRascunhoRef.current = chaveRascunhoAtual;
+    if (avisoRascunhoRef.current && avisoRascunhoRef.current.chave !== chaveRascunhoAtual)
+      definirAvisoRascunho(null);
+    if (!chaveRascunhoAtual) return;
+    const arm = armazenamentoRef.current;
+    const agora = Date.now();
+    const r = lerRascunho(arm, chaveRascunhoAtual, agora);
+    setUltimoRascunho(r ? { chave: chaveRascunhoAtual, em: r.salvoEm } : null);
+    const decisao = decidirRestauracao({
+      rascunho: r,
+      conteudoAtual: conteudoRascunhoAtual,
+      baseJson: baseRascunhoDa(chaveRascunhoAtual),
+      versaoBanco: ataEmEdicao?.versao || null,
+    });
+    if (decisao.acao === "nenhuma" || !r) {
+      // texto levado para outra obra/data (trocou no seletor): o rascunho vai junto, nao fica copia na antiga
+      if (anterior && anterior !== chaveRascunhoAtual && !conteudoVazio(conteudoRascunhoAtual)) {
+        const velho = lerRascunho(arm, anterior, agora);
+        if (
+          velho &&
+          serializarConteudo({ ...velho.conteudo, data_reuniao: conteudoRascunhoAtual.data_reuniao }) ===
+            conteudoRascunhoJson
+        )
+          apagarRascunho(arm, anterior);
+      }
+      return;
+    }
+    pendenteRascunhoRef.current = null;
+    if (decisao.acao === "restaurar") {
+      aplicarConteudoRascunho(r.conteudo);
+      definirAvisoRascunho({
+        chave: chaveRascunhoAtual,
+        tipo: "restaurado",
+        rascunho: r,
+        anterior: conteudoRascunhoAtual,
+      });
+    } else {
+      definirAvisoRascunho({
+        chave: chaveRascunhoAtual,
+        tipo: "perguntar",
+        motivo: decisao.motivo,
+        rascunho: r,
+        anterior: conteudoRascunhoAtual,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveRascunhoAtual]);
+
+  // sair da pagina / trocar de app no celular: grava na hora o que estava esperando o debounce
+  useEffect(() => {
+    const aoEsconder = () => {
+      if (document.visibilityState === "hidden") gravarRascunhoPendente();
+    };
+    window.addEventListener("pagehide", gravarRascunhoPendente);
+    document.addEventListener("visibilitychange", aoEsconder);
+    return () => {
+      window.removeEventListener("pagehide", gravarRascunhoPendente);
+      document.removeEventListener("visibilitychange", aoEsconder);
+    };
+  }, []);
+
+  // rascunhos com mais de 14 dias somem ao abrir a tela
+  useEffect(() => {
+    if (ativa) limparRascunhosVencidos(armazenamentoRef.current, Date.now());
+  }, [ativa]);
+
+  // outros rascunhos deste usuario na mesma reuniao (para achar depois de recarregar a pagina)
+  const outrosRascunhos = useMemo(
+    () =>
+      listarRascunhosDoUsuario(armazenamentoRef.current, usuarioIdAtual, Date.now())
+        .filter((x) => x.chave !== chaveRascunhoAtual)
+        .filter((x) =>
+          x.rascunho.idReuniao
+            ? obrasNaAtaAtual.some((ob: any) => ob.id_reuniao === x.rascunho.idReuniao)
+            : x.rascunho.dataReuniao === reuniaoForm.data_reuniao,
+        ),
+    // ultimoRascunho/avisoRascunho: rele depois de gravar ou descartar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [usuarioIdAtual, chaveRascunhoAtual, reuniaoForm.data_reuniao, obrasNaAtaAtual, ultimoRascunho, avisoRascunho],
+  );
+
+  const abrirOutroRascunho = (r: RascunhoAta) => {
+    if (r.idReuniao) {
+      const registro = obrasNaAtaAtual.find((ob: any) => ob.id_reuniao === r.idReuniao);
+      if (registro) editarRegistroAta(registro);
+      return;
+    }
+    setGestorSelecionadoAta("");
+    setErrosCampos((prev) => ({ ...prev, obra: undefined }));
+    setReuniaoForm((prev: any) => ({ ...prev, id_obra: r.idObra }));
+  };
+
+  const descartarRascunhoDoAviso = () => {
+    const aviso = avisoRascunhoRef.current;
+    if (!aviso) return;
+    pendenteRascunhoRef.current = null;
+    apagarRascunho(armazenamentoRef.current, aviso.chave);
+    setUltimoRascunho(null);
+    // restaurado: volta ao que estava antes; pergunta: a tela ja esta com o que estava antes
+    if (aviso.tipo === "restaurado") aplicarConteudoRascunho(aviso.anterior);
+    definirAvisoRascunho(null);
+  };
+
+  const usarRascunhoDoAviso = () => {
+    const aviso = avisoRascunhoRef.current;
+    if (!aviso) return;
+    aplicarConteudoRascunho(aviso.rascunho.conteudo);
+    definirAvisoRascunho({ ...aviso, tipo: "restaurado", motivo: undefined });
+  };
 
   useEffect(() => {
     if (
@@ -921,19 +1221,23 @@ export default function TelaReunioes({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 max-w-full">
-                    2. Selecione a Obra
+                  <label htmlFor="reuniao-obra" className="block text-sm font-medium mb-2 max-w-full">
+                    2. Selecione a Obra <span className="text-red-600" aria-hidden="true">*</span>
                   </label>
                   <select
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] font-bold bg-gray-50 max-w-full"
+                    id="reuniao-obra"
+                    className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] font-bold bg-gray-50 max-w-full ${errosCampos.obra ? "border-red-500" : ""}`}
                     value={reuniaoForm.id_obra}
                     disabled={!!ataEmEdicao}
-                    onChange={(e) =>
+                    aria-required="true"
+                    aria-invalid={!!errosCampos.obra}
+                    onChange={(e) => {
+                      limparErroCampo("obra");
                       setReuniaoForm({
                         ...reuniaoForm,
                         id_obra: e.target.value,
-                      })
-                    }
+                      });
+                    }}
                   >
                     <option value="">
                       {gestorSelecionadoAta
@@ -958,6 +1262,9 @@ export default function TelaReunioes({
                         );
                       })}
                   </select>
+                  {errosCampos.obra && (
+                    <p className="text-red-600 text-xs mt-1 font-semibold">{errosCampos.obra}</p>
+                  )}
                   {!ataEmEdicao && obrasNaAtaAtual.some(
                     (ob: any) => ob.id_obra === reuniaoForm.id_obra,
                   ) && (
@@ -1014,6 +1321,78 @@ export default function TelaReunioes({
                 </button>
               </div>
             )}
+            {avisoRascunho && avisoRascunho.chave === chaveRascunhoAtual && (() => {
+              const quando = formatarMomentoRascunho(avisoRascunho.rascunho.salvoEm);
+              const perguntando = avisoRascunho.tipo === "perguntar";
+              return (
+                <div
+                  role="status"
+                  className={`mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm border ${perguntando ? "bg-amber-50 border-amber-300 text-amber-900" : "bg-sky-50 border-sky-200 text-sky-900"}`}
+                >
+                  <span className="min-w-0">
+                    {perguntando
+                      ? avisoRascunho.motivo === "alterada_no_banco"
+                        ? `Você tem um rascunho desta obra de ${quando.dia} às ${quando.hora}, mas a ata gravada foi alterada por outra pessoa depois dele. A tela mostra a versão gravada atual. Se usar o rascunho, ao salvar ele substitui essa versão.`
+                        : `Há um rascunho desta obra de ${quando.dia} às ${quando.hora} que ainda não foi salvo, diferente do que está na tela agora.`
+                      : `Recuperamos o que você tinha digitado em ${quando.dia} às ${quando.hora} e ainda não foi salvo.`}
+                    <span className="block text-xs opacity-80">
+                      O rascunho fica só neste navegador (não aparece em outro computador ou celular).
+                    </span>
+                  </span>
+                  <span className="flex flex-wrap gap-2 shrink-0">
+                    {perguntando ? (
+                      <button
+                        onClick={usarRascunhoDoAviso}
+                        className="text-xs font-bold px-3 py-1.5 rounded-lg border border-amber-400 bg-white hover:bg-amber-100"
+                      >
+                        Usar o rascunho
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => definirAvisoRascunho(null)}
+                        className="text-xs font-bold px-3 py-1.5 rounded-lg border border-sky-300 bg-white hover:bg-sky-100"
+                      >
+                        Manter
+                      </button>
+                    )}
+                    <button
+                      onClick={descartarRascunhoDoAviso}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100"
+                    >
+                      Descartar rascunho
+                    </button>
+                  </span>
+                </div>
+              );
+            })()}
+            {chaveRascunhoAtual && !(avisoRascunho && avisoRascunho.chave === chaveRascunhoAtual) && (
+              <p className="mt-3 text-xs text-slate-500">
+                {ultimoRascunho && ultimoRascunho.chave === chaveRascunhoAtual
+                  ? `Rascunho salvo neste computador às ${formatarMomentoRascunho(ultimoRascunho.em).hora}. `
+                  : "O que você digitar fica guardado como rascunho até salvar. "}
+                Ele fica só neste navegador (não aparece em outro computador ou celular).
+              </p>
+            )}
+            {outrosRascunhos.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span>Também há rascunho não salvo de:</span>
+                {outrosRascunhos.map(({ chave, rascunho: r }) => (
+                  <button
+                    key={chave}
+                    onClick={() => abrirOutroRascunho(r)}
+                    disabled={carregando || (!r.idReuniao && !!ataEmEdicao)}
+                    className="px-2 py-1 rounded-full border border-slate-300 bg-white hover:bg-slate-50 font-semibold disabled:opacity-50"
+                    title={r.idReuniao ? "Reabrir esta obra para edição" : "Abrir esta obra"}
+                  >
+                    {r.nomeObra || "Obra"}
+                    {r.idReuniao ? " (edição)" : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-xs text-slate-500">
+              <span className="text-red-600" aria-hidden="true">*</span> obrigatório
+            </p>
             {obrasNaAtaAtual.length > 0 && (
               <div className="mt-6 pt-4 border-t flex flex-wrap items-center gap-2 max-w-full">
                 <span className="text-sm font-medium text-gray-500 mr-2 max-w-full">
@@ -1185,29 +1564,44 @@ export default function TelaReunioes({
                         <option value="outros">Outros</option>
                       </select>
                     </div>
+                    <label htmlFor="reuniao-ocorrencia-descricao" className="text-xs text-slate-500">
+                      Descrição <span className="text-red-600" aria-hidden="true">*</span>
+                    </label>
                     <textarea
+                      id="reuniao-ocorrencia-descricao"
                       ref={refDescricaoOcorrencia}
-                      className="border rounded-lg p-3 w-full flex-1 min-h-[110px] outline-none focus:border-[#2A6377] text-sm resize-none"
+                      className={`border rounded-lg p-3 w-full flex-1 min-h-[110px] outline-none focus:border-[#2A6377] text-sm resize-none ${errosCampos.ocorrencia ? "border-red-500" : ""}`}
                       placeholder="Descreva a ocorrência… (Ctrl+Enter para adicionar)"
+                      aria-required="true"
+                      aria-invalid={!!errosCampos.ocorrencia}
                       value={novaOcorrencia.descricao}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        limparErroCampo("ocorrencia");
                         setNovaOcorrencia({
                           ...novaOcorrencia,
                           descricao: e.target.value,
-                        })
-                      }
+                        });
+                      }}
                       onKeyDown={(e) =>
                         e.key === "Enter" &&
                         (e.ctrlKey || e.metaKey) &&
                         adicionarOcorrencia()
                       }
                     />
-                    <button
-                      onClick={adicionarOcorrencia}
-                      className="self-end bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm transition"
-                    >
-                      Adicionar
-                    </button>
+                    {errosCampos.ocorrencia && (
+                      <p className="text-red-600 text-xs font-semibold">{errosCampos.ocorrencia}</p>
+                    )}
+                    <div className="flex items-center justify-between gap-2 w-full">
+                      <span className="text-xs text-slate-500">
+                        <span className="text-red-600" aria-hidden="true">*</span> obrigatório
+                      </span>
+                      <button
+                        onClick={adicionarOcorrencia}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2 rounded-lg font-bold text-sm transition"
+                      >
+                        Adicionar
+                      </button>
+                    </div>
                   </div>
                   {listaOcorrencias.map((oc, idx) => (
                     <div
@@ -1239,19 +1633,28 @@ export default function TelaReunioes({
                     5. Gerar Tarefas
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-2 mb-2 w-full">
-                    <input
-                      ref={refTituloTarefa}
-                      type="text"
-                      className="border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm"
-                      placeholder="O que precisa ser feito…"
-                      value={novaTarefa.titulo}
-                      onChange={(e) =>
-                        setNovaTarefa({
-                          ...novaTarefa,
-                          titulo: e.target.value,
-                        })
-                      }
-                    />
+                    <div className="min-w-0">
+                      <input
+                        ref={refTituloTarefa}
+                        type="text"
+                        className={`border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm ${errosCampos.tituloTarefa ? "border-red-500" : ""}`}
+                        placeholder="O que precisa ser feito… *"
+                        aria-label="Título da tarefa (obrigatório)"
+                        aria-required="true"
+                        aria-invalid={!!errosCampos.tituloTarefa}
+                        value={novaTarefa.titulo}
+                        onChange={(e) => {
+                          limparErroCampo("tituloTarefa");
+                          setNovaTarefa({
+                            ...novaTarefa,
+                            titulo: e.target.value,
+                          });
+                        }}
+                      />
+                      {errosCampos.tituloTarefa && (
+                        <p className="text-red-600 text-xs mt-1 font-semibold">{errosCampos.tituloTarefa}</p>
+                      )}
+                    </div>
                     <input
                       type="date"
                       className="border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm"
@@ -1277,24 +1680,33 @@ export default function TelaReunioes({
                     }
                   />
                   <div className="flex flex-wrap gap-2 w-full items-start">
-                    <select
-                      ref={refResponsavelTarefa}
-                      className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none focus:border-[#2A6377] text-sm"
-                      value={novaTarefa.id_responsavel}
-                      onChange={(e) =>
-                        setNovaTarefa({
-                          ...novaTarefa,
-                          id_responsavel: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="">Atribuir a…</option>
-                      {listaUsuarios.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.nome}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex-1 min-w-[140px]">
+                      <select
+                        ref={refResponsavelTarefa}
+                        className={`border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm ${errosCampos.responsavelTarefa ? "border-red-500" : ""}`}
+                        aria-label="Responsável pela tarefa (obrigatório)"
+                        aria-required="true"
+                        aria-invalid={!!errosCampos.responsavelTarefa}
+                        value={novaTarefa.id_responsavel}
+                        onChange={(e) => {
+                          limparErroCampo("responsavelTarefa");
+                          setNovaTarefa({
+                            ...novaTarefa,
+                            id_responsavel: e.target.value,
+                          });
+                        }}
+                      >
+                        <option value="">Atribuir a… *</option>
+                        {listaUsuarios.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.nome}
+                          </option>
+                        ))}
+                      </select>
+                      {errosCampos.responsavelTarefa && (
+                        <p className="text-red-600 text-xs mt-1 font-semibold">{errosCampos.responsavelTarefa}</p>
+                      )}
+                    </div>
                     <select
                       className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none focus:border-[#2A6377] text-sm"
                       value={novaTarefa.prioridade}
@@ -1317,6 +1729,9 @@ export default function TelaReunioes({
                       Adicionar
                     </button>
                   </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    <span className="text-red-600" aria-hidden="true">*</span> obrigatório (título e responsável)
+                  </p>
                   {listaTarefas.map((tar, idx) => (
                     <div
                       key={idx}

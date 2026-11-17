@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- RLS de 70 tabelas e 132 politicas do schema public
+-- RLS de 72 tabelas e 134 politicas do schema public
 
 -- auditoria
 alter table public.auditoria enable row level security;
@@ -395,6 +395,13 @@ create policy obra_anexos_update_admin_or_responsavel on public.obra_anexos
     using (public.pode_gerenciar_obra(id_obra))
     with check (public.pode_gerenciar_obra(id_obra));
 
+-- obra_avancos
+alter table public.obra_avancos enable row level security;
+create policy obra_avancos_select_authenticated on public.obra_avancos
+    as permissive for select
+    to authenticated
+    using (public.eh_usuario_ativo());
+
 -- obra_compras_abertas
 alter table public.obra_compras_abertas enable row level security;
 create policy obra_compras_abertas_select on public.obra_compras_abertas
@@ -606,6 +613,13 @@ create policy parcelas_cliente_update_admin_or_responsavel on public.parcelas_cl
     to authenticated
     using (public.pode_gerenciar_obra(id_obra))
     with check (public.pode_gerenciar_obra(id_obra));
+
+-- projetos_erp
+alter table public.projetos_erp enable row level security;
+create policy projetos_erp_select on public.projetos_erp
+    as permissive for select
+    to authenticated
+    using ((public.perfil_atual() = ANY (ARRAY['admin'::text, 'coordenador'::text, 'engenheiro'::text, 'assistente'::text])));
 
 -- push_inscricoes
 alter table public.push_inscricoes enable row level security;

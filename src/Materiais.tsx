@@ -7,6 +7,7 @@ import { ErroCarga, confirmar, useDialogos } from "./Dialogos";
 import { Modal } from "./Modal";
 import { SeloDiasParados, useFiltroSalvo } from "./modulos_lista";
 import type { Usuario } from "./types";
+import { mensagemErro } from "./erros";
 
 // Solicitacao de cadastro de material (04/11/2026, fase 1). Qualquer usuario pede um item novo; o app mostra os
 // itens parecidos que ja existem no ERP (espelho materiais_erp, robo sync_materiais_erp.py). O responsavel pelo
@@ -145,7 +146,7 @@ export function rotuloClasse(c: number | null | undefined, classes: { classe_tip
 export const formatarNcm = (n?: string | null) => (n && n.length === 8 ? `${n.slice(0, 4)}.${n.slice(4, 6)}.${n.slice(6)}` : n || "");
 const fmtDataHora = (v?: string | null) =>
   v ? new Date(v).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-const msgErro = (e: any) => String(e?.message || e || "Erro desconhecido.").replace(/^.*?ERROR:\s*/, "");
+const msgErro = (e: any) => mensagemErro(e, "Tente de novo em instantes.");
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 const Badge = ({ status, urgente }: { status: StatusMat; urgente?: boolean }) => (
@@ -400,6 +401,7 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
       }
     >
       <div className="space-y-3 text-sm" onChange={() => setSujo(true)}>
+        <p className="text-xs text-slate-500">* obrigatório</p>
         {devolvida?.motivo && (
           <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">
             <b>Devolvida por {devolvida.nome_motivo}:</b> {devolvida.motivo}
@@ -756,7 +758,27 @@ function DetalheMaterial({
             {revisandoFiscal && (
               <button
                 disabled={ocupado}
-                onClick={() =>
+                onClick={async () => {
+                  // depois desta aprovacao o item vai para o ERP (pelo robo ou criado pelo fiscal): confirma com o resumo
+                  const ok = await confirmar({
+                    titulo: robo ? "Aprovar e criar o item no ERP?" : "Aprovar e liberar para criar no ERP?",
+                    texto: [
+                      `Código: ${(codigoEdit.trim() || sugestao).toUpperCase()}`,
+                      `Descrição: ${s.descricao}`,
+                      `Unidade: ${nomeUnidade(s.unidade)}`,
+                      `Classe/tipo: ${nomeClasse(s.classe_tipo)}`,
+                      `NCM: ${formatarNcm(ncm.replace(/\D/g, ""))}${ncmDesc ? ` - ${ncmDesc}` : ""}`,
+                      `Tipo do item: ${tipoTxt(tipoItem === "" ? null : Number(tipoItem))}`,
+                      `IPI: ${ipi.trim() || "0"}%`,
+                      "",
+                      robo
+                        ? "O robô cria o item no ERP em até 5 minutos. Até lá ainda dá para trocar o código ou voltar para a revisão fiscal; depois de criado no ERP o código não pode ser alterado por aqui."
+                        : "Em seguida crie o item no ERP com estes dados. Depois de criado no ERP o código não pode ser alterado por aqui.",
+                    ].join("\n"),
+                    rotuloConfirmar: robo ? "Aprovar e criar no ERP" : "Aprovar e liberar",
+                    rotuloCancelar: "Voltar",
+                  });
+                  if (!ok) return;
                   rpc(
                     "mat_aprovar_fiscal",
                     {
@@ -769,8 +791,8 @@ function DetalheMaterial({
                     robo
                       ? `Solicitação de material ${nSol} aprovada pelo fiscal: o robô cria o item no ERP em até 5 minutos.`
                       : `Solicitação de material ${nSol} aprovada pelo fiscal: crie o item no ERP com os dados mostrados.`,
-                  )
-                }
+                  );
+                }}
                 className="px-4 py-2 rounded-lg bg-amber-600 text-white font-bold flex items-center gap-1 text-sm disabled:opacity-60"
               >
                 <CheckCircle2 size={14} /> Aprovar (criar no ERP)
@@ -953,13 +975,24 @@ function DetalheMaterial({
                   </div>
                   <button
                     disabled={ocupado || !codigoEdit.trim() || codigoEdit.trim().toUpperCase() === s.codigo_edit_proposto}
-                    onClick={() =>
+                    onClick={async () => {
+                      // com o robo ligado o codigo novo e o que vai ser gravado no ERP: confirma
+                      if (
+                        robo &&
+                        !(await confirmar({
+                          titulo: "Trocar o código que vai para o ERP?",
+                          texto: `${s.codigo_edit_proposto || "-"} → ${codigoEdit.trim().toUpperCase()}\n${s.descricao}\n\nO robô cria o item no ERP com o código novo em até 5 minutos. Depois de criado, o código não pode ser alterado por aqui.`,
+                          rotuloConfirmar: "Trocar código",
+                          rotuloCancelar: "Voltar",
+                        }))
+                      )
+                        return;
                       rpc(
                         "mat_alterar_codigo_proposto",
                         { p_codigo_edit: codigoEdit.trim().toUpperCase() === sugestao ? null : codigoEdit.trim() },
                         `Código proposto da solicitação ${nSol} trocado para ${codigoEdit.trim().toUpperCase()}.`,
-                      )
-                    }
+                      );
+                    }}
                     className="px-3 py-2 rounded-lg border border-violet-300 text-violet-800 font-bold text-sm disabled:opacity-50"
                   >
                     Trocar código

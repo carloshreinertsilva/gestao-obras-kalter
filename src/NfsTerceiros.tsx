@@ -1,15 +1,28 @@
 import { linhaClicavel } from "./teclado";
 import { avisar, useAviso } from "./aviso";
 import { ErroCarga, useDialogos } from "./Dialogos";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Download, FileText, Loader2, Paperclip, RotateCcw, Search, Send, Trash2, XCircle } from "lucide-react";
 import { Modal } from "./Modal";
 import { BotaoExportar, SeloDiasParados, diasUteisDesde, numCsv, useFiltroSalvo } from "./modulos_lista";
 import { supabase } from "./supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda, normalizarNomeArquivo } from "./utils";
 import type { Usuario } from "./types";
-import { lerNumero } from "./numero";
+import { formatarNumero, lerNumero } from "./numero";
 import { CampoNumero } from "./CampoNumero";
+import { mensagemErro } from "./erros";
+import EntradaArquivos from "./EntradaArquivos";
+import {
+  decodificarXml,
+  diferencasXml,
+  formatarDocumento,
+  leituraUtil,
+  lerNfXml,
+  mesmoDocumento,
+  resumoXml,
+  type CampoXml,
+  type LeituraNfXml,
+} from "./nfXml";
 import {
   FORMAS_PAGAMENTO,
   TIPOS_CHAVE_PIX,
@@ -105,7 +118,6 @@ const num = (v: unknown) => Number(v || 0);
 const data = (v?: string | null) => (v ? formatarDataSegura(v) : "-");
 const fmtDataHora = (v?: string | null) =>
   v ? new Date(v).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-const msgErro = (e: any) => String(e?.message || e || "Erro desconhecido.").replace(/^.*?ERROR:\s*/, "");
 const hojeISO = () => new Date().toLocaleDateString("sv-SE");
 
 // data AAAA-MM-DD + n dias (meio-dia local: sem pular dia em horario de verao)
@@ -625,21 +637,92 @@ function ModalEncaminharNf({
   const [enviando, setEnviando] = useState(false);
   // alteracoes nao enviadas (pergunta antes de fechar)
   const [sujo, setSujo] = useState(false);
+  // depois de tentar encaminhar, os campos obrigatorios vazios ficam marcados (some sozinho ao preencher)
+  const [tentou, setTentou] = useState(false);
+  // XML da nota anexado agora (so arquivo novo: anexo ja enviado de NF devolvida nao e baixado para ler)
+  const [xml, setXml] = useState<{ arquivo: File; leitura: LeituraNfXml | null } | null>(null);
   const aviso = useAviso();
   const { confirmar } = useDialogos();
 
+  const ehXml = (f: File) => /\.xml$/i.test(f.name) || /xml/i.test(f.type);
+  // le uma vez, quando o arquivo entra; preenche so campo vazio (reenvio de devolvida: nunca sobrescreve)
+  const lerXml = async (arq: File) => {
+    let leitura: LeituraNfXml | null = null;
+    try {
+      leitura = lerNfXml(decodificarXml(new Uint8Array(await arq.arrayBuffer())));
+    } catch {
+      leitura = null;
+    }
+    setXml({ arquivo: arq, leitura });
+    if (!leituraUtil(leitura)) return;
+    const l = leitura;
+    if (l.numero) setNumero((v) => (v.trim() ? v : l.numero!));
+    if (l.emissao) setEmissao((v) => v || l.emissao!);
+    if (l.valor !== undefined) setValor((v) => (lerNumero(v) ? v : formatarNumero(l.valor)));
+  };
+  const adicionarArquivos = (escolhidos: File[]) => {
+    setSujo(true);
+    const unicos = escolhidos.filter((f) => !novos.some((x) => x.name === f.name && x.size === f.size));
+    setNovos((l) => [...l, ...unicos.filter((f) => !l.some((x) => x.name === f.name && x.size === f.size))]);
+    const primeiroXml = unicos.find(ehXml);
+    if (!xml && primeiroXml) void lerXml(primeiroXml);
+  };
+  const removerNovo = (f: File) => {
+    setSujo(true);
+    const resto = novos.filter((x) => x !== f);
+    setNovos(resto);
+    if (xml?.arquivo === f) {
+      setXml(null);
+      const outro = resto.find(ehXml);
+      if (outro) void lerXml(outro);
+    }
+  };
+
   const listaAnexos = [
     ...mantidos.map((a) => ({ chave: a.caminho, nome: a.nome, tamanho: a.tamanho, remover: () => (setSujo(true), setMantidos((l) => l.filter((x) => x !== a))) })),
-    ...novos.map((f, i) => ({ chave: `novo-${i}-${f.name}`, nome: f.name, tamanho: f.size, remover: () => (setSujo(true), setNovos((l) => l.filter((x) => x !== f))) })),
+    ...novos.map((f, i) => ({ chave: `novo-${i}-${f.name}`, nome: f.name, tamanho: f.size, remover: () => removerNovo(f) })),
   ];
   // leitura unica (src/numero.ts): "850.00" e 850, nao 85.000; invalido vale 0 e cai no "Informe o valor"
   const valorNum = lerNumero(valor) || 0;
+  const lido = xml && leituraUtil(xml.leitura) ? xml.leitura : null;
+  const xmlIlegivel = Boolean(xml) && !lido;
+  const difsXml = lido ? diferencasXml(lido, { numero, emissao, valor: valorNum || null }) : [];
+  const cnpjOutro = lido?.cnpjEmitente && pedido.cnpj && !mesmoDocumento(lido.cnpjEmitente, pedido.cnpj) ? lido.cnpjEmitente : "";
+  const usarDoXml = (campo: CampoXml) => {
+    if (!lido) return;
+    setSujo(true);
+    if (campo === "numero" && lido.numero) setNumero(lido.numero);
+    if (campo === "emissao" && lido.emissao) setEmissao(lido.emissao);
+    if (campo === "valor" && lido.valor !== undefined) setValor(formatarNumero(lido.valor));
+  };
+  const notaXml = (campo: CampoXml) => {
+    const d = difsXml.find((x) => x.campo === campo);
+    if (!d) return null;
+    return (
+      <p className="mt-1 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+        No XML: <b>{d.doXml}</b>{" "}
+        <button type="button" onClick={() => usarDoXml(campo)} className="font-semibold text-[#2A6377] underline">
+          Usar o valor do XML
+        </button>
+      </p>
+    );
+  };
+  const faltaAnexo = !mantidos.length && !novos.length;
+  const errosCampo = {
+    numero: tentou && !numero.trim() ? "Informe o número." : "",
+    emissao: tentou && !emissao ? "Informe a data de emissão." : "",
+    valor: tentou && valorNum <= 0 ? "Informe o valor." : "",
+    vencimento: tentou && !vencimento ? "Informe o vencimento." : "",
+    forma: tentou && !forma ? "Escolha a forma de pagamento." : "",
+    anexos: tentou && faltaAnexo ? "Anexe a NF." : "",
+  };
   const acimaDoSaldo = valorNum > pedido.saldo + 0.005;
   const hoje = hojeISO();
   const vencePerto = Boolean(vencimento) && vencimento <= new Date(Date.now() + 3 * 86400000).toLocaleDateString("sv-SE");
 
   const enviar = async () => {
     setErro("");
+    setTentou(true);
     if (!numero.trim()) return setErro("Informe o número da NF.");
     if (!emissao) return setErro("Informe a data de emissão.");
     if (valorNum <= 0) return setErro("Informe o valor da NF.");
@@ -652,6 +735,27 @@ function ModalEncaminharNf({
     if (grande) return setErro(`${grande.name} passa de 15 MB.`);
     if (novos.reduce((t, f) => t + f.size, 0) + mantidos.reduce((t, a) => t + (a.tamanho || 0), 0) > MAX_TOTAL)
       return setErro("Os anexos passam de 20 MB no total (limite do e-mail). Reduza ou compacte os arquivos.");
+    // conferencia com o XML: so pergunta, nunca bloqueia (o leitor pode errar num layout novo de prefeitura)
+    if (
+      cnpjOutro &&
+      !(await confirmar({
+        titulo: "XML de outro CNPJ",
+        texto: `O XML é de outro CNPJ: ${formatarDocumento(cnpjOutro)}${lido?.nomeEmitente ? ` (${lido.nomeEmitente})` : ""}.\nO pedido é de ${formatarDocumento(pedido.cnpj)} (${pedido.fornecedor}).\n\nConfira se escolheu o pedido certo e anexou o XML certo.`,
+        rotuloConfirmar: "Encaminhar assim mesmo",
+        rotuloCancelar: "Revisar",
+      }))
+    )
+      return;
+    if (
+      difsXml.length &&
+      !(await confirmar({
+        titulo: "Dados diferentes do XML",
+        texto: `O que foi digitado não bate com o XML anexado:\n${difsXml.map((d) => `• ${d.rotulo}: digitado ${d.digitado}, no XML ${d.doXml}`).join("\n")}\n\nA NF só é ligada ao lançamento no ERP com número e data de emissão iguais aos da nota.`,
+        rotuloConfirmar: "Encaminhar assim mesmo",
+        rotuloCancelar: "Revisar",
+      }))
+    )
+      return;
     if (
       acimaDoSaldo &&
       !(await confirmar({
@@ -681,7 +785,7 @@ function ModalEncaminharNf({
       for (const [i, arq] of novos.entries()) {
         const caminho = `nf/${idObra}/${Date.now()}_${i}_${normalizarNomeArquivo(arq.name)}`;
         const { error } = await supabase.storage.from(BUCKET).upload(caminho, arq);
-        if (error) throw new Error(`Não foi possível enviar ${arq.name}: ${error.message}`);
+        if (error) throw new Error(`Não foi possível enviar ${arq.name}: ${mensagemErro(error)}`);
         enviados.push(caminho);
         lista.push({ caminho, nome: arq.name, tamanho: arq.size });
       }
@@ -716,7 +820,7 @@ function ModalEncaminharNf({
       onFeito();
     } catch (e) {
       if (enviados.length) await supabase.storage.from(BUCKET).remove(enviados);
-      setErro(msgErro(e));
+      setErro(mensagemErro(e));
     } finally {
       setEnviando(false);
     }
@@ -770,12 +874,13 @@ function ModalEncaminharNf({
               <b>{formatarMoeda(pedido.saldo)}</b>
             </p>
           </div>
+          <p className="text-xs text-slate-500 -mb-2">* obrigatório</p>
           <div className="grid grid-cols-2 gap-3">
-            <Campo rotulo="Número da NF *" valor={numero} onChange={setNumero} />
-            <Campo rotulo="Valor da NF (R$) *" valor={valor} onChange={setValor} placeholder="0,00" decimal />
-            <Campo rotulo="Data de emissão *" valor={emissao} onChange={setEmissao} tipo="date" max={hoje} />
+            <Campo rotulo="Número da NF *" valor={numero} onChange={setNumero} erro={errosCampo.numero} extra={notaXml("numero")} />
+            <Campo rotulo="Valor da NF (R$) *" valor={valor} onChange={setValor} placeholder="0,00" decimal erro={errosCampo.valor} extra={notaXml("valor")} />
+            <Campo rotulo="Data de emissão *" valor={emissao} onChange={setEmissao} tipo="date" max={hoje} erro={errosCampo.emissao} extra={notaXml("emissao")} />
             <div>
-              <Campo rotulo="Vencimento *" valor={vencimento} onChange={setVencimento} tipo="date" min={emissao || undefined} />
+              <Campo rotulo="Vencimento *" valor={vencimento} onChange={setVencimento} tipo="date" min={emissao || undefined} erro={errosCampo.vencimento} />
               {/* sugestao de vencimento pelo tipo da NF (dias a partir de hoje) */}
               <div className="flex flex-wrap gap-1.5 mt-1.5">
                 {PRAZOS_VENCIMENTO.map((p) => {
@@ -798,6 +903,35 @@ function ModalEncaminharNf({
               </div>
             </div>
           </div>
+          {cnpjOutro && (
+            <p className="text-sm bg-red-50 border border-red-300 text-red-800 rounded-lg px-3 py-2 flex items-start gap-2" role="alert">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+              <span>
+                <b>O XML é de outro CNPJ:</b> {formatarDocumento(cnpjOutro)}
+                {lido?.nomeEmitente ? ` (${lido.nomeEmitente})` : ""}. O pedido é de {formatarDocumento(pedido.cnpj)} ({pedido.fornecedor}).
+              </span>
+            </p>
+          )}
+          {lido && (
+            <div className="text-xs text-slate-500">
+              <p className="flex items-start gap-1 min-w-0">
+                <FileText size={13} className="shrink-0 mt-px" aria-hidden="true" />
+                <span className="min-w-0 break-words">
+                  Lido do XML: {resumoXml(lido)}
+                </span>
+              </p>
+              {lido.avisos.map((a) => (
+                <p key={a} className="ml-4 text-amber-700">
+                  {a}
+                </p>
+              ))}
+            </div>
+          )}
+          {xmlIlegivel && (
+            <p className="text-xs text-amber-700 flex items-center gap-1">
+              <AlertTriangle size={13} aria-hidden="true" /> Não consegui ler este XML ({xml?.arquivo.name}); confira os dados digitados.
+            </p>
+          )}
           {acimaDoSaldo && (
             <p className="text-xs text-amber-700 flex items-center gap-1">
               <AlertTriangle size={13} /> Valor acima do saldo do pedido.
@@ -825,6 +959,7 @@ function ModalEncaminharNf({
                 </button>
               ))}
             </div>
+            {errosCampo.forma && <p className="mt-1 text-xs text-red-600">{errosCampo.forma}</p>}
             {forma === "boleto" && (
               <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
                 <Paperclip size={13} className="shrink-0" aria-hidden="true" /> Anexe o boleto junto com a NF (logo abaixo, em Anexos).
@@ -891,21 +1026,14 @@ function ModalEncaminharNf({
                 ))}
               </ul>
             )}
-            <label className="border border-dashed rounded-lg px-3 py-3 flex items-center gap-2 text-sm text-slate-600 cursor-pointer hover:bg-slate-50 focus-within:border-[#2A6377]">
-              <Paperclip size={15} aria-hidden="true" />
-              {listaAnexos.length ? "Adicionar mais arquivos…" : "Escolher arquivos…"}
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.xml,image/*"
-                className="sr-only"
-                onChange={(e) => {
-                  const escolhidos = [...(e.target.files || [])];
-                  setNovos((l) => [...l, ...escolhidos.filter((f) => !l.some((x) => x.name === f.name && x.size === f.size))]);
-                  e.target.value = "";
-                }}
-              />
-            </label>
+            <EntradaArquivos
+              onArquivos={adicionarArquivos}
+              accept=".pdf,.xml,image/*"
+              rotulo={listaAnexos.length ? "Adicionar mais arquivos…" : "Escolher arquivos…"}
+              maxMb={MAX_ARQUIVO / 1048576}
+              className={errosCampo.anexos ? "border-red-500" : ""}
+            />
+            {errosCampo.anexos && <p className="mt-1 text-xs text-red-600">{errosCampo.anexos}</p>}
           </div>
           <div>
             <label className="block text-xs font-semibold mb-1">Observação</label>
@@ -925,6 +1053,8 @@ const Campo = ({
   min,
   max,
   decimal,
+  erro,
+  extra,
 }: {
   rotulo: string;
   valor: string;
@@ -934,12 +1064,23 @@ const Campo = ({
   min?: string;
   max?: string;
   decimal?: boolean;
+  // obrigatorio vazio depois de tentar enviar: borda vermelha + texto curto abaixo
+  erro?: string;
+  // aviso abaixo do campo (ex.: diferenca com o XML)
+  extra?: ReactNode;
 }) => (
   <div>
     <label className="block text-xs font-semibold mb-1">{rotulo}</label>
     {decimal ? (
       // valor em reais: ao sair do campo mostra como foi lido ("850.00" -> "850,00")
-      <CampoNumero valor={valor} onChange={onChange} casasMax={2} placeholder={placeholder} className="border rounded-lg px-2 py-2 w-full text-sm" />
+      <CampoNumero
+        valor={valor}
+        onChange={onChange}
+        casasMax={2}
+        placeholder={placeholder}
+        aria-invalid={erro ? true : undefined}
+        className={`border rounded-lg px-2 py-2 w-full text-sm ${erro ? "border-red-500" : ""}`}
+      />
     ) : (
       <input
         type={tipo}
@@ -948,9 +1089,12 @@ const Campo = ({
         max={max}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="border rounded-lg px-2 py-2 w-full text-sm"
+        aria-invalid={erro ? true : undefined}
+        className={`border rounded-lg px-2 py-2 w-full text-sm ${erro ? "border-red-500" : ""}`}
       />
     )}
+    {erro && <p className="mt-1 text-xs text-red-600">{erro}</p>}
+    {extra}
   </div>
 );
 
@@ -1005,10 +1149,10 @@ export function DetalheNfTerceiros({
       supabase.from("nfs_terceiros").select("*").eq("id", id).maybeSingle(),
       supabase.from("nfs_terceiros_eventos").select("*").eq("id_nf", id).order("id"),
     ]);
-    if (n.error) setErro("Não foi possível carregar a NF: " + msgErro(n.error));
+    if (n.error) setErro("Não foi possível carregar a NF: " + mensagemErro(n.error));
     else if (!n.data) setErro("NF não encontrada ou sem acesso.");
     setNf(n.data as NfTerceiros);
-    setErroEventos(e.error ? msgErro(e.error) : "");
+    setErroEventos(e.error ? mensagemErro(e.error) : "");
     setEventos(e.data || []);
   };
   useEffect(() => {
@@ -1029,8 +1173,8 @@ export function DetalheNfTerceiros({
     const { error } = await supabase.rpc(fn, { p_id: id, p_motivo: motivo.trim() });
     setOcupado(false);
     if (error) {
-      aviso.erro(msgErro(error));
-      return setErro(msgErro(error));
+      aviso.erro(mensagemErro(error));
+      return setErro(mensagemErro(error));
     }
     aviso.sucesso(sucesso);
     await carregar();
@@ -1205,7 +1349,7 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
   const carregar = async () => {
     const { data: d, error } = await supabase.from("nfs_terceiros").select("*").order("vencimento");
     if (error) {
-      setErroCarga(msgErro(error));
+      setErroCarga(mensagemErro(error));
       return;
     }
     setErroCarga("");

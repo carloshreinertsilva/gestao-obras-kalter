@@ -6,7 +6,7 @@
 -- ficam de fora). 'revoke all' antes de cada objeto deixa claro o que NAO foi concedido.
 
 -- Tabelas, views e sequencias
-grant delete, insert, select, update on public.auditoria to authenticated;
+grant select on public.auditoria to authenticated;
 grant delete, insert, select, update on public.comentarios_tarefa to authenticated;
 grant delete, insert, select, update on public.cronograma_obra to authenticated;
 grant delete, insert, select, update on public.diario_obra to authenticated;
@@ -19,77 +19,79 @@ grant select on public.exportacao_estimativas to authenticated;
 grant select on public.exportacao_ncm to authenticated;
 grant select on public.exportacao_processos to authenticated;
 grant select on public.exportacao_processos_versoes to authenticated;
-grant delete, insert, select, update on public.familias_faturamento_padrao to authenticated;
+grant select on public.familias_faturamento_padrao to authenticated;
 grant delete, insert, select, update on public.faturamentos to authenticated;
-grant delete, insert, select, update on public.fila_email to authenticated;
-grant delete, insert, select, update on public.fornecedores_erp to authenticated;
-grant delete, insert, select, update on public.fretes to authenticated;
-grant delete, insert, select, update on public.fretes_ctes to authenticated;
-grant delete, insert, select, update on public.fretes_eventos to authenticated;
-grant delete, insert, select, update on public.fretes_rotas to authenticated;
-grant delete, insert, select, update on public.fretes_transp_historico to authenticated;
+grant select on public.fila_email to authenticated;
+grant select on public.fornecedores_erp to authenticated;
+grant select on public.fretes to authenticated;
+grant select on public.fretes_ctes to authenticated;
+grant select on public.fretes_eventos to authenticated;
+grant select on public.fretes_rotas to authenticated;
+grant select on public.fretes_transp_historico to authenticated;
 grant delete, insert, select, update on public.fretes_transp_tarifas to authenticated;
-grant delete, insert, select, update on public.fretes_transp_ufs to authenticated;
+grant delete, insert, select on public.fretes_transp_ufs to authenticated;
 grant delete, insert, select, update on public.historico_tarefas to authenticated;
 grant select on public.materiais_erp to authenticated;
 grant select on public.materiais_erp_classes to authenticated;
 grant select on public.materiais_erp_ncm to authenticated;
 grant select on public.materiais_erp_unidades to authenticated;
-grant delete, insert, select, update on public.municipios to authenticated;
-grant delete, insert, select, update on public.nfs_terceiros to authenticated;
-grant delete, insert, select, update on public.nfs_terceiros_eventos to authenticated;
-grant delete, insert, select, update on public.notificacoes to authenticated;
-grant delete, insert, select, update on public.obra_alertas to authenticated;
+grant select on public.municipios to authenticated;
+grant select on public.nfs_terceiros to authenticated;
+grant select on public.nfs_terceiros_eventos to authenticated;
+grant select on public.notificacoes to authenticated;
+grant select on public.obra_alertas to authenticated;
 grant delete, insert, select, update on public.obra_anexos to authenticated;
-grant delete, insert, select, update on public.obra_compras_abertas to authenticated;
-grant delete, insert, select, update on public.obra_familia_alerta to authenticated;
+grant select on public.obra_avancos to authenticated;
+grant select on public.obra_compras_abertas to authenticated;
+grant select on public.obra_familia_alerta to authenticated;
 grant delete, insert, select, update on public.obra_faturamento_familias to authenticated;
 grant delete, insert, select, update on public.obra_faturamento_grupos to authenticated;
 grant delete, insert, select, update on public.obra_faturamento_previsoes to authenticated;
 grant delete, insert, select, update on public.obra_faturamento_realizados to authenticated;
-grant delete, insert, select, update on public.obra_pedido_itens to authenticated;
-grant delete, insert, select, update on public.obra_rentabilidade_familias to authenticated;
-grant delete, insert, select, update on public.obra_rentabilidade_historico to authenticated;
-grant delete, insert, select, update on public.obra_servicos_parcelas to authenticated;
-grant delete, insert, select, update on public.obra_sma_materiais to authenticated;
-grant delete, insert, select, update on public.obra_sma_projecao to authenticated;
+grant select on public.obra_pedido_itens to authenticated;
+grant select on public.obra_rentabilidade_familias to authenticated;
+grant select on public.obra_rentabilidade_historico to authenticated;
+grant select on public.obra_servicos_parcelas to authenticated;
+grant select on public.obra_sma_materiais to authenticated;
+grant select on public.obra_sma_projecao to authenticated;
 grant delete, insert, select, update on public.obras to authenticated;
 grant select on public.obras_valores_erp to authenticated;
 grant select on public.obras_valores_restritos to authenticated;
 grant delete, insert, select, update on public.ocorrencias to authenticated;
 grant delete, insert, select, update on public.parcelas_cliente to authenticated;
-grant delete, insert, select, update on public.push_inscricoes to authenticated;
+grant select on public.projetos_erp to authenticated;
+grant select on public.push_inscricoes to authenticated;
 grant delete, insert, select, update on public.reunioes to authenticated;
 grant delete, insert, select, update on public.reunioes_sessoes to authenticated;
-grant delete, insert, select, update on public.sistema_alertas to authenticated;
-grant delete, insert, select, update on public.solicitacoes_faturamento to authenticated;
-grant delete, insert, select, update on public.solicitacoes_faturamento_eventos to authenticated;
-grant delete, insert, select, update on public.solicitacoes_faturamento_itens to authenticated;
-grant delete, insert, select, update on public.solicitacoes_faturamento_nfs to authenticated;
-grant delete, insert, select, update on public.solicitacoes_faturamento_romaneios to authenticated;
+grant select on public.sistema_alertas to authenticated;
+grant select on public.solicitacoes_faturamento to authenticated;
+grant select on public.solicitacoes_faturamento_eventos to authenticated;
+grant select on public.solicitacoes_faturamento_itens to authenticated;
+grant select on public.solicitacoes_faturamento_nfs to authenticated;
+grant select on public.solicitacoes_faturamento_romaneios to authenticated;
 grant select on public.solicitacoes_material to authenticated;
 grant select on public.solicitacoes_material_eventos to authenticated;
-grant delete, insert, select, update on public.solicitacoes_previsao to authenticated;
+grant insert, select on public.solicitacoes_previsao to authenticated;
 -- public.sync_impressoes: nada para anon, authenticated, PUBLIC
-grant delete, insert, select, update on public.sync_status to authenticated;
+grant select on public.sync_status to authenticated;
 grant delete, insert, select, update on public.tarefas to authenticated;
-grant delete, insert, select, update on public.transportadoras to authenticated;
+grant select on public.transportadoras to authenticated;
 grant delete, insert, select, update on public.usuarios to authenticated;
-grant delete, insert, select, update on public.usuarios_erp to authenticated;
-grant select, update, usage on sequence public.auditoria_id_seq to authenticated;
-grant select, update, usage on sequence public.comentarios_tarefa_id_seq to authenticated;
-grant select, update, usage on sequence public.diario_obra_id_seq to authenticated;
-grant select, update, usage on sequence public.exportacao_processos_versoes_id_seq to authenticated;
-grant select, update, usage on sequence public.faturamentos_id_seq to authenticated;
-grant select, update, usage on sequence public.fretes_eventos_id_seq to authenticated;
-grant select, update, usage on sequence public.fretes_numero_seq to authenticated;
-grant select, update, usage on sequence public.nfs_terceiros_eventos_id_seq to authenticated;
-grant select, update, usage on sequence public.nfs_terceiros_numero_seq to authenticated;
-grant select, update, usage on sequence public.obra_servicos_parcelas_id_seq to authenticated;
-grant select, update, usage on sequence public.solicitacoes_faturamento_eventos_id_seq to authenticated;
-grant select, update, usage on sequence public.solicitacoes_faturamento_numero_seq to authenticated;
-grant select, update, usage on sequence public.solicitacoes_material_eventos_id_seq to authenticated;
-grant select, update, usage on sequence public.solicitacoes_material_numero_seq to authenticated;
+grant select on public.usuarios_erp to authenticated;
+-- sequence public.auditoria_id_seq: nada para anon, authenticated, PUBLIC
+grant select, usage on sequence public.comentarios_tarefa_id_seq to authenticated;
+grant select, usage on sequence public.diario_obra_id_seq to authenticated;
+-- sequence public.exportacao_processos_versoes_id_seq: nada para anon, authenticated, PUBLIC
+grant select, usage on sequence public.faturamentos_id_seq to authenticated;
+-- sequence public.fretes_eventos_id_seq: nada para anon, authenticated, PUBLIC
+-- sequence public.fretes_numero_seq: nada para anon, authenticated, PUBLIC
+-- sequence public.nfs_terceiros_eventos_id_seq: nada para anon, authenticated, PUBLIC
+-- sequence public.nfs_terceiros_numero_seq: nada para anon, authenticated, PUBLIC
+-- sequence public.obra_servicos_parcelas_id_seq: nada para anon, authenticated, PUBLIC
+-- sequence public.solicitacoes_faturamento_eventos_id_seq: nada para anon, authenticated, PUBLIC
+-- sequence public.solicitacoes_faturamento_numero_seq: nada para anon, authenticated, PUBLIC
+-- sequence public.solicitacoes_material_eventos_id_seq: nada para anon, authenticated, PUBLIC
+-- sequence public.solicitacoes_material_numero_seq: nada para anon, authenticated, PUBLIC
 
 -- Grants por coluna
 grant select (created_at) on public.exportacao_documentos to authenticated;
@@ -110,6 +112,7 @@ grant select (tipo) on public.exportacao_documentos to authenticated;
 -- function public.after_insert_obras_criar_pmis_padrao(): sem execute para anon, authenticated, PUBLIC
 -- function public.alerta_sistema_avisar(p_titulo text, p_detalhe text, p_problema boolean): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.aprovar_solicitacao_previsao(p_id uuid, p_codigo text) to authenticated;
+grant execute on function public.arquivo_extensao_bloqueada(p_nome text) to authenticated;
 -- function public.ata_json(p_id_reuniao uuid): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.ata_para_edicao(p_id_reuniao uuid) to authenticated;
 -- function public.auditar(): sem execute para anon, authenticated, PUBLIC
@@ -200,6 +203,12 @@ grant execute on function public.mat_similares(p_texto text, p_limite integer, p
 grant execute on function public.mat_solicitar(p_id uuid, p_descricao text, p_classe_tipo integer, p_unidade text, p_aplicacao text, p_ncm text, p_urgente boolean, p_origem text) to authenticated;
 -- function public.mat_validar_basico(p_descricao text, p_classe_tipo integer, p_unidade text): sem execute para anon, authenticated, PUBLIC
 -- function public.mat_validar_codigo_edit(p_s public.solicitacoes_material, p_codigo text): sem execute para anon, authenticated, PUBLIC
+grant execute on function public.meus_pedidos_andamento() to authenticated;
+grant execute on function public.mfa_exigido_para_mim() to authenticated;
+grant execute on function public.mfa_exigir_aal2() to authenticated;
+grant execute on function public.mfa_obrigatorio_ligado() to authenticated;
+grant execute on function public.mfa_redefinir_usuario(p_id_usuario uuid) to authenticated;
+grant execute on function public.mfa_usuarios_com_fator() to authenticated;
 grant execute on function public.minhas_pendencias() to authenticated;
 -- function public.nft_avisar(p_id uuid, p_para uuid[], p_cc uuid[], p_assunto text, p_titulo text, p_aviso text, p_cor text, p_titulo_push text, p_anexar boolean): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.nft_cancelar(p_id uuid, p_motivo text) to authenticated;
@@ -213,8 +222,10 @@ grant execute on function public.nft_validar_pagamento(p_forma text, p_dados jso
 -- function public.notificar_equipe_obra(p_id_obra uuid, p_tipo text, p_titulo text, p_detalhe text, p_financeira boolean, p_chave text): sem execute para anon, authenticated, PUBLIC
 -- function public.notificar_recebimento_obra(p_id_obra uuid, p_valor numeric): sem execute para anon, authenticated, PUBLIC
 -- function public.notificar_usuario(p_destino uuid, p_tipo text, p_titulo text, p_detalhe text, p_id_obra uuid, p_id_tarefa uuid, p_financeira boolean, p_chave text): sem execute para anon, authenticated, PUBLIC
+grant execute on function public.obra_avanco_registrar(p_id_obra uuid, p_percentual numeric, p_data date, p_observacao text) to authenticated;
 grant execute on function public.obra_valores_erp_solicitar(p_id_obra uuid, p_margem_contribuicao numeric, p_rentabilidade numeric, p_venda_sem_impostos numeric) to authenticated;
 grant execute on function public.obras_resumo_cartao(p_ids uuid[]) to authenticated;
+grant execute on function public.obras_saude(p_ids uuid[]) to authenticated;
 grant execute on function public.pedir_desfazer_previsao(p_id uuid) to authenticated;
 grant execute on function public.perfil_atual() to authenticated;
 grant execute on function public.pode_aprovar_exportacao(p_id_obra uuid) to authenticated;
@@ -225,6 +236,8 @@ grant execute on function public.pode_gerenciar_responsavel(p_id_responsavel uui
 grant execute on function public.pode_ver_exportacao(p_id_obra uuid) to authenticated;
 grant execute on function public.pode_ver_nf_terceiros(p_id_obra uuid) to authenticated;
 grant execute on function public.pode_ver_solicitacao_faturamento(p_id_obra uuid, p_id_solicitante uuid) to authenticated;
+grant execute on function public.previsao_chave_origens(p_origens jsonb) to authenticated;
+-- function public.previsao_checar_duplicada(p_id uuid, p_id_obra uuid, p_tipo text, p_familia text, p_origens jsonb, p_valor numeric): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.previsoes_familias_obra(p_id_obra uuid) to authenticated;
 grant execute on function public.push_lote(p_segredo text, p_id uuid) to anon;
 grant execute on function public.push_resultado(p_segredo text, p_enviadas uuid[], p_expiradas uuid[]) to anon;
@@ -249,6 +262,7 @@ grant execute on function public.salvar_ata(p_ata jsonb) to authenticated;
 grant execute on function public.sf_itens_disponiveis(p_id_obra uuid, p_tipo text, p_ignorar uuid) to authenticated;
 -- function public.sf_lembretes(): sem execute para anon, authenticated, PUBLIC
 -- function public.sf_saldo_item(p_id_obra uuid, p_sequencia integer, p_ignorar uuid): sem execute para anon, authenticated, PUBLIC
+grant execute on function public.sf_sugestao_conferencia(p_id uuid) to authenticated;
 -- function public.sincronizar_grupo_faturamento_familia(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_auth_dominio_kalter(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_exportacao_processo_hash(): sem execute para anon, authenticated, PUBLIC
@@ -265,8 +279,10 @@ grant execute on function public.sf_itens_disponiveis(p_id_obra uuid, p_tipo tex
 -- function public.trg_notificacao_push(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_obra_alertas_avisar(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_obras_protege_codigo(): sem execute para anon, authenticated, PUBLIC
+-- function public.trg_projetos_erp_obra_criada(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_sf_romaneio_avisos(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_solicitacao_faturamento_avisos(): sem execute para anon, authenticated, PUBLIC
+-- function public.trg_solicitacao_previsao_duplicada(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_solicitacao_previsao_email(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_solicitacao_previsao_ins(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_solicitacao_previsao_logistica(): sem execute para anon, authenticated, PUBLIC

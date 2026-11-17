@@ -15,9 +15,15 @@ import { AlertasObra } from "./AlertasObra";
 import { avisar } from "./aviso";
 import { confirmar as confirmarDialogo } from "./Dialogos";
 import { MinhasPendencias, contadorDoMenu, type Pendencias } from "./MinhasPendencias";
+import MeusPedidos from "./MeusPedidos";
 import { AtivarPush, ItemNotificacao } from "./Notificacoes";
 import { removerPushAoSair } from "./push";
 import { caminhoParaRota, rotaParaCaminho, type Rota } from "./rotas";
+import { avaliarSaude, EXPLICACAO_SAUDE } from "./saudeObra";
+import { mensagemErro } from "./erros";
+import { tipoParaEnvio } from "./tiposArquivoAnexo";
+import { JanelaDuasEtapas, TelaAtivarObrigatoria, TelaCodigoLogin, mfaExigidoParaMim } from "./DuasEtapas";
+import { decidirEtapaMfa, nivelDaSessao, temFatorVerificado, type EtapaMfa } from "./calculoDuasEtapas";
 import StatusSync from "./StatusSync";
 import type {
   Notificacao,
@@ -88,6 +94,7 @@ import {
   Package,
   Search,
   Star,
+  ShieldCheck,
 } from "lucide-react";
 
 // Link de "Esqueceu a senha?": o Supabase entra com a pessoa logada e marca
@@ -133,6 +140,15 @@ export default function App() {
   const [redefinindoSenha, setRedefinindoSenha] = useState<boolean>(ENTROU_POR_RECUPERACAO);
   const [novaSenha, setNovaSenha] = useState<string>("");
   const [confirmaSenha, setConfirmaSenha] = useState<string>("");
+  // verificacao em duas etapas (DuasEtapas.tsx): nada do app carrega enquanto nao estiver "ok".
+  // O ref deixa o callback do Supabase ler o valor atual.
+  const [etapaMfa, setEtapaMfaEstado] = useState<EtapaMfa>("verificando");
+  const etapaMfaRef = useRef<EtapaMfa>("verificando");
+  const setEtapaMfa = (e: EtapaMfa) => {
+    etapaMfaRef.current = e;
+    setEtapaMfaEstado(e);
+  };
+  const [duasEtapasAberta, setDuasEtapasAberta] = useState(false);
 
   const [telaAtiva, setTelaAtiva] = useState<string>("dashboard");
   // partes da navegacao que vao para o endereco (ver rotas.ts)
@@ -227,6 +243,26 @@ export default function App() {
     observacao: "",
   });
   const [parcelaParaLiquidar, setParcelaParaLiquidar] = useState<any>(null);
+  // erro junto do campo obrigatorio dos modais (id do campo -> texto); so aparece enquanto o campo segue invalido
+  const [errosModal, setErrosModal] = useState<Record<string, string>>({});
+  const falhaCampos = (faltando: Record<string, string>) => {
+    setErrosModal(faltando);
+    const primeiro = Object.keys(faltando)[0];
+    if (primeiro) setTimeout(() => document.getElementById(primeiro)?.focus(), 0);
+  };
+  const attrsModal = (id: string, invalido: boolean) => ({
+    id,
+    "aria-required": true as const,
+    "aria-invalid": errosModal[id] && invalido ? (true as const) : undefined,
+    "aria-describedby": errosModal[id] && invalido ? `${id}-erro` : undefined,
+  });
+  const bordaModal = (id: string, invalido: boolean) => (errosModal[id] && invalido ? " !border-red-500" : "");
+  const textoModal = (id: string, invalido: boolean) =>
+    errosModal[id] && invalido ? (
+      <p id={`${id}-erro`} className="mt-1 text-xs text-red-600">
+        {errosModal[id]}
+      </p>
+    ) : null;
   const [liquidacaoParcela, setLiquidacaoParcela] = useState<any>({
     data_recebimento: "",
     valor_recebido: "",
@@ -351,7 +387,7 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSessao(session);
-      if (session) buscarPerfilUsuario(session.user.email);
+      if (session) void aposSessao(session);
       else setCarregandoAuth(false);
     });
     const {
@@ -359,14 +395,36 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") setRedefinindoSenha(true);
       setSessao(session);
-      if (session) buscarPerfilUsuario(session.user?.email);
+      // sem await: chamar o Supabase esperando dentro deste callback pode travar o supabase-js
+      if (session) void aposSessao(session, event);
       else {
+        setEtapaMfa("verificando");
         setUsuarioAtual(null);
         setCarregandoAuth(false);
       }
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Antes de carregar o perfil (e com ele todos os dados), decide se falta o codigo do aplicativo
+  // ou a ativacao obrigatoria. Renovacao de token com o app ja liberado nao repete a decisao.
+  const aposSessao = async (session: Session, evento?: string) => {
+    if ((evento === "TOKEN_REFRESHED" || evento === "USER_UPDATED") && etapaMfaRef.current === "ok") {
+      buscarPerfilUsuario(session.user?.email);
+      return;
+    }
+    const aal = nivelDaSessao(session.access_token);
+    const temFator = temFatorVerificado(session);
+    // so pergunta ao banco quando a sessao ainda nao passou pelo codigo e nao ha aplicativo ativado
+    const exigido = aal !== "aal2" && !temFator ? await mfaExigidoParaMim() : false;
+    const etapa = decidirEtapaMfa({ aal, temFator, exigido });
+    setEtapaMfa(etapa);
+    if (etapa === "ok") buscarPerfilUsuario(session.user?.email);
+    else {
+      setUsuarioAtual(null);
+      setCarregandoAuth(false);
+    }
+  };
 
   const buscarPerfilUsuario = async (email: any) => {
     try {
@@ -763,10 +821,11 @@ export default function App() {
     return () => window.removeEventListener("keydown", atalho);
   }, []);
 
-  // contadores dos cartoes de Minhas Obras (uma consulta so)
+  // contadores dos cartoes de Minhas Obras (uma consulta so). obras_saude e a mesma funcao do
+  // Painel, para a obra ter a mesma classificacao nas duas telas (regra em saudeObra.ts).
   useEffect(() => {
     if (telaAtiva !== "minhas_obras" || !obrasLista.length) return;
-    supabase.rpc("obras_resumo_cartao", { p_ids: obrasLista.map((o) => o.id) }).then(({ data, error }) => {
+    (supabase as any).rpc("obras_saude", { p_ids: obrasLista.map((o) => o.id) }).then(({ data, error }: any) => {
       if (error) return;
       setResumoObras(Object.fromEntries((data || []).map((r: any) => [r.id_obra, r])));
     });
@@ -847,12 +906,13 @@ export default function App() {
 
 
 
-  const anexarArquivoDocumento = async (doc: any, arquivo: File | null) => {
-    if (!obraEcoSelecionada || !doc?.id || !arquivo) return;
+  const anexarArquivoDocumento = async (doc: any, arquivo: File | null): Promise<boolean> => {
+    if (!obraEcoSelecionada || !doc?.id || !arquivo) return false;
 
     const tamanhoMaximoMb = 25;
     if (arquivo.size > tamanhoMaximoMb * 1024 * 1024) {
-      return mostrarAviso(`Arquivo maior que ${tamanhoMaximoMb} MB.`, "erro");
+      mostrarAviso(`Não foi possível enviar ${arquivo.name}: o arquivo é maior que ${tamanhoMaximoMb} MB.`, "erro");
+      return false;
     }
 
     setUploadDocumentoId(doc.id);
@@ -865,6 +925,9 @@ export default function App() {
         .upload(caminhoStorage, arquivo, {
           cacheControl: "3600",
           upsert: false,
+          // tipo que o bucket nao lista (desenho de programa menos comum) vai como "binario"; executavel e
+          // barrado pela extensao (AbaDocumentos e politica do Storage)
+          contentType: tipoParaEnvio(arquivo),
         });
 
       if (uploadError) throw uploadError;
@@ -900,8 +963,10 @@ export default function App() {
       mostrarAviso("Arquivo anexado ao documento!");
       buscarDocumentosProjeto(obraEcoSelecionada.id);
       buscarArquivosDocumentos(obraEcoSelecionada.id);
+      return true;
     } catch (error: any) {
-      mostrarAviso(error.message || "Erro ao anexar arquivo.", "erro");
+      mostrarAviso(`Não foi possível enviar ${arquivo.name}: ` + mensagemErro(error, "tente de novo."), "erro");
+      return false;
     } finally {
       setUploadDocumentoId("");
     }
@@ -917,7 +982,7 @@ export default function App() {
       if (data?.signedUrl) window.open(data.signedUrl, "_blank");
     } catch (error: any) {
       mostrarAviso(
-        error.message || "Não foi possível abrir o arquivo.",
+        mensagemErro(error, "Não foi possível abrir o arquivo."),
         "erro",
       );
     }
@@ -944,7 +1009,7 @@ export default function App() {
       mostrarAviso("Anexo excluído!");
       if (obraEcoSelecionada) buscarArquivosDocumentos(obraEcoSelecionada.id);
     } catch (error: any) {
-      mostrarAviso(error.message || "Erro ao excluir anexo.", "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível excluir o anexo."), "erro");
     }
   };
 
@@ -1000,7 +1065,7 @@ export default function App() {
       mostrarAviso("Parcela adicionada!");
       buscarParcelasCliente(obraEcoSelecionada.id);
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível salvar a parcela."), "erro");
     } finally {
       setCarregando(false);
     }
@@ -1032,6 +1097,10 @@ export default function App() {
     const valorRecebido = Number(liquidacaoParcela.valor_recebido) || 0;
     const valorPrevisto = Number(parcelaParaLiquidar.valor_previsto) || 0;
 
+    const faltandoLiq: Record<string, string> = {};
+    if (!dataRealizadaISO) faltandoLiq["liq-data"] = "Informe uma data válida (dd/mm/aaaa).";
+    if (valorRecebido <= 0) faltandoLiq["liq-valor"] = "Informe um valor maior que zero.";
+    falhaCampos(faltandoLiq);
     if (!dataRealizadaISO)
       return mostrarAviso("Informe uma data de recebimento válida.", "erro");
     if (valorRecebido <= 0)
@@ -1062,7 +1131,7 @@ export default function App() {
       fecharLiquidacaoParcela();
       buscarParcelasCliente(obraEcoSelecionada.id);
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível registrar a liquidação da parcela."), "erro");
     } finally {
       setCarregando(false);
     }
@@ -1102,7 +1171,7 @@ export default function App() {
       mostrarAviso("Parcela reaberta com sucesso!");
       buscarParcelasCliente(obraEcoSelecionada.id);
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível reabrir a parcela."), "erro");
     } finally {
       setCarregando(false);
     }
@@ -1139,7 +1208,7 @@ export default function App() {
       mostrarAviso("Documento adicionado!");
       buscarDocumentosProjeto(obraEcoSelecionada.id);
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível salvar o documento."), "erro");
     } finally {
       setCarregando(false);
     }
@@ -1168,7 +1237,7 @@ export default function App() {
         prev.map((d) => (d.id === id ? { ...d, ...payload } : d)),
       );
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível atualizar o documento."), "erro");
     }
   };
 
@@ -1237,6 +1306,10 @@ export default function App() {
         );
 
         if (!inicioPrevistoISO || !fimPrevistoISO) {
+          const f: Record<string, string> = {};
+          if (!inicioPrevistoISO) f["cron-inicio"] = "Use o formato dd/mm/aaaa.";
+          if (!fimPrevistoISO) f["cron-fim"] = "Use o formato dd/mm/aaaa.";
+          falhaCampos(f);
           mostrarAviso(
             "Informe início previsto e prazo de entrega no formato dd/mm/aaaa.",
             "erro",
@@ -1257,6 +1330,7 @@ export default function App() {
       } else {
         const dataISO = dataBRParaISO(formCronogramaModal.data || "");
         if (!dataISO) {
+          falhaCampos({ "cron-data": "Use o formato dd/mm/aaaa." });
           mostrarAviso(
             "Informe uma data válida no formato dd/mm/aaaa.",
             "erro",
@@ -1298,7 +1372,7 @@ export default function App() {
       );
       fecharModalCronograma();
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível salvar a etapa do cronograma."), "erro");
     }
   };
 
@@ -1315,7 +1389,7 @@ export default function App() {
       );
       mostrarAviso("Fase reaberta.");
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível reabrir a fase."), "erro");
     }
   };
 
@@ -1348,7 +1422,7 @@ export default function App() {
       );
       mostrarAviso("Fase voltou para Não iniciado.");
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível zerar a fase."), "erro");
     }
   };
 
@@ -1367,7 +1441,7 @@ export default function App() {
         }
       }
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível excluir o registro."), "erro");
     }
   };
 
@@ -1490,7 +1564,7 @@ export default function App() {
         .order("created_at", { ascending: true });
       setComentariosTarefaAtual(data || []);
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível salvar o comentário."), "erro");
     }
   };
 
@@ -1552,7 +1626,7 @@ export default function App() {
       buscarPendencias();
       mostrarAviso(novoStatus === "concluida" ? "Tarefa concluída!" : novoStatus === "em_andamento" ? "Tarefa iniciada!" : "Status atualizado!");
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível atualizar a tarefa."), "erro");
     }
   };
 
@@ -1585,7 +1659,7 @@ export default function App() {
       buscarTarefasKanban();
       mostrarAviso("Tarefa cancelada com sucesso!");
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível cancelar a tarefa."), "erro");
     }
   };
 
@@ -1603,7 +1677,7 @@ export default function App() {
       buscarTarefasKanban();
       mostrarAviso("Prazo atualizado!");
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível atualizar a data da tarefa."), "erro");
     }
   };
 
@@ -1667,7 +1741,7 @@ export default function App() {
       });
       buscarTarefasKanban();
     } catch (error: any) {
-      mostrarAviso(error.message, "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível salvar a tarefa."), "erro");
     } finally {
       setCarregando(false);
     }
@@ -1981,6 +2055,7 @@ export default function App() {
     }
 
     if (!formFinalizarObra.data_finalizacao) {
+      falhaCampos({ "fin-data": "Informe a data de finalização." });
       mostrarAviso("Informe a data de finalização.", "erro");
       return;
     }
@@ -2006,7 +2081,7 @@ export default function App() {
       await buscarObras();
       setTelaAtiva("minhas_obras");
     } catch (error: any) {
-      mostrarAviso(error.message || "Erro ao finalizar obra.", "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível finalizar a obra."), "erro");
     } finally {
       setCarregando(false);
     }
@@ -2026,13 +2101,12 @@ export default function App() {
   const confirmarCancelamentoObra = async () => {
     if (!obraEcoSelecionada) return;
 
-    if (!formCancelarObra.data_cancelamento) {
-      mostrarAviso("Informe a data de cancelamento.", "erro");
-      return;
-    }
-
-    if (!formCancelarObra.motivo_cancelamento?.trim()) {
-      mostrarAviso("Informe o motivo do cancelamento.", "erro");
+    if (!formCancelarObra.data_cancelamento || !formCancelarObra.motivo_cancelamento?.trim()) {
+      const f: Record<string, string> = {};
+      if (!formCancelarObra.data_cancelamento) f["canc-data"] = "Informe a data de cancelamento.";
+      if (!formCancelarObra.motivo_cancelamento?.trim()) f["canc-motivo"] = "Informe o motivo do cancelamento.";
+      falhaCampos(f);
+      mostrarAviso(f["canc-data"] ? "Informe a data de cancelamento." : "Informe o motivo do cancelamento.", "erro");
       return;
     }
 
@@ -2070,7 +2144,7 @@ export default function App() {
       await buscarObras();
       setTelaAtiva("minhas_obras");
     } catch (error: any) {
-      mostrarAviso(error.message || "Erro ao cancelar obra.", "erro");
+      mostrarAviso(mensagemErro(error, "Não foi possível cancelar a obra."), "erro");
     } finally {
       setCarregando(false);
     }
@@ -2172,12 +2246,17 @@ export default function App() {
     novaParcelaCliente.valor_previsto,
   ]);
 
-  if (carregandoAuth)
+  if (carregandoAuth || (sessao && etapaMfa === "verificando"))
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50">
         <Loader2 className="animate-spin text-[#2A6377]" size={48} />
       </div>
     );
+
+  // codigo do aplicativo antes de tudo (inclusive antes de "Definir nova senha" pelo link do e-mail:
+  // o link sozinho nao passa pela verificacao)
+  if (sessao && etapaMfa === "codigo")
+    return <TelaCodigoLogin email={sessao.user?.email} onSair={fazerLogout} />;
 
   if (sessao && redefinindoSenha) {
     return (
@@ -2252,6 +2331,8 @@ export default function App() {
       </div>
     );
   }
+
+  if (sessao && etapaMfa === "ativar_obrigatorio") return <TelaAtivarObrigatoria onSair={fazerLogout} />;
 
   if (!sessao) {
     return (
@@ -2460,11 +2541,13 @@ export default function App() {
             </div>
 
             <div className="p-5 space-y-4">
+              <p className="text-xs text-slate-500">* obrigatório</p>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">
-                  Título da tarefa
+                  Título da tarefa<span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                 </label>
                 <input
+                  aria-required="true"
                   value={novaTarefaObra.titulo}
                   onChange={(e) =>
                     setNovaTarefaObra({ ...novaTarefaObra, titulo: e.target.value })
@@ -2495,9 +2578,10 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">
-                    Responsável
+                    Responsável<span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                   </label>
                   <select
+                    aria-required="true"
                     value={novaTarefaObra.id_responsavel}
                     onChange={(e) =>
                       setNovaTarefaObra({
@@ -2836,9 +2920,10 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-bold mb-1 text-slate-700">
-                      Início previsto
+                      Início previsto<span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                     </label>
                     <input
+                      {...attrsModal("cron-inicio", !dataBRParaISO(formCronogramaModal.inicio_previsto || ""))}
                       type="text"
                       inputMode="numeric"
                       maxLength={10}
@@ -2853,14 +2938,16 @@ export default function App() {
                           ),
                         })
                       }
-                      className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                      className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("cron-inicio", !dataBRParaISO(formCronogramaModal.inicio_previsto || ""))}`}
                     />
+                {textoModal("cron-inicio", !dataBRParaISO(formCronogramaModal.inicio_previsto || ""))}
                   </div>
                   <div>
                     <label className="block text-sm font-bold mb-1 text-slate-700">
-                      Prazo de entrega
+                      Prazo de entrega<span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                     </label>
                     <input
+                      {...attrsModal("cron-fim", !dataBRParaISO(formCronogramaModal.fim_previsto || ""))}
                       type="text"
                       inputMode="numeric"
                       maxLength={10}
@@ -2873,8 +2960,9 @@ export default function App() {
                           fim_previsto: formatarEntradaDataBR(e.target.value),
                         })
                       }
-                      className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                      className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("cron-fim", !dataBRParaISO(formCronogramaModal.fim_previsto || ""))}`}
                     />
+                {textoModal("cron-fim", !dataBRParaISO(formCronogramaModal.fim_previsto || ""))}
                   </div>
                 </div>
               ) : (
@@ -2883,8 +2971,10 @@ export default function App() {
                     {acaoCronogramaModal === "finalizar"
                       ? "Data de finalização"
                       : "Data de início"}
+                    <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                   </label>
                   <input
+                    {...attrsModal("cron-data", !dataBRParaISO(formCronogramaModal.data || ""))}
                     type="text"
                     inputMode="numeric"
                     maxLength={10}
@@ -2897,8 +2987,9 @@ export default function App() {
                         data: formatarEntradaDataBR(e.target.value),
                       })
                     }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("cron-data", !dataBRParaISO(formCronogramaModal.data || ""))}`}
                   />
+                {textoModal("cron-data", !dataBRParaISO(formCronogramaModal.data || ""))}
                 </div>
               )}
 
@@ -2992,9 +3083,10 @@ export default function App() {
 
               <div>
                 <label className="block text-sm font-bold mb-1 text-slate-700">
-                  Data de recebimento
+                  Data de recebimento<span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                 </label>
                 <input
+                  {...attrsModal("liq-data", !dataBRParaISO(liquidacaoParcela.data_recebimento || ""))}
                   type="text"
                   inputMode="numeric"
                   placeholder="dd/mm/aaaa"
@@ -3007,15 +3099,17 @@ export default function App() {
                       data_recebimento: formatarEntradaDataBR(e.target.value),
                     })
                   }
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("liq-data", !dataBRParaISO(liquidacaoParcela.data_recebimento || ""))}`}
                 />
+                {textoModal("liq-data", !dataBRParaISO(liquidacaoParcela.data_recebimento || ""))}
               </div>
 
               <div>
                 <label className="block text-sm font-bold mb-1 text-slate-700">
-                  Valor recebido
+                  Valor recebido<span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                 </label>
                 <input
+                  {...attrsModal("liq-valor", !(Number(liquidacaoParcela.valor_recebido) > 0))}
                   type="number"
                   step="0.01"
                   min="0"
@@ -3026,8 +3120,9 @@ export default function App() {
                       valor_recebido: e.target.value,
                     })
                   }
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("liq-valor", !(Number(liquidacaoParcela.valor_recebido) > 0))}`}
                 />
+                {textoModal("liq-valor", !(Number(liquidacaoParcela.valor_recebido) > 0))}
                 <p className="text-xs text-slate-400 mt-2">
                   Se o valor recebido for menor que o previsto, o sistema
                   marcará como parcial.
@@ -3136,8 +3231,9 @@ export default function App() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Data de finalização</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Data de finalização<span className="text-red-500 ml-0.5" aria-hidden="true">*</span></label>
                   <input
+                    {...attrsModal("fin-data", !formFinalizarObra.data_finalizacao)}
                     type="date"
                     value={formFinalizarObra.data_finalizacao}
                     onChange={(e) =>
@@ -3146,9 +3242,10 @@ export default function App() {
                         data_finalizacao: e.target.value,
                       }))
                     }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("fin-data", !formFinalizarObra.data_finalizacao)}`}
                     disabled={!podeFinalizarObraPorFaturamento}
                   />
+                {textoModal("fin-data", !formFinalizarObra.data_finalizacao)}
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">Saldo a receber em aberto</label>
@@ -3230,8 +3327,9 @@ export default function App() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Data de cancelamento</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Data de cancelamento<span className="text-red-500 ml-0.5" aria-hidden="true">*</span></label>
                   <input
+                    {...attrsModal("canc-data", !formCancelarObra.data_cancelamento)}
                     type="date"
                     value={formCancelarObra.data_cancelamento}
                     onChange={(e) =>
@@ -3240,12 +3338,14 @@ export default function App() {
                         data_cancelamento: e.target.value,
                       }))
                     }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("canc-data", !formCancelarObra.data_cancelamento)}`}
                   />
+                {textoModal("canc-data", !formCancelarObra.data_cancelamento)}
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Motivo do cancelamento</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Motivo do cancelamento<span className="text-red-500 ml-0.5" aria-hidden="true">*</span></label>
                   <input
+                    {...attrsModal("canc-motivo", !formCancelarObra.motivo_cancelamento?.trim())}
                     type="text"
                     value={formCancelarObra.motivo_cancelamento}
                     onChange={(e) =>
@@ -3254,9 +3354,10 @@ export default function App() {
                         motivo_cancelamento: e.target.value,
                       }))
                     }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("canc-motivo", !formCancelarObra.motivo_cancelamento?.trim())}`}
                     placeholder="Ex.: Cancelado pelo cliente, revisão comercial, perda do projeto…"
                   />
+                {textoModal("canc-motivo", !formCancelarObra.motivo_cancelamento?.trim())}
                 </div>
               </div>
 
@@ -3586,6 +3687,16 @@ export default function App() {
             </div>
           </div>
           <button
+            type="button"
+            onClick={() => setDuasEtapasAberta(true)}
+            title={menuRecolhido ? "Verificação em duas etapas" : undefined}
+            className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition text-sm"
+          >
+            <ShieldCheck size={18} className="shrink-0" aria-hidden="true" />
+            <span className={menuRecolhido ? "md:hidden" : ""}>Verificação em duas etapas</span>
+          </button>
+          {duasEtapasAberta && <JanelaDuasEtapas onFechar={() => setDuasEtapasAberta(false)} />}
+          <button
             onClick={fazerLogout}
             title={menuRecolhido ? "Sair" : undefined}
             className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition"
@@ -3600,6 +3711,16 @@ export default function App() {
       <main className="flex-1 p-4 md:p-5 2xl:p-8 overflow-y-auto overflow-x-hidden bg-slate-50/50">
         <Suspense fallback={<CarregandoTela />}>
         {telaAtiva === "dashboard" && <MinhasPendencias pendencias={pendencias} onIr={setTelaAtiva} />}
+        {/* o outro lado das pendencias: o que a pessoa pediu e esta parado com outra area */}
+        {telaAtiva === "dashboard" && (
+          <MeusPedidos
+            onIr={setTelaAtiva}
+            onAbrirPedido={(tela, id) => {
+              setTelaAtiva(tela);
+              setSolicitacaoDestaque(id);
+            }}
+          />
+        )}
         {telaAtiva === "dashboard" && (
           <TelaDashboard
             usuarioAtual={usuarioAtual}
@@ -3661,21 +3782,17 @@ export default function App() {
                   <p className="text-sm text-slate-500 col-span-full">Nenhuma obra encontrada para "{buscaObras}".</p>
                 )}
                 {obrasListaOrdenada.map((obra) => {
+                  // sem resposta da consulta ainda: nenhum selo (nunca "Em dia" antes de ter dado)
                   const r = resumoObras[obra.id];
-                  const motivos: string[] = [];
-                  if (r?.alertas_criticos) motivos.push(`${r.alertas_criticos} alerta(s) crítico(s)`);
-                  if (r?.parcelas_vencidas) motivos.push(`${r.parcelas_vencidas} parcela(s) vencida(s)`);
-                  if (r?.tarefas_atrasadas) motivos.push(`${r.tarefas_atrasadas} tarefa(s) atrasada(s)`);
-                  if (r?.fases_atrasadas) motivos.push(`${r.fases_atrasadas} fase(s) atrasada(s)`);
-                  if (r?.documentos_atrasados) motivos.push(`${r.documentos_atrasados} documento(s) atrasado(s)`);
-                  if (r && r.alertas_abertos > r.alertas_criticos) motivos.push(`${r.alertas_abertos - r.alertas_criticos} alerta(s)`);
-                  const selo = !r
+                  const saude = r ? avaliarSaude(r) : null;
+                  const motivos: string[] = saude?.motivos || [];
+                  const selo = !saude
                     ? null
-                    : r.alertas_criticos || r.parcelas_vencidas
-                      ? { t: "Crítico", c: "bg-red-50 text-red-800 border-red-200", barra: "bg-red-500" }
-                      : motivos.length
-                        ? { t: "Atenção", c: "bg-amber-50 text-amber-900 border-amber-200", barra: "bg-amber-400" }
-                        : { t: "Em dia", c: "bg-emerald-50 text-emerald-800 border-emerald-200", barra: "bg-emerald-500" };
+                    : saude.geral === "critico"
+                      ? { t: saude.rotulo, c: "bg-red-50 text-red-800 border-red-200", barra: "bg-red-500" }
+                      : saude.geral === "atencao"
+                        ? { t: saude.rotulo, c: "bg-amber-50 text-amber-900 border-amber-200", barra: "bg-amber-400" }
+                        : { t: saude.rotulo, c: "bg-emerald-50 text-emerald-800 border-emerald-200", barra: "bg-emerald-500" };
                   const favorita = obrasFavoritas.includes(obra.id);
                   return (
                   <div
@@ -3696,7 +3813,7 @@ export default function App() {
                     <button type="button" onClick={() => abrirPainelObra(obra)} className="p-5 flex-1 flex flex-col text-left">
                       <span className="flex items-center gap-2 flex-wrap mb-3 pr-8">
                         <span className="text-xs font-bold bg-slate-100 text-slate-600 uppercase px-2 py-1 rounded">{obra.codigo_externo}</span>
-                        {selo && <span className={`text-xs font-semibold px-2 py-1 rounded border ${selo.c}`}>{selo.t}</span>}
+                        {selo && <span title={EXPLICACAO_SAUDE} className={`text-xs font-semibold px-2 py-1 rounded border ${selo.c}`}>{selo.t}</span>}
                       </span>
                       <h3 className="text-lg font-bold text-slate-800 leading-tight mb-3 group-hover:text-[#2A6377] transition">
                         {obra.nome}
@@ -3841,6 +3958,7 @@ export default function App() {
             <Suspense fallback={<CarregandoTela />}>
             {abaPainelObra === "resumo" && abaObraPermitida("resumo") && (
               <AbaResumo
+                irParaAba={setAbaPainelObra}
                 cronogramaObra={cronogramaObra}
                 documentosConcluidos={documentosConcluidos}
                 documentosProjeto={documentosProjeto}

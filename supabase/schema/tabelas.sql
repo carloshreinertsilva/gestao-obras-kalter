@@ -577,6 +577,23 @@ create table public.obra_anexos (
     constraint obra_anexos_id_usuario_fkey FOREIGN KEY (id_usuario) REFERENCES public.usuarios(id)
 );
 
+create table public.obra_avancos (
+    id uuid default gen_random_uuid() not null,
+    id_obra uuid not null,
+    data_referencia date not null,
+    percentual numeric(5,2) not null,
+    observacao text,
+    id_usuario uuid,
+    created_at timestamp with time zone default now() not null,
+    updated_at timestamp with time zone default now() not null,
+    constraint obra_avancos_pkey PRIMARY KEY (id),
+    constraint obra_avancos_obra_data_key UNIQUE (id_obra, data_referencia),
+    constraint obra_avancos_percentual_check CHECK (percentual >= 0::numeric AND percentual <= 100::numeric),
+    constraint obra_avancos_id_obra_fkey FOREIGN KEY (id_obra) REFERENCES public.obras(id) ON DELETE CASCADE,
+    constraint obra_avancos_id_usuario_fkey FOREIGN KEY (id_usuario) REFERENCES public.usuarios(id) ON DELETE SET NULL
+);
+comment on table public.obra_avancos is 'Avanco fisico (%) da obra informado pelo gestor; gravacao so pela funcao obra_avanco_registrar.';
+
 create table public.obra_compras_abertas (
     id_obra uuid not null,
     nr_solicitacao bigint not null,
@@ -923,6 +940,30 @@ create table public.parcelas_cliente (
     constraint parcelas_cliente_status_check CHECK (status = ANY (ARRAY['a_vencer'::text, 'vencido'::text, 'pago_parcial'::text, 'pago'::text, 'cancelado'::text])),
     constraint parcelas_cliente_id_obra_fkey FOREIGN KEY (id_obra) REFERENCES public.obras(id) ON DELETE CASCADE
 );
+
+create table public.projetos_erp (
+    codigo text not null,
+    nome text not null,
+    pedido_venda bigint,
+    situacao_pedido text,
+    situacao_projeto text,
+    cliente_codigo bigint,
+    cliente_nome text,
+    cidade text,
+    uf text,
+    valor_produto numeric(14,2) default 0 not null,
+    valor_servico numeric(14,2) default 0 not null,
+    data_pedido date,
+    data_aprovacao date,
+    data_entrega_prevista date,
+    atualizado_em timestamp with time zone default now() not null,
+    constraint projetos_erp_pkey PRIMARY KEY (codigo)
+);
+comment on table public.projetos_erp is 'Projetos vivos do ERP (CADPROJ situacao A, pedido de venda P/L mexido nos ultimos 12 meses) que ainda nao tem obra no app. Gravado so pelo robo (sync_projetos_erp, so o que mudou). Usado para pre-preencher o cadastro de obra nova.';
+comment on column public.projetos_erp.valor_produto is 'Venda de material do pedido (com IPI, sem cancelados, com desconto) - mesma conta do Estagio 1.';
+comment on column public.projetos_erp.valor_servico is 'Venda de servico do pedido (mater.mt_tipo_item = 9) - mesma conta do Estagio 1.';
+comment on column public.projetos_erp.data_aprovacao is 'Primeira aprovacao do pedido (pv_dt_prim_aprov; sem ela, a ultima aprovacao).';
+comment on column public.projetos_erp.data_entrega_prevista is 'CADPROJ.cpj_aaaammdd_entr (99991231 = sem data -> nulo).';
 
 create table public.push_inscricoes (
     id uuid default gen_random_uuid() not null,

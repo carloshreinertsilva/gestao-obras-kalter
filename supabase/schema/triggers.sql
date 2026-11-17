@@ -18,13 +18,30 @@ CREATE TRIGGER auditar_documentos_projeto AFTER INSERT OR DELETE OR UPDATE ON pu
 -- documentos_projeto_arquivos
 CREATE TRIGGER auditar_documentos_projeto_arquivos AFTER INSERT OR DELETE OR UPDATE ON public.documentos_projeto_arquivos FOR EACH ROW EXECUTE FUNCTION public.auditar();
 
+-- exportacao_config
+CREATE TRIGGER auditar_exportacao_config AFTER INSERT OR DELETE OR UPDATE ON public.exportacao_config FOR EACH ROW EXECUTE FUNCTION public.auditar('ignorar=atualizado_em');
+
 -- exportacao_processos
+CREATE TRIGGER auditar_exportacao_processos AFTER INSERT OR DELETE ON public.exportacao_processos FOR EACH ROW EXECUTE FUNCTION public.auditar('ignorar=dados,hash_dados');
+CREATE TRIGGER auditar_exportacao_processos_situacao AFTER UPDATE ON public.exportacao_processos FOR EACH ROW WHEN (old.situacao IS DISTINCT FROM new.situacao OR old.aprovacao IS DISTINCT FROM new.aprovacao) EXECUTE FUNCTION public.auditar('ignorar=dados,hash_dados,versao,atualizado_em,atualizado_por,nome_atualizou');
 CREATE TRIGGER exportacao_processo_hash BEFORE INSERT OR UPDATE OF dados ON public.exportacao_processos FOR EACH ROW EXECUTE FUNCTION public.trg_exportacao_processo_hash();
 CREATE TRIGGER exportacao_processo_versao AFTER UPDATE ON public.exportacao_processos FOR EACH ROW EXECUTE FUNCTION public.trg_exportacao_processo_versao();
 
 -- faturamentos
 CREATE TRIGGER auditar_faturamentos AFTER INSERT OR DELETE OR UPDATE ON public.faturamentos FOR EACH ROW EXECUTE FUNCTION public.auditar();
 CREATE TRIGGER trg_notif_nf_nova AFTER INSERT ON public.faturamentos FOR EACH ROW EXECUTE FUNCTION public.trg_notif_nf_nova();
+
+-- fornecedores_erp
+CREATE TRIGGER auditar_fornecedores_erp_transportadora AFTER UPDATE OF transportadora ON public.fornecedores_erp FOR EACH ROW WHEN (old.transportadora IS DISTINCT FROM new.transportadora) EXECUTE FUNCTION public.auditar('chave=codigo');
+
+-- fretes
+CREATE TRIGGER auditar_fretes AFTER INSERT OR DELETE OR UPDATE ON public.fretes FOR EACH ROW EXECUTE FUNCTION public.auditar();
+
+-- fretes_rotas
+CREATE TRIGGER auditar_fretes_rotas AFTER INSERT OR DELETE OR UPDATE ON public.fretes_rotas FOR EACH ROW EXECUTE FUNCTION public.auditar('chave=origem_ibge,destino_ibge');
+
+-- fretes_transp_tarifas
+CREATE TRIGGER auditar_fretes_transp_tarifas AFTER INSERT OR DELETE OR UPDATE ON public.fretes_transp_tarifas FOR EACH ROW EXECUTE FUNCTION public.auditar();
 
 -- nfs_terceiros
 CREATE TRIGGER auditar_nfs_terceiros AFTER INSERT OR DELETE OR UPDATE ON public.nfs_terceiros FOR EACH ROW EXECUTE FUNCTION public.auditar();
@@ -38,6 +55,9 @@ CREATE TRIGGER trg_obra_alertas_avisar AFTER INSERT OR UPDATE ON public.obra_ale
 
 -- obra_anexos
 CREATE TRIGGER auditar_obra_anexos AFTER INSERT OR DELETE OR UPDATE ON public.obra_anexos FOR EACH ROW EXECUTE FUNCTION public.auditar();
+
+-- obra_avancos
+CREATE TRIGGER auditar_obra_avancos AFTER INSERT OR DELETE OR UPDATE ON public.obra_avancos FOR EACH ROW EXECUTE FUNCTION public.auditar();
 
 -- obra_faturamento_familias
 CREATE TRIGGER auditar_obra_faturamento_familias AFTER INSERT OR DELETE OR UPDATE ON public.obra_faturamento_familias FOR EACH ROW EXECUTE FUNCTION public.auditar();
@@ -65,8 +85,12 @@ CREATE TRIGGER trg_after_insert_obras_criar_pmis_padrao AFTER INSERT ON public.o
 CREATE TRIGGER trg_notif_fase_obra AFTER UPDATE OF fase_atual ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_notif_fase_obra();
 CREATE TRIGGER trg_notif_obra_nova AFTER INSERT ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_notif_obra_nova();
 CREATE TRIGGER trg_obras_protege_codigo BEFORE UPDATE OF codigo_externo ON public.obras FOR EACH ROW WHEN (old.codigo_externo::text IS DISTINCT FROM new.codigo_externo::text) EXECUTE FUNCTION public.trg_obras_protege_codigo();
+CREATE TRIGGER trg_projetos_erp_obra_criada AFTER INSERT OR UPDATE OF codigo_externo ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_projetos_erp_obra_criada();
 CREATE TRIGGER trg_validar_responsavel_obra BEFORE INSERT OR UPDATE OF id_responsavel ON public.obras FOR EACH ROW EXECUTE FUNCTION public.validar_responsavel_obra_e_engenheiro();
 CREATE TRIGGER update_obras_modtime BEFORE UPDATE ON public.obras FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- obras_valores_erp
+CREATE TRIGGER auditar_obras_valores_erp AFTER INSERT OR DELETE OR UPDATE ON public.obras_valores_erp FOR EACH ROW EXECUTE FUNCTION public.auditar();
 
 -- obras_valores_restritos
 CREATE TRIGGER auditar_obras_valores_restritos AFTER INSERT OR DELETE OR UPDATE ON public.obras_valores_restritos FOR EACH ROW EXECUTE FUNCTION public.auditar();
@@ -104,9 +128,11 @@ CREATE TRIGGER trg_solicitacoes_material_avisos AFTER INSERT OR UPDATE ON public
 CREATE TRIGGER auditar_solicitacoes_previsao AFTER INSERT OR DELETE OR UPDATE ON public.solicitacoes_previsao FOR EACH ROW EXECUTE FUNCTION public.auditar();
 CREATE TRIGGER trg_solicitacao_previsao_email AFTER UPDATE ON public.solicitacoes_previsao FOR EACH ROW EXECUTE FUNCTION public.trg_solicitacao_previsao_email();
 CREATE TRIGGER trg_solicitacao_previsao_ins BEFORE INSERT ON public.solicitacoes_previsao FOR EACH ROW EXECUTE FUNCTION public.trg_solicitacao_previsao_ins();
+CREATE TRIGGER trg_solicitacao_previsao_ins_duplicada BEFORE INSERT ON public.solicitacoes_previsao FOR EACH ROW EXECUTE FUNCTION public.trg_solicitacao_previsao_duplicada();
 CREATE TRIGGER trg_solicitacao_previsao_logistica AFTER UPDATE ON public.solicitacoes_previsao FOR EACH ROW EXECUTE FUNCTION public.trg_solicitacao_previsao_logistica();
 CREATE TRIGGER trg_solicitacao_previsao_notif AFTER UPDATE ON public.solicitacoes_previsao FOR EACH ROW EXECUTE FUNCTION public.trg_solicitacao_previsao_notif();
 CREATE TRIGGER trg_solicitacao_previsao_upd BEFORE UPDATE ON public.solicitacoes_previsao FOR EACH ROW EXECUTE FUNCTION public.trg_solicitacao_previsao_upd();
+CREATE TRIGGER trg_solicitacao_previsao_upd_duplicada BEFORE UPDATE OF status ON public.solicitacoes_previsao FOR EACH ROW WHEN ((old.status <> ALL (ARRAY['simulando'::text, 'aguardando_aprovacao'::text, 'aprovada'::text])) AND (new.status = ANY (ARRAY['simulando'::text, 'aguardando_aprovacao'::text, 'aprovada'::text]))) EXECUTE FUNCTION public.trg_solicitacao_previsao_duplicada();
 
 -- tarefas
 CREATE TRIGGER auditar_tarefas AFTER INSERT OR DELETE OR UPDATE ON public.tarefas FOR EACH ROW EXECUTE FUNCTION public.auditar();

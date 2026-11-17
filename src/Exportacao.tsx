@@ -20,12 +20,13 @@ import { soDigitos } from "./exportacao/numeros";
 import type { Aprovacao, DocumentoLista, Material, Processo, TabelaEstimativas } from "./exportacao/tipos";
 import { Aviso, Botao, ListasDeSugestoes } from "./exportacao/ui";
 import { confirmar } from "./Dialogos";
+import { mensagemErro } from "./erros";
 
 const COLUNAS_DOCUMENTO = "id, tipo, situacao, erro, nome_arquivo, tamanho, nome_pedido_por, created_at, gerado_em, hash_dados";
 const PERFIS_EXPORTACAO = ["admin", "coordenador", "fiscal"];
 // texto fixo que exportacao_salvar devolve quando outra janela/pessoa gravou antes (trava por versao)
 const TEXTO_CONFLITO = "foi alterado em outra janela";
-const msgErro = (e: unknown) => String((e as { message?: string })?.message || e || "Erro").replace(/^.*?ERROR:\s*/, "");
+const msgErro = (e: unknown) => mensagemErro(e, "Tente de novo em instantes.");
 
 interface Mensagem {
   tom: "ok" | "aviso" | "erro";

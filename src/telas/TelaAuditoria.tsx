@@ -41,6 +41,20 @@ const TABELAS: Record<string, string> = {
   ocorrencias: "Ocorrência de reunião",
   reunioes: "Reunião",
   reunioes_sessoes: "Sessão de reunião",
+  // ja auditadas antes, faltavam aqui (apareciam com o nome tecnico)
+  nfs_terceiros: "NF de terceiros",
+  solicitacoes_faturamento: "Solicitação de faturamento",
+  solicitacoes_faturamento_itens: "Item de solicitação de faturamento",
+  solicitacoes_material: "Solicitação de material",
+  obras_valores_restritos: "Margem e rentabilidade (ERP)",
+  // Pacote 4 (D4)
+  fretes: "Frete",
+  fretes_transp_tarifas: "Tarifa de transportadora",
+  fretes_rotas: "Distância de rota (frete)",
+  fornecedores_erp: "Transportadora (marcação)",
+  exportacao_processos: "Processo de exportação",
+  exportacao_config: "Dados do exportador",
+  obras_valores_erp: "Valores da obra enviados ao ERP",
 };
 
 const OPERACAO = {
@@ -50,7 +64,9 @@ const OPERACAO = {
 };
 
 // campos que identificam o registro na linha da lista (o primeiro que existir)
-const CAMPOS_NOME = ["titulo", "nome", "item", "descricao", "descricao_familia", "familia_destino", "numero_nf", "texto", "fase", "email"];
+// (os do fim identificam frete, tarifa e valores do ERP, que nao tem titulo/nome)
+const CAMPOS_NOME = ["titulo", "nome", "item", "descricao", "descricao_familia", "familia_destino", "numero_nf", "texto", "fase", "email",
+  "transportadora_nome", "familia", "codigo_obra", "tipo_veiculo", "situacao"];
 const LIMITE = 200;
 
 const valorTexto = (v: unknown) => {

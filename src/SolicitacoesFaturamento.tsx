@@ -2,14 +2,23 @@ import { linhaClicavel } from "./teclado";
 import { useAviso } from "./aviso";
 import { ErroCarga, useDialogos } from "./Dialogos";
 import { useEffect, useMemo, useState } from "react";
-import { lerNumero } from "./numero";
+import { formatarNumero, lerNumero } from "./numero";
 import { CampoNumero } from "./CampoNumero";
+import {
+  aplicarSugestao,
+  calcularSugestao,
+  pesoMuitoDiferente,
+  temSugestao,
+  textoConfianca,
+  type BasesConferencia,
+} from "./calculoConferencia";
 import {
   AlertTriangle,
   CheckCircle2,
   ChevronRight,
   Clock,
   FileText,
+  Lightbulb,
   Loader2,
   Package,
   Paperclip,
@@ -27,6 +36,9 @@ import { exportarCsv, formatarDataSegura, formatarMoeda, normalizarNomeArquivo }
 import { Modal } from "./Modal";
 import { BotaoExportar, SeloDiasParados, diasUteisDesde, maisRecente, numCsv, useFiltroSalvo } from "./modulos_lista";
 import type { Usuario } from "./types";
+import EntradaArquivos from "./EntradaArquivos";
+import { semDuplicados, textoProgresso } from "./arquivosRegras";
+import { mensagemErro } from "./erros";
 
 // Solicitacao de faturamento (2026-10-15): gestor pede -> logistica (flag aprova_faturamento)
 // confere e informa o transporte -> fiscal (perfil "fiscal") emite a NF no ERP -> o robo liga a NF.
@@ -159,7 +171,6 @@ const fmtDataHora = (v?: string | null) =>
   v ? new Date(v).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 const arred4 = (v: number) => Math.round(v * 10000) / 10000;
 const tipoTexto = (t: string) => (t === "produto" ? "Produto" : "Serviço");
-const msgErro = (e: any) => String(e?.message || e || "Erro desconhecido.").replace(/^.*?ERROR:\s*/, "");
 
 // SF ainda andando (alguem precisa agir)
 const SF_ABERTA: StatusSolicitacaoFaturamento[] = ["rascunho", "aguardando_logistica", "devolvida", "aguardando_fiscal", "faturada_parcial"];
@@ -186,6 +197,48 @@ export const BadgeStatusFaturamento = ({ status }: { status: StatusSolicitacaoFa
     {STATUS[status]?.rotulo || status}
   </span>
 );
+
+// Item que estava na solicitacao (rascunho/devolvida) e agora tem saldo menor ou nenhum: outra solicitacao aberta
+// usou o saldo ou o pedido mudou no ERP (faturado/cancelado). A regra de saldo continua no banco (sf_saldo_item).
+interface ItemForaDoSaldo {
+  sequencia: number;
+  codigo_material: string | null;
+  descricao: string | null;
+  unidade: string | null;
+  antes: number;
+  agora: number;
+}
+
+const itensForaDoSaldo = (salvos: ItemSolicitacao[], disponiveis: ItemDisponivel[]): ItemForaDoSaldo[] => {
+  const saldo = new Map(disponiveis.map((d) => [d.sequencia, num(d.saldo)]));
+  return salvos.flatMap((s) => {
+    const antes = num(s.quantidade_solicitada);
+    if (antes <= 0) return [];
+    const agora = Math.min(antes, saldo.get(s.sequencia) ?? 0);
+    if (agora >= antes - 0.00005) return [];
+    return [{ sequencia: s.sequencia, codigo_material: s.codigo_material, descricao: s.descricao, unidade: s.unidade, antes, agora }];
+  });
+};
+
+const motivoForaDoSaldo = (i: ItemForaDoSaldo) =>
+  i.agora > 0
+    ? `quantidade reduzida de ${fmtQtd(i.antes)} para ${fmtQtd(i.agora)} ${i.unidade || ""} (é o saldo a faturar agora)`
+    : `ficou de fora: sem saldo a faturar agora (estava com ${fmtQtd(i.antes)} ${i.unidade || ""})`;
+
+function ListaForaDoSaldo({ itens }: { itens: ItemForaDoSaldo[] }) {
+  return (
+    <ul className="mt-1 space-y-0.5 list-disc pl-5">
+      {itens.map((i) => (
+        <li key={i.sequencia}>
+          <b>
+            Seq. {i.sequencia} · {i.codigo_material}
+          </b>
+          {i.descricao ? ` – ${i.descricao}` : ""}: {motivoForaDoSaldo(i)}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 // ------------------------------------------------------------------------------------------------
 // Modal do gestor: escolhe itens do pedido com saldo (por % ou R$) e envia para a logistica
@@ -218,6 +271,11 @@ function ModalSolicitarFaturamento({
   // alteracoes nao salvas (pergunta antes de fechar); a carga dos itens nao conta
   const [sujo, setSujo] = useState(false);
   const aviso = useAviso();
+  const { confirmar } = useDialogos();
+  // itens da solicitacao salva que nao cabem mais no saldo (calculado na carga; nao muda com o que a pessoa digita)
+  const [foraDoSaldo, setForaDoSaldo] = useState<ItemForaDoSaldo[]>([]);
+  const [progresso, setProgresso] = useState("");
+  const [campoErro, setCampoErro] = useState<"" | "itens" | "data">("");
 
   // carrega 1x por solicitacao aberta. Depende da id, NAO do objeto `existente`: o App redesenha a cada 60 s (sino) e
   // ao voltar para a aba; com o objeto como dependencia a quantidade voltava ao valor salvo enquanto o campo de % seguia
@@ -229,12 +287,20 @@ function ModalSolicitarFaturamento({
       .rpc("sf_itens_disponiveis", { p_id_obra: idObra, p_tipo: tipo, p_ignorar: idExistente })
       .then(({ data, error }) => {
         if (!ativo) return;
-        if (error) setErro(msgErro(error));
-        setItens((data as ItemDisponivel[]) || []);
+        if (error) setErro(mensagemErro(error));
+        const disponiveis = (data as ItemDisponivel[]) || [];
+        setItens(disponiveis);
         if (existente) {
+          // so os itens que ainda tem saldo, limitados ao saldo de agora; o que ficou de fora ou diminuiu vai para o
+          // aviso (antes sumia do envio sem aviso nenhum e o gestor reenviava achando que mandou tudo)
+          const saldoPorSeq = new Map(disponiveis.map((d) => [d.sequencia, num(d.saldo)]));
           const q: Record<number, number> = {};
-          existente.itens.forEach((i) => (q[i.sequencia] = num(i.quantidade_solicitada)));
+          existente.itens.forEach((i) => {
+            if (saldoPorSeq.has(i.sequencia))
+              q[i.sequencia] = Math.min(num(i.quantidade_solicitada), saldoPorSeq.get(i.sequencia) || 0);
+          });
           setQtd(q);
+          setForaDoSaldo(error ? [] : itensForaDoSaldo(existente.itens, disponiveis));
         }
       });
     return () => {
@@ -294,30 +360,62 @@ function ModalSolicitarFaturamento({
     setEntrada({});
   };
 
-  const escolherArquivos = (lista: FileList | null) => {
-    const novos = [...arquivos, ...Array.from(lista || [])];
-    const grande = novos.find((f) => f.size > 10 * 1024 * 1024);
-    if (grande) return setErro(`O arquivo ${grande.name} passa de 10 MB.`);
-    if (novos.length + anexos.length > 5) return setErro("Anexe no máximo 5 arquivos.");
-    setErro("");
-    setArquivos(novos);
+  // tamanho (10 MB) e tipo ja sao conferidos pela EntradaArquivos; aqui o limite de 5 com os ja salvos
+  const escolherArquivos = (lista: File[]) => {
+    setSujo(true);
+    const novos = semDuplicados([...arquivos, ...lista]);
+    const cabem = Math.max(0, 5 - anexos.length);
+    if (novos.length > cabem) {
+      aviso.erro(`Anexe no máximo 5 arquivos. Ficaram de fora: ${novos.slice(cabem).map((f) => f.name).join(", ")}.`);
+    }
+    setArquivos(novos.slice(0, cabem));
   };
 
   const salvar = async (enviar: boolean) => {
     setErro("");
-    if (nItens === 0) return setErro("Informe o % ou o valor de ao menos um item.");
-    if (enviar && !dataDesejada) return setErro("Informe a data desejada de faturamento.");
+    setCampoErro("");
+    if (nItens === 0) {
+      setCampoErro("itens");
+      return setErro("Informe o % ou o valor de ao menos um item.");
+    }
+    if (enviar && !dataDesejada) {
+      setCampoErro("data");
+      return setErro("Informe a data desejada de faturamento.");
+    }
+    if (
+      foraDoSaldo.length &&
+      !(await confirmar({
+        titulo: enviar ? "Enviar sem estes itens?" : "Salvar sem estes itens?",
+        texto: (
+          <>
+            Estes itens estavam na solicitação e não cabem mais no saldo a faturar (outra solicitação aberta usou o saldo ou o
+            pedido mudou no ERP):
+            <ListaForaDoSaldo itens={foraDoSaldo} />
+            <span className="block mt-2">
+              {enviar ? "A logística vai receber a solicitação sem eles (ou com a quantidade reduzida)." : "O rascunho fica sem eles (ou com a quantidade reduzida)."}
+            </span>
+          </>
+        ),
+        rotuloConfirmar: enviar ? "Enviar assim" : "Salvar assim",
+      }))
+    )
+      return;
     setEnviando(true);
     const enviados: string[] = [];
     try {
       const novosAnexos = [...anexos];
-      for (const arq of arquivos) {
+      for (const [k, arq] of arquivos.entries()) {
+        setProgresso(arquivos.length > 1 ? textoProgresso(k + 1, arquivos.length) : "");
         const caminho = `obras/${idObra}/faturamento/${Date.now()}_${normalizarNomeArquivo(arq.name)}`;
         const { error } = await supabase.storage.from("previsao-anexos").upload(caminho, arq);
-        if (error) throw new Error(`Não foi possível enviar o anexo ${arq.name}: ${error.message}`);
+        if (error)
+          throw new Error(
+            `Não foi possível enviar o anexo ${arq.name}: ${mensagemErro(error)} Os anexos continuam na lista; tente de novo ou tire este anexo.`,
+          );
         enviados.push(caminho);
         novosAnexos.push({ nome: arq.name, caminho, tamanho: arq.size });
       }
+      setProgresso("");
       const { data, error } = await supabase.rpc("faturamento_salvar", {
         p_id: existente?.solicitacao.id ?? null,
         p_id_obra: idObra,
@@ -334,9 +432,10 @@ function ModalSolicitarFaturamento({
       onSalvo(data as string);
     } catch (e) {
       if (enviados.length) await supabase.storage.from("previsao-anexos").remove(enviados);
-      setErro(msgErro(e));
+      setErro(mensagemErro(e));
     } finally {
       setEnviando(false);
+      setProgresso("");
     }
   };
 
@@ -371,12 +470,30 @@ function ModalSolicitarFaturamento({
             onClick={() => salvar(true)}
             className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            {enviando ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />} Enviar para a logística
+            {enviando ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}{" "}
+            {enviando && progresso ? progresso : "Enviar para a logística"}
           </button>
         </>
       }
     >
         <div className="space-y-4" onChange={() => setSujo(true)}>
+          {foraDoSaldo.length > 0 && (
+            <div role="alert" className="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2">
+              <p className="font-bold flex items-center gap-1.5">
+                <AlertTriangle size={15} className="shrink-0" aria-hidden="true" />
+                {foraDoSaldo.length === 1 ? "1 item da solicitação não cabe mais" : `${foraDoSaldo.length} itens da solicitação não cabem mais`} no saldo a faturar
+              </p>
+              <p className="text-xs mt-0.5">Outra solicitação aberta usou o saldo ou o pedido mudou no ERP. Confira antes de enviar:</p>
+              <div className="text-xs">
+                <ListaForaDoSaldo itens={foraDoSaldo} />
+              </div>
+            </div>
+          )}
+          {erro && campoErro === "itens" && (
+            <p className="text-sm font-semibold text-red-600 flex items-center gap-1.5">
+              <AlertTriangle size={15} className="shrink-0" aria-hidden="true" /> {erro}
+            </p>
+          )}
           {itens === null ? (
             <p className="text-sm text-slate-500 flex items-center gap-2">
               <Loader2 className="animate-spin" size={16} /> Carregando itens do pedido…
@@ -504,9 +621,17 @@ function ModalSolicitarFaturamento({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-semibold mb-1">Faturar até *</label>
-              <input type="date" value={dataDesejada} onChange={(e) => setDataDesejada(e.target.value)} className="border rounded-lg px-3 py-2 w-full" />
-              <p className="text-xs text-slate-500 mt-1">Lembretes diários começam 3 dias antes.</p>
+              <label htmlFor="sf-faturar-ate" className="block text-sm font-semibold mb-1">Faturar até *</label>
+              <input
+                id="sf-faturar-ate"
+                type="date"
+                value={dataDesejada}
+                onChange={(e) => setDataDesejada(e.target.value)}
+                aria-invalid={(erro && campoErro === "data") || undefined}
+                className={`border rounded-lg px-3 py-2 w-full ${erro && campoErro === "data" ? "border-red-400" : ""}`}
+              />
+              {erro && campoErro === "data" && <p className="text-xs font-semibold text-red-600 mt-1">{erro}</p>}
+              <p className="text-xs text-slate-500 mt-1">Lembretes diários começam 3 dias antes. * obrigatório para enviar.</p>
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-semibold mb-1">Observação para logística e fiscal</label>
@@ -521,19 +646,14 @@ function ModalSolicitarFaturamento({
           </div>
 
           <div>
-            <label className="inline-flex items-center gap-2 px-3 py-2 border rounded-lg text-sm text-slate-600 cursor-pointer hover:bg-slate-50">
-              <Paperclip size={15} /> Anexar romaneio, fotos, aceite…
-              <input
-                type="file"
-                multiple
-                accept=".pdf,image/*"
-                className="hidden"
-                onChange={(e) => {
-                  escolherArquivos(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
+            <EntradaArquivos
+              rotulo="Anexar romaneio, fotos, aceite…"
+              accept=".pdf,image/*"
+              maxMb={10}
+              desabilitado={enviando || arquivos.length + anexos.length >= 5}
+              onArquivos={escolherArquivos}
+            />
+            <p className="text-xs text-slate-500 mt-1">PDF ou imagem, até 5 arquivos de 10 MB.</p>
             <ul className="mt-2 space-y-1">
               {anexos.map((a, k) => (
                 <li key={a.caminho} className="text-xs text-slate-600 flex items-center gap-2">
@@ -625,10 +745,30 @@ function ModalConferencia({
         .select("codigo, nome, cidade, uf")
         .order("nome")
         .then(({ data, error }) => {
-          if (error) setErro("Não foi possível carregar as transportadoras: " + msgErro(error) + ". Feche e abra a conferência de novo.");
+          if (error) setErro("Não foi possível carregar as transportadoras: " + mensagemErro(error) + ". Feche e abra a conferência de novo.");
           setTransportadoras((data as any[]) || []);
         });
   }, [produto]);
+
+  // bases da sugestao de peso/volumes (conferencias aprovadas da obra, packing list da exportacao). So mostra:
+  // nada e preenchido sem a logistica pedir (botao "Usar sugestao"). Falha aqui nao atrapalha a conferencia.
+  const [bases, setBases] = useState<BasesConferencia | null>(null);
+  const [erroSugestao, setErroSugestao] = useState(false);
+  useEffect(() => {
+    if (!produto) return;
+    let ativo = true;
+    // funcao nova (pacote 4): ainda fora de database.types.ts
+    (supabase as any)
+      .rpc("sf_sugestao_conferencia", { p_id: solicitacao.id })
+      .then(({ data, error }: { data: unknown; error: unknown }) => {
+        if (!ativo) return;
+        if (error) setErroSugestao(true);
+        else setBases((data as BasesConferencia) || null);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [produto, solicitacao.id]);
 
   // leitura unica (src/numero.ts): peso "850.5" e 850,5 (antes virava 8505 no romaneio)
   const n = (t: string) => lerNumero(t);
@@ -643,6 +783,39 @@ function ModalConferencia({
     return t === "" ? null : parseInt(t, 10);
   };
   const totalVolumes = itens.reduce((a, i) => a + (qtdNum(i) > 0 ? volNum(i) || 0 : 0), 0);
+
+  // sugestao acompanha a quantidade aprovada digitada (peso proporcional; volumes so com a mesma quantidade)
+  const sugestao = calcularSugestao(
+    itens.map((i) => ({ sequencia: i.sequencia, codigo_material: i.codigo_material, quantidade: qtdNum(i) })),
+    bases,
+  );
+  const fontesVolumes = [...new Set(Object.values(sugestao.volumes).map((v) => v.fonte))];
+  const podeUsarSugestao = Boolean(sugestao.peso) || fontesVolumes.length > 0;
+  const rotuloItem = (s: number) => {
+    const i = itens.find((x) => x.sequencia === s);
+    return `item ${s}${i?.codigo_material ? ` (${i.codigo_material})` : ""}`;
+  };
+  const kg = (v: number) => formatarNumero(v, 0, 2);
+
+  const usarSugestao = async () => {
+    const campos = { pesoBruto, pesoLiquido, volumes };
+    let r = aplicarSugestao(campos, sugestao, false, rotuloItem);
+    // campo ja digitado com outro valor: so substitui se a pessoa confirmar (os vazios sao preenchidos de todo jeito)
+    if (
+      r.conflitos.length &&
+      (await confirmar({
+        titulo: "Substituir o que já foi digitado?",
+        texto: `Estes campos já têm outro valor: ${r.conflitos.join(", ")}.\n\nOs campos vazios são preenchidos com a sugestão de qualquer forma.`,
+        rotuloConfirmar: "Substituir pela sugestão",
+        rotuloCancelar: "Manter o digitado",
+      }))
+    )
+      r = aplicarSugestao(campos, sugestao, true, rotuloItem);
+    setPesoBruto(r.campos.pesoBruto);
+    setPesoLiquido(r.campos.pesoLiquido);
+    setVolumes(r.campos.volumes);
+    if (r.preenchidos) setSujo(true);
+  };
 
   const aprovar = async () => {
     setErro("");
@@ -661,12 +834,78 @@ function ModalConferencia({
     }
     const qtdInvalida = itens.find((i) => (qtd[i.sequencia] ?? "").trim() !== "" && Number.isNaN(lerNumero(qtd[i.sequencia], { medida: true })));
     if (qtdInvalida) return setErro(`Quantidade inválida no item ${qtdInvalida.sequencia}: use só números (ex.: 1,5).`);
+    // peso muito longe da sugestao (mais de 30%): costuma ser erro de digitacao (kg x t, casa decimal); pergunta antes
+    if (produto && sugestao.peso) {
+      const diferencas = [
+        pesoMuitoDiferente(n(pesoBruto), sugestao.peso.bruto)
+          ? `O peso bruto informado (${kg(n(pesoBruto))} kg) é bem diferente do sugerido (${kg(sugestao.peso.bruto)} kg).`
+          : "",
+        pesoMuitoDiferente(n(pesoLiquido), sugestao.peso.liquido)
+          ? `O peso líquido informado (${kg(n(pesoLiquido))} kg) é bem diferente do sugerido (${kg(sugestao.peso.liquido as number)} kg).`
+          : "",
+      ].filter(Boolean);
+      if (
+        diferencas.length &&
+        !(await confirmar({
+          titulo: "Peso bem diferente do sugerido",
+          texto: `${diferencas.join("\n")}\n\nSugestão: ${sugestao.peso.fonte}.\n\nConfirmar o peso informado?`,
+          rotuloConfirmar: "Confirmar peso",
+          rotuloCancelar: "Voltar e corrigir",
+        }))
+      )
+        return;
+    }
+    // resumo do que vai para o ERP (o robo gera o romaneio com exatamente estes dados)
+    const aprovados = itens.filter((i) => qtdNum(i) > 0);
+    const foraConferencia = itens.filter((i) => qtdNum(i) <= 0);
     if (
       !(await confirmar({
         titulo: `Aprovar o faturamento SF ${solicitacao.numero}?`,
-        texto:
-          `${formatarMoeda(total)} · obra ${solicitacao.codigo_obra}. A solicitação segue para o fiscal emitir a NF.` +
-          (produto ? "\n\nO romaneio será gerado no ERP automaticamente em alguns minutos." : ""),
+        texto: (
+          <>
+            <span className="block">
+              {produto ? "Confira o que vai para o romaneio do ERP (gerado automaticamente em alguns minutos):" : "Confira o resumo da aprovação:"}
+            </span>
+            <span className="block mt-2">
+              <b>Obra:</b> {solicitacao.codigo_obra} · SF {solicitacao.numero} · {formatarMoeda(total)}
+            </span>
+            <span className="block mt-1">
+              <b>Itens e quantidades:</b>
+            </span>
+            <ul className="list-disc pl-5 whitespace-normal">
+              {aprovados.slice(0, 15).map((i) => (
+                <li key={i.sequencia}>
+                  Seq. {i.sequencia} · {i.codigo_material}: {fmtQtd(qtdNum(i))} {i.unidade || ""}
+                  {produto ? ` · ${volNum(i) ?? 0} vol.` : ""}
+                </li>
+              ))}
+              {aprovados.length > 15 && <li>e mais {aprovados.length - 15} item(ns)</li>}
+            </ul>
+            {foraConferencia.length > 0 && (
+              <span className="block">Ficam de fora (quantidade 0): {foraConferencia.map((i) => `seq. ${i.sequencia}`).join(", ")}.</span>
+            )}
+            {produto && (
+              <>
+                <span className="block mt-1">
+                  <b>Peso:</b> bruto {n(pesoBruto) > 0 ? `${kg(n(pesoBruto))} kg` : "não informado"} · líquido{" "}
+                  {n(pesoLiquido) > 0 ? `${kg(n(pesoLiquido))} kg` : "não informado"}
+                </span>
+                <span className="block">
+                  <b>Volumes:</b> {totalVolumes}
+                  {especie.trim() ? ` (${especie.trim()})` : ""}
+                </span>
+                <span className="block">
+                  <b>Transportadora:</b> {transportadora}
+                </span>
+                <span className="block">
+                  <b>Data do romaneio:</b> hoje, {new Date().toLocaleDateString("pt-BR")}
+                  {solicitacao.data_desejada ? ` · faturar até ${formatarDataSegura(solicitacao.data_desejada)}` : ""}
+                </span>
+              </>
+            )}
+            <span className="block mt-2">A solicitação segue para o fiscal emitir a NF.</span>
+          </>
+        ),
         rotuloConfirmar: "Aprovar e enviar ao fiscal",
         rotuloCancelar: "Voltar",
       }))
@@ -685,7 +924,7 @@ function ModalConferencia({
       p_observacao: obs,
     });
     setEnviando(false);
-    if (error) return setErro(msgErro(error));
+    if (error) return setErro(mensagemErro(error));
     aviso.sucesso(
       `SF ${solicitacao.numero} aprovada e enviada ao fiscal.` + (produto ? " O romaneio será gerado no ERP em alguns minutos." : ""),
     );
@@ -758,7 +997,13 @@ function ModalConferencia({
                         disabled={qtdNum(i) <= 0}
                         className="border rounded px-2 py-1 w-full text-right disabled:bg-slate-50"
                         inputMode="numeric"
+                        aria-label={`Volumes do item ${i.sequencia}`}
                       />
+                      {qtdNum(i) > 0 && sugestao.volumes[i.sequencia] && (
+                        <span className="block text-[11px] text-slate-500 text-right mt-0.5" title={`Sugestão: ${sugestao.volumes[i.sequencia].fonte}, mesma quantidade`}>
+                          sugerido: {sugestao.volumes[i.sequencia].volumes}
+                        </span>
+                      )}
                     </td>
                   )}
                   <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">
@@ -770,18 +1015,91 @@ function ModalConferencia({
           </table>
           </div>
 
+          {produto && temSugestao(sugestao) && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50/60 px-3 py-2 text-sm">
+              <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:justify-between">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="font-bold text-slate-700 flex items-center gap-1.5">
+                    <Lightbulb size={15} className="shrink-0 text-[#2A6377]" aria-hidden="true" /> Sugestão
+                  </p>
+                  {sugestao.peso && (
+                    <>
+                      <p className="text-slate-700">
+                        Peso bruto <b>{kg(sugestao.peso.bruto)} kg</b>
+                        {sugestao.peso.liquido !== null && (
+                          <>
+                            {" "}
+                            · líquido <b>{kg(sugestao.peso.liquido)} kg</b>
+                          </>
+                        )}{" "}
+                        <span className="text-xs text-slate-500">({textoConfianca(sugestao.peso.confianca)})</span>
+                      </p>
+                      <p className="text-xs text-slate-500">Fonte: {sugestao.peso.fonte}.</p>
+                    </>
+                  )}
+                  {fontesVolumes.length > 0 && (
+                    <p className="text-xs text-slate-600">
+                      Volumes de {Object.keys(sugestao.volumes).length} item(ns): mesma quantidade na {fontesVolumes.join(", ")}.
+                    </p>
+                  )}
+                  {sugestao.volumesTotalExportacao && (
+                    <p className="text-xs text-slate-600">
+                      {sugestao.volumesTotalExportacao.fonte}: {sugestao.volumesTotalExportacao.volumes} volumes no total do embarque (distribua por item).
+                    </p>
+                  )}
+                </div>
+                {podeUsarSugestao && (
+                  <button
+                    type="button"
+                    onClick={usarSugestao}
+                    className="px-3 py-1.5 rounded-lg border border-[#2A6377] text-[#2A6377] font-semibold text-sm hover:bg-white shrink-0"
+                  >
+                    Usar sugestão
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {produto && bases && !temSugestao(sugestao) && (
+            <p className="text-xs text-slate-500">
+              Sem sugestão de peso e volumes: nenhuma conferência anterior desta obra com os mesmos itens nem packing list de exportação.
+            </p>
+          )}
+          {produto && erroSugestao && (
+            <p className="text-xs text-slate-500">Não foi possível carregar a sugestão de peso e volumes; preencha normalmente.</p>
+          )}
           {produto ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Campo rotulo="Peso bruto (kg) *" valor={pesoBruto} onChange={setPesoBruto} numero />
-              <Campo rotulo="Peso líquido (kg) *" valor={pesoLiquido} onChange={setPesoLiquido} numero />
+              <Campo
+                rotulo="Peso bruto (kg) *"
+                valor={pesoBruto}
+                onChange={setPesoBruto}
+                numero
+                dica={sugestao.peso ? `sugerido: ${kg(sugestao.peso.bruto)} kg` : undefined}
+              />
+              <Campo
+                rotulo="Peso líquido (kg) *"
+                valor={pesoLiquido}
+                onChange={setPesoLiquido}
+                numero
+                dica={sugestao.peso?.liquido != null ? `sugerido: ${kg(sugestao.peso.liquido)} kg` : undefined}
+              />
               <div>
                 <label className="block text-xs font-semibold mb-1">Volumes (soma dos itens)</label>
                 <p className="border rounded-lg px-2 py-2 w-full text-sm bg-slate-50 font-semibold">{totalVolumes}</p>
+                {sugestao.volumesTotalExportacao && (
+                  <p className="text-[11px] text-slate-500 mt-0.5">packing list: {sugestao.volumesTotalExportacao.volumes}</p>
+                )}
               </div>
               <Campo rotulo="Espécie" valor={especie} onChange={setEspecie} placeholder="caixa, palete…" />
               <div className="col-span-2 md:col-span-4">
                 <label className="block text-xs font-semibold mb-1">Transportadora *</label>
-                <select value={codTransp} onChange={(e) => setCodTransp(e.target.value)} className="border rounded-lg px-2 py-2 w-full bg-white text-sm">
+                <select
+                  value={codTransp}
+                  onChange={(e) => setCodTransp(e.target.value)}
+                  aria-invalid={erro === "Escolha a transportadora." || undefined}
+                  className={`border rounded-lg px-2 py-2 w-full bg-white text-sm ${erro === "Escolha a transportadora." ? "border-red-400" : ""}`}
+                >
                   <option value="">Selecione…</option>
                   {transportadoras.map((t) => (
                     <option key={t.codigo} value={t.codigo}>
@@ -790,8 +1108,9 @@ function ModalConferencia({
                     </option>
                   ))}
                 </select>
+                {erro === "Escolha a transportadora." && <p className="text-xs font-semibold text-red-600 mt-1">{erro}</p>}
                 <p className="text-xs text-slate-500 mt-1">
-                  Lista do cadastro do ERP (o romaneio exige o código). Não achou? Cadastre no ERP; aparece aqui na próxima sincronização.
+                  * obrigatório. Lista do cadastro do ERP (o romaneio exige o código). Não achou? Cadastre no ERP; aparece aqui na próxima sincronização.
                 </p>
               </div>
             </div>
@@ -813,12 +1132,14 @@ const Campo = ({
   onChange,
   placeholder,
   numero,
+  dica,
 }: {
   rotulo: string;
   valor: string;
   onChange: (v: string) => void;
   placeholder?: string;
   numero?: boolean;
+  dica?: string; // sugestao em texto discreto (conferencia da logistica)
 }) => (
   <div>
     <label className="block text-xs font-semibold mb-1">{rotulo}</label>
@@ -828,6 +1149,7 @@ const Campo = ({
     ) : (
       <input value={valor} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="border rounded-lg px-2 py-2 w-full text-sm" />
     )}
+    {dica && <p className="text-[11px] text-slate-500 mt-0.5">{dica}</p>}
   </div>
 );
 
@@ -867,7 +1189,7 @@ export function DetalheSolicitacaoFaturamento({
       supabase.from("solicitacoes_faturamento_eventos").select("*").eq("id_solicitacao", id).order("id"),
       supabase.from("solicitacoes_faturamento_romaneios").select("*").eq("id_solicitacao", id).order("created_at"),
     ]);
-    if (s.error) setErro("Não foi possível carregar a solicitação: " + msgErro(s.error));
+    if (s.error) setErro("Não foi possível carregar a solicitação: " + mensagemErro(s.error));
     else if (!s.data) setErro("Solicitação não encontrada ou sem acesso.");
     else if (i.error || n.error || e.error || r.error)
       setErro("Parte dos dados (itens, NFs, histórico ou romaneio) não carregou. Feche e abra a solicitação de novo.");
@@ -891,8 +1213,8 @@ export function DetalheSolicitacaoFaturamento({
     const { error } = await supabase.rpc(fn, args);
     setOcupado(false);
     if (error) {
-      aviso.erro(msgErro(error));
-      return setErro(msgErro(error));
+      aviso.erro(mensagemErro(error));
+      return setErro(mensagemErro(error));
     }
     aviso.sucesso(sucesso);
     await carregar();
@@ -1377,7 +1699,7 @@ export function SolicitacoesFaturamentoObra({
       .eq("id_obra", idObra)
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
-        if (error) return setErroCarga(msgErro(error));
+        if (error) return setErroCarga(mensagemErro(error));
         setErroCarga("");
         setLista((data as SolicitacaoFaturamento[]) || []);
       });
@@ -1489,7 +1811,7 @@ export function TelaFaturamento({
       .order("created_at", { ascending: false })
       .limit(500)
       .then(({ data, error }) => {
-        if (error) return setErroCarga(msgErro(error));
+        if (error) return setErroCarga(mensagemErro(error));
         setErroCarga("");
         setLista((data as SolicitacaoFaturamento[]) || []);
       });

@@ -4,7 +4,8 @@ import { supabase } from "../supabase";
 import { perfisUsuario } from "../constants";
 import { labelPerfilUsuario } from "../utils";
 import type { Usuario } from "../types";
-import { ErroCarga } from "../Dialogos";
+import { ErroCarga, confirmar } from "../Dialogos";
+import { mensagemErro } from "../erros";
 
 // Cadastros -> Equipe (so admin): cadastro e edicao de colaboradores, perfil,
 // engenheiro vinculado do assistente e indicadores de previsao.
@@ -33,6 +34,55 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
     login_erp: "",
   });
   const [salvando, setSalvando] = useState(false);
+  // quem esta com a verificacao em duas etapas ligada (so admin recebe a lista) e o e-mail de quem esta logado:
+  // o botao "Redefinir verificação" serve para quem perdeu/trocou o celular e nao vale para a propria pessoa
+  const [comMfa, setComMfa] = useState<Set<string>>(new Set());
+  const [meuEmail, setMeuEmail] = useState("");
+  useEffect(() => {
+    let ativo = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (ativo) setMeuEmail((data.session?.user?.email || "").toLowerCase());
+    });
+    (supabase as any).rpc("mfa_usuarios_com_fator").then(({ data, error }: any) => {
+      if (ativo && !error) setComMfa(new Set((data ?? []).map((r: any) => String(r.id_usuario))));
+    });
+    return () => {
+      ativo = false;
+    };
+  }, []);
+  const redefinirMfa = async (user: Usuario) => {
+    const ok = await confirmar({
+      titulo: "Redefinir verificação em duas etapas?",
+      texto: `${user.nome} vai voltar a entrar só com a senha e poderá ativar de novo pelo menu. Use quando a pessoa perdeu ou trocou de celular.`,
+      rotuloConfirmar: "Redefinir verificação",
+      perigo: true,
+    });
+    if (!ok) return;
+    const { error } = await (supabase as any).rpc("mfa_redefinir_usuario", { p_id_usuario: user.id });
+    if (error) return onAviso(mensagemErro(error, "Não foi possível redefinir a verificação."), "erro");
+    onAviso(`Verificação em duas etapas de ${user.nome} redefinida.`, "sucesso");
+    setComMfa((atual) => {
+      const novo = new Set(atual);
+      novo.delete(String(user.id));
+      return novo;
+    });
+  };
+  // erro junto do campo (id -> texto); so aparece enquanto o campo continua invalido
+  const [errosCampo, setErrosCampo] = useState<Record<string, string>>({});
+  const attrsCampo = (id: string, invalido: boolean) => {
+    const comErro = invalido && Boolean(errosCampo[id]);
+    return {
+      "aria-required": true as const,
+      "aria-invalid": comErro ? (true as const) : undefined,
+      "aria-describedby": comErro ? `${id}-erro` : undefined,
+    };
+  };
+  const erroCampo = (id: string, invalido: boolean) =>
+    invalido && errosCampo[id] ? (
+      <p id={`${id}-erro`} className="mt-1 text-xs text-red-600">
+        {errosCampo[id]}
+      </p>
+    ) : null;
   // logins do ERP espelhados pelo robo (sync_romaneios.py)
   const [loginsErp, setLoginsErp] = useState<string[]>([]);
   const [erroLogins, setErroLogins] = useState("");
@@ -42,7 +92,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       .select("login")
       .order("login")
       .then(({ data, error }) => {
-        if (error) return setErroLogins(error.message || "Erro ao buscar os usuários do ERP.");
+        if (error) return setErroLogins(mensagemErro(error, "Erro ao buscar os usuários do ERP."));
         setErroLogins("");
         setLoginsErp(((data as { login: string }[]) || []).map((r) => r.login));
       });
@@ -54,6 +104,20 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
 
   async function salvarUsuario(e: any) {
     e.preventDefault();
+    // validacao propria (form com noValidate): o erro aparece junto do campo, em portugues
+    const faltando: Record<string, string> = {};
+    if (!novoUsuario.nome.trim()) faltando["eq-nome"] = "Informe o nome.";
+    if (!novoUsuario.email.trim()) faltando["eq-email"] = "Informe o e-mail.";
+    else if (!/^\S+@\S+\.\S+$/.test(novoUsuario.email.trim())) faltando["eq-email"] = "Informe um e-mail válido.";
+    if (novoUsuario.perfil === "assistente" && !novoUsuario.id_engenheiro_vinculado)
+      faltando["eq-engenheiro"] = "Escolha o engenheiro vinculado.";
+    setErrosCampo(faltando);
+    const primeiro = Object.keys(faltando)[0];
+    if (primeiro) {
+      onAviso("Preencha os campos obrigatórios (*).", "erro");
+      setTimeout(() => document.getElementById(primeiro)?.focus(), 0);
+      return;
+    }
     setSalvando(true);
     try {
       const dadosUsuario = {
@@ -107,7 +171,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
       });
       onAtualizar();
     } catch (error: any) {
-      onAviso(error.message, "erro");
+      onAviso(mensagemErro(error, "Não foi possível salvar o usuário."), "erro");
     } finally {
       setSalvando(false);
     }
@@ -167,32 +231,39 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
         <form
           id="form-cadastro-colaborador"
           onSubmit={salvarUsuario}
+          noValidate
           className="bg-white p-4 md:p-6 rounded-xl shadow-sm border h-fit max-w-full"
         >
           <h3 className="text-lg font-bold mb-4 border-b pb-2">
             {novoUsuario.id ? "Editar Colaborador" : "Novo Colaborador"}
           </h3>
+          <p className="text-xs text-slate-500 mb-3">
+            <span className="text-red-500" aria-hidden="true">*</span> obrigatório
+          </p>
           <div className="space-y-4 max-w-full">
             <div>
-              <label className="block text-sm mb-1 max-w-full">
-                Nome
+              <label htmlFor="eq-nome" className="block text-sm mb-1 max-w-full">
+                Nome<span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
               </label>
               <input
-                required
+                id="eq-nome"
+                {...attrsCampo("eq-nome", !novoUsuario.nome.trim())}
                 type="text"
                 value={novoUsuario.nome}
                 onChange={(e) =>
                   setNovoUsuario({ ...novoUsuario, nome: e.target.value })
                 }
-                className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full"
+                className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full${errosCampo["eq-nome"] && (!novoUsuario.nome.trim()) ? " !border-red-500" : ""}`}
               />
+              {erroCampo("eq-nome", !novoUsuario.nome.trim())}
             </div>
             <div>
-              <label className="block text-sm mb-1 max-w-full">
-                E-mail
+              <label htmlFor="eq-email" className="block text-sm mb-1 max-w-full">
+                E-mail<span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
               </label>
               <input
-                required
+                id="eq-email"
+                {...attrsCampo("eq-email", !novoUsuario.email.trim() || !/^\S+@\S+\.\S+$/.test(novoUsuario.email.trim()))}
                 type="email"
                 value={novoUsuario.email}
                 onChange={(e) =>
@@ -201,8 +272,9 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                     email: e.target.value,
                   })
                 }
-                className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full"
+                className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full${errosCampo["eq-email"] && (!novoUsuario.email.trim() || !/^\S+@\S+\.\S+$/.test(novoUsuario.email.trim())) ? " !border-red-500" : ""}`}
               />
+              {erroCampo("eq-email", !novoUsuario.email.trim() || !/^\S+@\S+\.\S+$/.test(novoUsuario.email.trim()))}
             </div>
             <div>
               <label className="block text-sm mb-1 max-w-full">
@@ -227,11 +299,12 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
             </div>
             {novoUsuario.perfil === "assistente" && (
               <div>
-                <label className="block text-sm mb-1 max-w-full">
-                  Engenheiro vinculado
+                <label htmlFor="eq-engenheiro" className="block text-sm mb-1 max-w-full">
+                  Engenheiro vinculado<span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
                 </label>
                 <select
-                  required
+                  id="eq-engenheiro"
+                  {...attrsCampo("eq-engenheiro", !novoUsuario.id_engenheiro_vinculado)}
                   value={novoUsuario.id_engenheiro_vinculado}
                   onChange={(e) =>
                     setNovoUsuario({
@@ -239,7 +312,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                       id_engenheiro_vinculado: e.target.value,
                     })
                   }
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full"
+                  className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full${errosCampo["eq-engenheiro"] && (!novoUsuario.id_engenheiro_vinculado) ? " !border-red-500" : ""}`}
                 >
                   <option value="">Selecione…</option>
                   {listaUsuarios
@@ -250,6 +323,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                       </option>
                     ))}
                 </select>
+              {erroCampo("eq-engenheiro", !novoUsuario.id_engenheiro_vinculado)}
                 <p className="text-xs text-slate-500 mt-1">
                   O assistente passa a ter o mesmo acesso às obras deste engenheiro.
                 </p>
@@ -532,6 +606,25 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                       Assistente de:{" "}
                       {nomeUsuarioPorId(user.id_engenheiro_vinculado) ||
                         "não definido"}
+                    </p>
+                  )}
+                  {comMfa.has(String(user.id)) && (
+                    <p className="text-xs text-slate-600 mt-1 flex flex-wrap items-center gap-2">
+                      <span className="font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Duas etapas ligada
+                      </span>
+                      {(user.email || "").toLowerCase() !== meuEmail && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            redefinirMfa(user);
+                          }}
+                          className="text-red-700 underline hover:text-red-900"
+                        >
+                          Redefinir verificação
+                        </button>
+                      )}
                     </p>
                   )}
                 </div>

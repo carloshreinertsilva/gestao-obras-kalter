@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -24,6 +24,17 @@ import { Modal } from "./Modal";
 import { BotaoExportar, SeloDiasParados, diasUteisDesde, maisRecente, numCsv, useFiltroSalvo } from "./modulos_lista";
 import { lerNumero } from "./numero";
 import { CampoNumero } from "./CampoNumero";
+import EntradaArquivos from "./EntradaArquivos";
+import { semDuplicados, textoProgresso } from "./arquivosRegras";
+import { mensagemErro } from "./erros";
+import {
+  STATUS_EM_ABERTO,
+  acharDuplicada,
+  mensagemDuplicada,
+  resumoAprovacao,
+  resumoDesfazer,
+  type SolicitacaoExistente,
+} from "./calculoPrevisaoDuplicada";
 
 // Familia da obra como vem de obra_rentabilidade_familias (saldo de previsoes em aberto sincronizado do ERP)
 export interface FamiliaPrevisao {
@@ -147,13 +158,18 @@ export function ModalSolicitarPrevisao({
   const aviso = useAviso();
   // cotacao/orcamento anexados (bucket previsao-anexos, caminho obras/<id_obra>/previsoes/...)
   const [arquivos, setArquivos] = useState<File[]>([]);
-  const escolherArquivos = (lista: FileList | null) => {
-    const novos = [...arquivos, ...Array.from(lista || [])];
-    const grande = novos.find((f) => f.size > 10 * 1024 * 1024);
-    if (grande) return setErro(`O arquivo ${grande.name} passa de 10 MB.`);
-    if (novos.length > 3) return setErro("Anexe no máximo 3 arquivos.");
-    setErro("");
-    setArquivos(novos);
+  const [progresso, setProgresso] = useState("");
+  // campo do erro de validacao, para mostrar a mensagem junto dele (alem do quadro de erro no fim)
+  const [campoErro, setCampoErro] = useState("");
+  // tamanho (10 MB) e tipo ja sao conferidos pela EntradaArquivos; aqui so o limite de 3 (fica com os 3 primeiros)
+  const escolherArquivos = (lista: File[]) => {
+    setSujo(true);
+    const novos = semDuplicados([...arquivos, ...lista]);
+    if (novos.length > 3) {
+      const fora = novos.slice(3).map((f) => f.name);
+      aviso.erro(`Anexe no máximo 3 arquivos. Ficaram de fora: ${fora.join(", ")}.`);
+    }
+    setArquivos(novos.slice(0, 3));
   };
 
   // Gestor costuma informar "disponivel X / necessario Y": o aumento e Y - X
@@ -167,6 +183,33 @@ export function ModalSolicitarPrevisao({
   }, [disponivel, necessario]);
 
   const totalTransferencia = origens.reduce((acc, o) => acc + (parseValorBR(o.valor) || 0), 0);
+
+  // solicitacoes desta obra ainda em aberto: avisa antes de enviar um pedido igual (o banco tambem recusa)
+  const [abertas, setAbertas] = useState<SolicitacaoExistente[]>([]);
+  useEffect(() => {
+    if (!obra?.id) return;
+    supabase
+      .from("solicitacoes_previsao")
+      .select("id, id_obra, tipo, familia_destino, origens, valor, status, nome_solicitante, created_at")
+      .eq("id_obra", obra.id)
+      .in("status", STATUS_EM_ABERTO)
+      .then(({ data }) => setAbertas((data as SolicitacaoExistente[]) || []));
+  }, [obra?.id]);
+  const duplicada = destino
+    ? acharDuplicada(
+        {
+          id_obra: obra.id,
+          tipo,
+          familia_destino: destino,
+          valor: tipo === "aumento" ? parseValorBR(valorAumento) : Math.round(totalTransferencia * 100) / 100,
+          origens: tipo === "transferencia" ? origens.map((o) => ({ familia: o.familia, valor: parseValorBR(o.valor) })) : [],
+        },
+        abertas,
+      )
+    : undefined;
+  // dois cliques seguidos antes de a tela atualizar o "enviando" nao podem gerar dois pedidos
+  const enviandoRef = useRef(false);
+
   const nomeErp = (usuario?.nome || "").trim().split(" ")[0].toUpperCase();
   const anoVencimento = new Date().getFullYear();
 
@@ -183,13 +226,25 @@ export function ModalSolicitarPrevisao({
   const origemBloqueada = tipo === "transferencia" && origens.some((o) => problemaOrigem(o));
 
   const validar = (): string => {
-    if (!destino) return tipo === "aumento" ? "Escolha a família." : "Escolha a família de destino.";
-    if (!justificativa.trim()) return "Informe a justificativa.";
+    setCampoErro("");
+    if (!destino) {
+      setCampoErro("destino");
+      return tipo === "aumento" ? "Escolha a família." : "Escolha a família de destino.";
+    }
+    if (!justificativa.trim()) {
+      setCampoErro("justificativa");
+      return "Informe a justificativa.";
+    }
     if (tipo === "aumento") {
       const v = parseValorBR(valorAumento);
-      if (!(v > 0)) return "Informe o valor do aumento (maior que zero).";
+      if (!(v > 0)) {
+        setCampoErro("valor");
+        return "Informe o valor do aumento (maior que zero).";
+      }
       return "";
     }
+    // erros de origem: mensagem logo abaixo da lista de origens (o saldo de cada uma ja aparece embaixo dela)
+    setCampoErro("origens");
     const usadas = new Set<string>();
     for (const o of origens) {
       if (!o.familia) return "Escolha a família de cada origem.";
@@ -203,25 +258,33 @@ export function ModalSolicitarPrevisao({
       if (v > saldo(o.familia) + 0.001)
         return `O valor que sai de ${o.familia} (${formatarMoeda(v)}) é maior que o saldo em aberto da família (${formatarMoeda(saldo(o.familia))}).`;
     }
+    setCampoErro("");
     return "";
   };
 
   const enviar = async () => {
-    const msg = validar();
+    if (enviandoRef.current) return;
+    const msg = validar() || (duplicada ? mensagemDuplicada(duplicada) : "");
     setErro(msg);
     if (msg) return;
+    enviandoRef.current = true;
     setEnviando(true);
     try {
       const anexos: { nome: string; caminho: string; tamanho: number }[] = [];
-      for (const arq of arquivos) {
+      for (const [k, arq] of arquivos.entries()) {
+        setProgresso(arquivos.length > 1 ? textoProgresso(k + 1, arquivos.length) : "");
         const caminho = `obras/${obra.id}/previsoes/${Date.now()}_${normalizarNomeArquivo(arq.name)}`;
         const { error: erroUpload } = await supabase.storage.from("previsao-anexos").upload(caminho, arq);
         if (erroUpload) {
+          // a solicitacao vai inteira ou nada: os anexos continuam escolhidos na tela para tentar de novo
           if (anexos.length) await supabase.storage.from("previsao-anexos").remove(anexos.map((a) => a.caminho));
-          throw new Error(`Não foi possível enviar o anexo ${arq.name}: ${erroUpload.message}`);
+          throw new Error(
+            `Não foi possível enviar o anexo ${arq.name}: ${mensagemErro(erroUpload)} Os anexos continuam na lista; tente enviar de novo ou tire este anexo.`,
+          );
         }
         anexos.push({ nome: arq.name, caminho, tamanho: arq.size });
       }
+      setProgresso("");
       const registro: any = {
         anexos,
         id_obra: obra.id,
@@ -250,10 +313,12 @@ export function ModalSolicitarPrevisao({
       );
       onEnviado?.();
       onFechar();
-    } catch (e: any) {
-      setErro(e.message || "Não foi possível enviar a solicitação.");
+    } catch (e) {
+      setErro(mensagemErro(e, "Não foi possível enviar a solicitação."));
     } finally {
+      enviandoRef.current = false;
       setEnviando(false);
+      setProgresso("");
     }
   };
 
@@ -286,11 +351,18 @@ export function ModalSolicitarPrevisao({
           <button
             type="button"
             onClick={enviar}
-            disabled={enviando || origemBloqueada}
-            title={origemBloqueada ? "Corrija as origens sem saldo suficiente para enviar" : undefined}
+            disabled={enviando || origemBloqueada || Boolean(duplicada)}
+            title={
+              duplicada
+                ? "Já existe uma solicitação igual em aberto"
+                : origemBloqueada
+                  ? "Corrija as origens sem saldo suficiente para enviar"
+                  : undefined
+            }
             className="px-4 py-2.5 md:py-2 rounded-lg text-sm font-bold bg-[#2A6377] text-white hover:bg-[#1e4857] flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            {enviando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Enviar solicitação
+            {enviando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}{" "}
+            {enviando && progresso ? progresso : "Enviar solicitação"}
           </button>
         </>
       }
@@ -319,17 +391,20 @@ export function ModalSolicitarPrevisao({
           </div>
 
           <div>
-            <label className="block text-sm font-semibold mb-1">
-              {tipo === "aumento" ? "Família" : "Para a família (destino)"}
+            <label htmlFor="sp-destino" className="block text-sm font-semibold mb-1">
+              {tipo === "aumento" ? "Família *" : "Para a família (destino) *"}
             </label>
             <select
+              id="sp-destino"
               value={destino}
               onChange={(e) => setDestino(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+              aria-invalid={(erro && campoErro === "destino") || undefined}
+              className={`w-full border rounded-lg px-3 py-2 text-sm bg-white ${erro && campoErro === "destino" ? "border-red-400" : ""}`}
             >
               <option value="">Selecione…</option>
               {lista.map(opcaoFamilia)}
             </select>
+            {erro && campoErro === "destino" && <p className="mt-1 text-xs font-semibold text-red-600">{erro}</p>}
           </div>
 
           {tipo === "aumento" ? (
@@ -361,8 +436,9 @@ export function ModalSolicitarPrevisao({
                   onChange={setValorAumento}
                   casasMax={2}
                   placeholder="0,00"
-                  className="w-full border rounded-lg px-3 py-2 text-sm font-semibold"
+                  className={`w-full border rounded-lg px-3 py-2 text-sm font-semibold ${erro && campoErro === "valor" ? "border-red-400" : ""}`}
                 />
+                {erro && campoErro === "valor" && <p className="mt-1 text-xs font-semibold text-red-600">{erro}</p>}
               </div>
               <p className="sm:col-span-3 text-xs text-slate-500 -mt-1">
                 Preenchendo disponível e necessário, o aumento é calculado (necessário − disponível).
@@ -370,7 +446,7 @@ export function ModalSolicitarPrevisao({
             </div>
           ) : (
             <div className="space-y-2">
-              <label className="block text-sm font-semibold">De (origens)</label>
+              <label className="block text-sm font-semibold">De (origens) *</label>
               {origens.map((o, i) => {
                 const problema = problemaOrigem(o);
                 const semSaldo = Boolean(o.familia) && saldo(o.familia) <= 0.005;
@@ -441,36 +517,34 @@ export function ModalSolicitarPrevisao({
                   Total: <b>{formatarMoeda(totalTransferencia)}</b>
                 </span>
               </div>
+              {erro && campoErro === "origens" && <p className="text-xs font-semibold text-red-600">{erro}</p>}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-semibold mb-1">Justificativa *</label>
+            <label htmlFor="sp-justificativa" className="block text-sm font-semibold mb-1">Justificativa *</label>
             <textarea
+              id="sp-justificativa"
               value={justificativa}
               onChange={(e) => setJustificativa(e.target.value)}
               rows={3}
               placeholder="Por que a previsão é necessária?"
-              className="w-full border rounded-lg px-3 py-2 text-sm"
+              aria-invalid={(erro && campoErro === "justificativa") || undefined}
+              className={`w-full border rounded-lg px-3 py-2 text-sm ${erro && campoErro === "justificativa" ? "border-red-400" : ""}`}
             />
+            {erro && campoErro === "justificativa" && <p className="mt-1 text-xs font-semibold text-red-600">{erro}</p>}
           </div>
 
           <div>
-            <label className="block text-sm font-semibold mb-1">Anexos (opcional)</label>
-            <label className="inline-flex items-center gap-2 px-3 py-2 border rounded-lg text-sm text-slate-600 cursor-pointer hover:bg-slate-50">
-              <Paperclip size={15} /> Anexar cotação ou orçamento
-              <input
-                type="file"
-                multiple
-                accept=".pdf,image/*"
-                className="hidden"
-                onChange={(e) => {
-                  escolherArquivos(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <span className="block sm:inline sm:ml-2 mt-1 sm:mt-0 text-xs text-slate-500">PDF ou imagem, até 3 arquivos de 10 MB</span>
+            <span className="block text-sm font-semibold mb-1">Anexos (opcional)</span>
+            <EntradaArquivos
+              rotulo="Anexar cotação ou orçamento"
+              accept=".pdf,image/*"
+              maxMb={10}
+              desabilitado={enviando || arquivos.length >= 3}
+              onArquivos={escolherArquivos}
+            />
+            <span className="block mt-1 text-xs text-slate-500">PDF ou imagem, até 3 arquivos de 10 MB</span>
             {arquivos.length > 0 && (
               <ul className="mt-2 space-y-1">
                 {arquivos.map((a, i) => (
@@ -495,6 +569,7 @@ export function ModalSolicitarPrevisao({
           </div>
 
           <div className="text-xs text-slate-500 bg-slate-50 border rounded-lg p-3 space-y-1">
+            <p>* obrigatório.</p>
             <p>A parcela nova vence em 30/12/{anoVencimento}.</p>
             <p>
               Depois de enviar, o sistema simula no ERP (em até 5 minutos) e envia para aprovação. Você acompanha o
@@ -506,6 +581,12 @@ export function ModalSolicitarPrevisao({
               </p>
             )}
           </div>
+
+          {duplicada && erro !== mensagemDuplicada(duplicada) && (
+            <div role="alert" className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5" /> {mensagemDuplicada(duplicada)}
+            </div>
+          )}
 
           {erro && (
             <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 flex gap-2">
@@ -622,8 +703,8 @@ export function CartaoSolicitacao({
       setRecusando(false);
       aviso.sucesso(sucesso);
       onAtualizar();
-    } catch (e: any) {
-      const msg = e.message || "Não foi possível concluir a ação.";
+    } catch (e) {
+      const msg = mensagemErro(e, "Não foi possível concluir a ação.");
       setErro(msg);
       aviso.erro(msg);
       onAtualizar();
@@ -778,11 +859,11 @@ export function CartaoSolicitacao({
             {botao(
               "Aprovar e gravar no ERP",
               async () => {
-                // grava no ERP: confirma antes (no celular um toque sem querer e facil)
+                // grava no ERP: confirma antes (no celular um toque sem querer e facil) mostrando o que vai ser gravado
                 const ok = await confirmar({
                   titulo: "Aprovar e gravar no ERP?",
-                  texto: resumo,
-                  rotuloConfirmar: "Aprovar e gravar",
+                  texto: resumoAprovacao(s),
+                  rotuloConfirmar: "Aprovar e gravar no ERP",
                   rotuloCancelar: "Voltar",
                 });
                 if (!ok) return;
@@ -843,12 +924,22 @@ export function CartaoSolicitacao({
             )}
             {botao(
               "Confirmar desfazer",
-              () =>
+              async () => {
+                // tambem grava no ERP (exclui a parcela criada e devolve as origens): confirma com o resumo
+                const ok = await confirmar({
+                  titulo: "Desfazer no ERP?",
+                  texto: resumoDesfazer(s),
+                  rotuloConfirmar: "Desfazer no ERP",
+                  rotuloCancelar: "Voltar",
+                  perigo: true,
+                });
+                if (!ok) return;
                 acao(
                   "confirmar_desfazer_previsao",
                   { p_id: s.id, p_codigo: s.desfazer_codigo },
                   `Desfazer confirmado: ${resumo}. O robô desfaz no ERP em instantes.`,
-                ),
+                );
+              },
               "bg-amber-600 text-white hover:bg-amber-700",
               RotateCcw,
             )}
@@ -903,7 +994,7 @@ export function PainelSolicitacoes({
     let q = supabase.from("solicitacoes_previsao").select("*").order("created_at", { ascending: false }).limit(300);
     if (idObra) q = q.eq("id_obra", idObra);
     const { data, error } = await q;
-    if (error) setErroCarga(error.message || "Erro ao buscar as solicitações.");
+    if (error) setErroCarga(mensagemErro(error, "Erro ao buscar as solicitações."));
     else {
       setErroCarga("");
       setLista((data as SolicitacaoPrevisao[]) || []);
@@ -1071,7 +1162,7 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
     supabase
       .rpc("previsoes_familias_obra", { p_id_obra: obra.id })
       .then(({ data, error }) => {
-        if (error) return setErroFamilias(error.message || "Erro ao buscar as famílias.");
+        if (error) return setErroFamilias(mensagemErro(error, "Erro ao buscar as famílias."));
         setErroFamilias("");
         setFamilias((data as FamiliaPrevisao[]) || []);
       });

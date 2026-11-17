@@ -1,13 +1,19 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabase } from "../supabase";
 import { fasesProjeto } from "../constants";
 import ValorAjustavel from "../ValorAjustavel";
 import { formatarDataSegura, formatarDataHora, formatarMoeda, dataHojeISO, labelFase, isAtrasada } from "../utils";
-import { Briefcase, CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2, FolderOpen, Activity, DollarSign } from "lucide-react";
-import { linhaClicavel } from "../teclado";
+import { Briefcase, CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2, FolderOpen, Activity, DollarSign, CalendarClock, RefreshCw } from "lucide-react";
 import type { Usuario } from "../types";
+import TabelaStatusGeral from "../painel/TabelaStatusGeral";
+import { ROTULO_SAUDE, avaliarSaude, hojeLocalISO, prazoEntrega } from "../saudeObra";
 
 const GraficoObrasPorFase = lazy(() => import("./GraficoObrasPorFase"));
+// cartoes da carteira (Pacote 2): cada um busca os proprios dados para as obras que o Painel ja listou
+const MargemCarteira = lazy(() => import("../painel/MargemCarteira"));
+const PrevisaoMensal = lazy(() => import("../painel/PrevisaoMensal"));
+const GanttCarteira = lazy(() => import("../painel/GanttCarteira"));
+const ComprasAtrasadas = lazy(() => import("../painel/ComprasAtrasadas"));
 
 // Painel: visao geral das obras do usuario (admin ve todas), saude de cada obra,
 // projetos criticos, minhas tarefas e ultimas anotacoes do diario.
@@ -48,42 +54,38 @@ export default function TelaDashboard({
   });
   const [statusProjetosPMIS, setStatusProjetosPMIS] = useState<any[]>([]);
   const [projetosCriticosPMIS, setProjetosCriticosPMIS] = useState<any[]>([]);
+  const [fasesSemana, setFasesSemana] = useState<any[]>([]);
+  const [semSaude, setSemSaude] = useState(false);
+  // ate a primeira resposta nao mostra zeros como se fossem dado real; "tentativa" refaz a carga
+  const [estadoCarga, setEstadoCarga] = useState<"carregando" | "erro" | "ok">("carregando");
+  const [tentativa, setTentativa] = useState(0);
+  const carregando = estadoCarga === "carregando";
+  const falhou = estadoCarga === "erro";
 
-  const estiloStatusPMIS = (status: string) => {
+  // statusGeral: critico / atencao / em_dia (saudeObra.ts); null = indicadores nao vieram
+  const estiloStatusPMIS = (status: string | null) => {
     const mapa: any = {
-      verde: "bg-green-100 text-green-700 border-green-200",
-      amarelo: "bg-amber-100 text-amber-700 border-amber-200",
-      vermelho: "bg-red-100 text-red-700 border-red-200",
+      em_dia: "bg-green-100 text-green-700 border-green-200",
+      atencao: "bg-amber-100 text-amber-700 border-amber-200",
+      critico: "bg-red-100 text-red-700 border-red-200",
     };
-    return mapa[status] || "bg-slate-100 text-slate-600 border-slate-200";
+    return mapa[status || ""] || "bg-slate-100 text-slate-600 border-slate-200";
   };
 
-  const labelStatusPMIS = (status: string) => {
-    const mapa: any = { verde: "OK", amarelo: "Atenção", vermelho: "Crítico" };
-    return mapa[status] || status;
-  };
+  const labelStatusPMIS = (status: string | null) =>
+    (ROTULO_SAUDE as Record<string, string>)[status || ""] || "Sem dados";
 
-  const bolinhaStatusPMIS = (status: string) => {
-    const mapa: any = {
-      verde: "bg-green-500",
-      amarelo: "bg-amber-400",
-      vermelho: "bg-red-500",
-    };
-    return mapa[status] || "bg-slate-300";
-  };
-
-  // saude por area: so a bolinha colorida (e um resumo; o detalhe fica no painel da obra - pedido do Carlos 06/11).
-  // O texto continua no title (passar o mouse) e para leitor de tela.
-  const SeloSaude = ({ status, area }: { status: string; area: string }) => {
-    const texto = ({ verde: "OK", amarelo: "Atenção", vermelho: "Crítico" } as Record<string, string>)[status] || status || "—";
-    return (
-      <span className="inline-flex items-center justify-center" title={`${area}: ${texto}`}>
-        <span className={`inline-block w-3 h-3 rounded-full ${bolinhaStatusPMIS(status)}`} aria-hidden="true" />
-        <span className="sr-only">
-          {area}: {texto}
-        </span>
-      </span>
-    );
+  // lista estavel para os cartoes da carteira (so muda quando o Painel recarrega)
+  const obrasCarteira = useMemo(
+    () =>
+      statusProjetosPMIS
+        .filter((p: any) => p.obraOriginal)
+        .map((p: any) => ({ id: String(p.id), codigo: String(p.codigo ?? ""), nome: String(p.nome ?? "") })),
+    [statusProjetosPMIS],
+  );
+  const abrirObraPorId = (idObra: string) => {
+    const p = statusProjetosPMIS.find((x: any) => x.id === idObra);
+    if (p?.obraOriginal) onAbrirObra(p.obraOriginal);
   };
 
   const abrirProjetoDashboard = (projeto: any) => {
@@ -93,11 +95,9 @@ export default function TelaDashboard({
   useEffect(() => {
     async function buscarDadosDashboard() {
       if (!usuarioAtual) return;
+      setEstadoCarga("carregando");
       try {
         const hoje = dataHojeISO();
-        const em7Dias = new Date();
-        em7Dias.setDate(em7Dias.getDate() + 7);
-        const em7DiasISO = em7Dias.toISOString().split("T")[0];
         const isDocumentoEntregaTecnica = (item: any) =>
           String(item || "")
             .toLowerCase()
@@ -127,9 +127,11 @@ export default function TelaDashboard({
         let tarefasData: any[] = [];
         let escopoData: any[] = [];
         let faturadoData: any[] = [];
+        // indicadores de saude por obra (mesma funcao de Minhas Obras); null = nao vieram
+        let saudePorObra: Record<string, any> | null = {};
 
         if (idsObras.length > 0) {
-          const [parcelasResp, documentosResp, cronogramaResp, tarefasResp, escopoResp, faturadoResp] =
+          const [parcelasResp, documentosResp, cronogramaResp, tarefasResp, escopoResp, faturadoResp, saudeResp] =
             await Promise.all([
               supabase
                 .from("parcelas_cliente")
@@ -164,7 +166,16 @@ export default function TelaDashboard({
                 .select("id_obra, valor_realizado")
                 .in("id_obra", idsObras)
                 .not("id_obra_faturamento_familia", "is", null),
+              (supabase as any).rpc("obras_saude", { p_ids: idsObras }),
             ]);
+
+          // sem os indicadores o resto do painel ainda serve: a saude fica "Sem dados"
+          if (saudeResp.error) {
+            console.error("obras_saude", saudeResp.error);
+            saudePorObra = null;
+          } else {
+            saudePorObra = Object.fromEntries((saudeResp.data || []).map((r: any) => [r.id_obra, r]));
+          }
 
           if (parcelasResp.error) throw parcelasResp.error;
           if (escopoResp.error) throw escopoResp.error;
@@ -246,6 +257,7 @@ export default function TelaDashboard({
           tarefasHoje,
         });
 
+        const fasesProximasTodas: any[] = [];
         const projetos = obras.map((obra: any) => {
           const parcelasObra = parcelasData.filter(
             (p: any) => p.id_obra === obra.id,
@@ -290,12 +302,6 @@ export default function TelaDashboard({
           const documentosAvaliaveis = documentosObra.filter(
             (d: any) => !isDocumentoEntregaTecnica(d.item),
           );
-          const docsNaoElaborados = documentosAvaliaveis.filter(
-            (d: any) => d.status === "nao_elaborado",
-          ).length;
-          const docsEmAndamento = documentosAvaliaveis.filter(
-            (d: any) => d.status === "em_andamento",
-          ).length;
           const docsPendentes = documentosAvaliaveis.filter(
             (d: any) =>
               d.status !== "concluido" && d.status !== "nao_aplicavel",
@@ -307,74 +313,19 @@ export default function TelaDashboard({
               c.fim_previsto &&
               c.fim_previsto < hoje,
           ).length;
-          const fasesEmAndamento = cronogramaObraDashboard.filter(
-            (c: any) => c.status === "em_andamento",
-          ).length;
-          const fasesProximas = cronogramaObraDashboard.filter(
-            (c: any) =>
-              c.status !== "concluido" &&
-              c.status !== "cancelado" &&
-              c.fim_previsto &&
-              c.fim_previsto >= hoje &&
-              c.fim_previsto <= em7DiasISO,
-          ).length;
-          void fasesEmAndamento;
-          void fasesProximas;
           const tarefasAtrasadasObra = tarefasObra.filter(
             (t: any) =>
               t.status !== "concluida" &&
               t.data_vencimento &&
               String(t.data_vencimento).split("T")[0] < hoje,
           ).length;
-          const tarefasProximas = tarefasObra.filter(
-            (t: any) =>
-              t.status !== "concluida" &&
-              t.data_vencimento &&
-              String(t.data_vencimento).split("T")[0] >= hoje &&
-              String(t.data_vencimento).split("T")[0] <= em7DiasISO,
-          ).length;
 
-          const financeiroStatus = valorVencidoObra > 0 ? "vermelho" : "verde";
-          const documentosStatus =
-            docsNaoElaborados > 0
-              ? "vermelho"
-              : docsEmAndamento > 0 || docsPendentes > 0
-                ? "amarelo"
-                : "verde";
-          const cronogramaStatus = fasesAtrasadasObra > 0 ? "vermelho" : "verde";
-          const tarefasStatus =
-            tarefasAtrasadasObra > 0
-              ? "vermelho"
-              : tarefasProximas > 0
-                ? "amarelo"
-                : "verde";
-          const score = [
-            financeiroStatus,
-            documentosStatus,
-            cronogramaStatus,
-            tarefasStatus,
-          ].reduce(
-            (acc, status) =>
-              acc + (status === "vermelho" ? 2 : status === "amarelo" ? 1 : 0),
-            0,
+          // saude: criterio unico (saudeObra.ts), o mesmo do selo de Minhas Obras
+          const indicadores = saudePorObra ? saudePorObra[obra.id] : null;
+          const saude = indicadores ? avaliarSaude(indicadores) : null;
+          (indicadores?.fases_proximas || []).forEach((f: any) =>
+            fasesProximasTodas.push({ ...f, idObra: obra.id, codigo: obra.codigo_externo, nome: obra.nome, obraOriginal: obra }),
           );
-          const statusGeral =
-            score >= 4 ? "vermelho" : score >= 2 ? "amarelo" : "verde";
-
-          const motivosCriticos = [
-            valorVencidoObra > 0
-              ? `Financeiro vencido: ${formatarMoeda(valorVencidoObra)}`
-              : "",
-            docsPendentes > 0
-              ? `${docsPendentes} documento(s) pendente(s)`
-              : "",
-            fasesAtrasadasObra > 0
-              ? `${fasesAtrasadasObra} fase(s) atrasada(s)`
-              : "",
-            tarefasAtrasadasObra > 0
-              ? `${tarefasAtrasadasObra} tarefa(s) atrasada(s)`
-              : "",
-          ].filter(Boolean);
 
           return {
             id: obra.id,
@@ -390,13 +341,11 @@ export default function TelaDashboard({
             documentosPendentes: docsPendentes,
             fasesAtrasadas: fasesAtrasadasObra,
             tarefasAtrasadas: tarefasAtrasadasObra,
-            financeiroStatus,
-            documentosStatus,
-            cronogramaStatus,
-            tarefasStatus,
-            statusGeral,
-            score,
-            motivosCriticos,
+            dataEntrega: obra.data_previsao_fim,
+            areas: saude?.areas || null,
+            statusGeral: saude?.geral || null,
+            gravidade: saude?.gravidade || 0,
+            motivosCriticos: saude?.motivos || [],
             obraOriginal: obra,
           };
         });
@@ -414,9 +363,16 @@ export default function TelaDashboard({
         setStatusProjetosPMIS(projetosPorCodigo);
         setProjetosCriticosPMIS(
           projetosPorCodigo
-            .filter((p: any) => p.score > 0)
-            .sort((a: any, b: any) => b.score - a.score)
+            .filter((p: any) => p.statusGeral === "critico" || p.statusGeral === "atencao")
+            .sort((a: any, b: any) => b.gravidade - a.gravidade)
             .slice(0, 6),
+        );
+        setSemSaude(saudePorObra === null);
+        setFasesSemana(
+          [...fasesProximasTodas].sort((a, b) =>
+            String(a.fim_previsto).localeCompare(String(b.fim_previsto)) ||
+            String(a.codigo || "").localeCompare(String(b.codigo || ""), "pt-BR", { numeric: true }),
+          ),
         );
 
         const mapaFases: any = {};
@@ -448,13 +404,16 @@ export default function TelaDashboard({
         } catch (err) {
           console.log("Tabela diario_obra ausente para o Feed");
         }
+        setEstadoCarga("ok");
       } catch (error) {
+        setEstadoCarga("erro");
         falhaAoCarregar("o painel", error);
       }
     }
 
     buscarDadosDashboard();
-  }, [usuarioAtual?.id]);
+    // so o usuario e o "Tentar de novo" recarregam (App re-renderiza a cada minuto)
+  }, [usuarioAtual?.id, tentativa]);
 
   const blocoTarefas = (
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
@@ -506,6 +465,22 @@ export default function TelaDashboard({
         </div>
   );
 
+  // enquanto carrega: barra cinza no lugar do numero (nao mostrar "0" / "R$ 0,00" como se fosse dado)
+  const valorOu = (no: ReactNode) =>
+    carregando ? (
+      <span className="block h-8 w-24 max-w-full rounded bg-slate-100 animate-pulse mt-1">
+        <span className="sr-only">Carregando...</span>
+      </span>
+    ) : (
+      no
+    );
+  const avisoFalha = (
+    <div className="h-full flex items-center justify-center p-8 text-center text-slate-500">
+      Não foi possível carregar.
+    </div>
+  );
+  const hojeLocal = hojeLocalISO();
+
   return (
     <div className="animate-in fade-in h-full flex flex-col gap-6">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
@@ -518,7 +493,7 @@ export default function TelaDashboard({
               Visão geral das obras{isAdmin ? "" : " sob sua responsabilidade"}.
             </span>{" "}
             Resumo executivo da saúde dos projetos, com foco em
-            financeiro, documentação, cronograma e tarefas.
+            financeiro, documentação, cronograma, tarefas e alertas.
           </p>
         </div>
         <button
@@ -531,7 +506,23 @@ export default function TelaDashboard({
 
       {!isAdmin && blocoTarefas}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
+      {falhou && (
+        <div role="alert" className="bg-white p-5 rounded-xl shadow-sm border border-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-sm text-red-700 font-semibold flex items-center gap-2">
+            <AlertCircle size={18} /> Não foi possível carregar o painel.
+          </p>
+          <button
+            type="button"
+            onClick={() => setTentativa((t) => t + 1)}
+            className="bg-[#2A6377] text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#1e4857] transition"
+          >
+            <RefreshCw size={16} /> Tentar de novo
+          </button>
+        </div>
+      )}
+
+      {!falhou && (
+      <div aria-busy={carregando} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-blue-500">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
@@ -539,9 +530,11 @@ export default function TelaDashboard({
             </p>
             <Briefcase className="text-blue-500" size={22} />
           </div>
+          {valorOu(
           <p className="text-3xl font-bold text-slate-800">
             {resumoPMIS.obrasAtivas}
-          </p>
+          </p>,
+          )}
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-slate-500">
           <div className="flex items-center justify-between mb-3">
@@ -550,9 +543,11 @@ export default function TelaDashboard({
             </p>
             <DollarSign className="text-slate-500" size={22} />
           </div>
+          {valorOu(
           <ValorAjustavel className="text-2xl font-bold text-slate-800">
             {formatarMoeda(resumoPMIS.carteiraTotal)}
-          </ValorAjustavel>
+          </ValorAjustavel>,
+          )}
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-green-500">
           <div className="flex items-center justify-between mb-3">
@@ -561,9 +556,11 @@ export default function TelaDashboard({
             </p>
             <CheckCircle2 className="text-green-500" size={22} />
           </div>
+          {valorOu(
           <ValorAjustavel className="text-2xl font-bold text-green-700">
             {formatarMoeda(resumoPMIS.recebidoTotal)}
-          </ValorAjustavel>
+          </ValorAjustavel>,
+          )}
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-orange-500">
           <div className="flex items-center justify-between mb-3">
@@ -572,9 +569,11 @@ export default function TelaDashboard({
             </p>
             <Clock className="text-orange-500" size={22} />
           </div>
+          {valorOu(
           <ValorAjustavel className="text-2xl font-bold text-orange-700">
             {formatarMoeda(resumoPMIS.saldoReceber)}
-          </ValorAjustavel>
+          </ValorAjustavel>,
+          )}
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-red-500">
           <div className="flex items-center justify-between mb-3">
@@ -583,9 +582,11 @@ export default function TelaDashboard({
             </p>
             <AlertCircle className="text-red-500" size={22} />
           </div>
+          {valorOu(
           <ValorAjustavel className="text-2xl font-bold text-red-600">
             {formatarMoeda(resumoPMIS.valorVencido)}
-          </ValorAjustavel>
+          </ValorAjustavel>,
+          )}
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-amber-500">
           <div className="flex items-center justify-between mb-3">
@@ -594,16 +595,36 @@ export default function TelaDashboard({
             </p>
             <AlertTriangle className="text-amber-500" size={22} />
           </div>
+          {valorOu(
           <p className="text-3xl font-bold text-slate-800">
             {resumoPMIS.documentosPendentes +
               resumoPMIS.fasesAtrasadas +
               resumoPMIS.tarefasAtrasadas}
-          </p>
+          </p>,
+          )}
           <p className="text-xs text-slate-500 mt-1">
             Docs, fases e tarefas
           </p>
         </div>
       </div>
+      )}
+
+      {/* carteira: previsao de faturamento/recebimento por mes e margem prevista x atual (a margem so aparece
+          para quem o banco deixa ver: admin, coordenador e o gestor da obra) */}
+      {estadoCarga === "ok" && obrasCarteira.length > 0 && (
+        <Suspense fallback={null}>
+          <PrevisaoMensal obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
+          <MargemCarteira obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
+        </Suspense>
+      )}
+
+      {/* carteira (Pacote 4): compras/entregas atrasadas das obras e cronograma em barras (comeca recolhido) */}
+      {estadoCarga === "ok" && obrasCarteira.length > 0 && (
+        <Suspense fallback={null}>
+          <ComprasAtrasadas obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
+          <GanttCarteira obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
+        </Suspense>
+      )}
 
       {/* Status geral ocupa o espaco que sobra; Projetos Criticos fica numa coluna
           estreita (os motivos sao textos curtos) so em tela grande (>= 1700px, onde a
@@ -611,102 +632,14 @@ export default function TelaDashboard({
           criticos viram uma grade de cartoes - antes eram 2/3 x 1/3 e a coluna Saldo
           ficava cortada. */}
       <div className="grid grid-cols-1 min-[1700px]:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start min-[1700px]:items-stretch">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-            <h3 className="text-lg font-bold flex items-center gap-2">
-              <Activity size={20} className="text-[#2A6377]" /> Status
-              Geral dos Projetos
-            </h3>
-            <p className="text-xs text-slate-500">
-              Clique (ou Enter) em uma obra para abrir o painel da obra.
-            </p>
-          </div>
-          <div className="overflow-x-auto max-w-full">
-            <table className="w-full text-sm min-w-[720px] [&_th]:px-2 [&_td]:px-2 2xl:[&_th]:px-4 2xl:[&_td]:px-4">
-              <thead className="bg-slate-50 text-slate-500 uppercase text-xs">
-                <tr>
-                  <th className="px-4 py-3 text-left">Obra</th>
-                  <th className="px-4 py-3 text-left">Fase</th>
-                  <th className="px-4 py-3 text-center">Financeiro</th>
-                  <th className="px-4 py-3 text-center">Documentos</th>
-                  <th className="px-4 py-3 text-center">Cronograma</th>
-                  <th className="px-4 py-3 text-center">Tarefas</th>
-                  <th className="px-4 py-3 text-center">Geral</th>
-                  <th className="px-4 py-3 text-right" title="Escopo de faturamento − NFs já emitidas">
-                    A faturar
-                  </th>
-                  <th className="px-4 py-3 text-right" title="Valor de venda − recebido do cliente (NF emitida e não paga continua aqui)">
-                    A receber
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {statusProjetosPMIS.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-10 text-center text-slate-500"
-                    >
-                      Nenhuma obra ativa encontrada.
-                    </td>
-                  </tr>
-                ) : (
-                  statusProjetosPMIS.map((projeto) => (
-                    <tr
-                      key={projeto.id}
-                      {...linhaClicavel(() => abrirProjetoDashboard(projeto))}
-                      aria-label={`Abrir obra ${projeto.codigo} - ${projeto.nome}`}
-                      className="hover:bg-slate-50 cursor-pointer transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2A6377]"
-                    >
-                      <td className="px-4 py-3">
-                        <p className="font-bold text-[#2A6377]">
-                          {projeto.codigo} - {projeto.nome}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Resp.: {projeto.responsavel}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
-                        {labelFase(projeto.fase)}
-                      </td>
-                      {(
-                        [
-                          ["financeiroStatus", "Financeiro"],
-                          ["documentosStatus", "Documentos"],
-                          ["cronogramaStatus", "Cronograma"],
-                          ["tarefasStatus", "Tarefas"],
-                        ] as const
-                      ).map(([campo, area]) => (
-                        <td key={campo} className="px-4 py-3 text-center">
-                          <SeloSaude status={projeto[campo]} area={area} />
-                        </td>
-                      ))}
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-flex px-3 py-1 rounded-full border text-xs font-bold ${estiloStatusPMIS(projeto.statusGeral)}`}
-                        >
-                          {labelStatusPMIS(projeto.statusGeral)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap">
-                        {projeto.saldoFaturar === null ? (
-                          <span className="font-normal text-slate-500" title="Escopo de faturamento não cadastrado">
-                            —
-                          </span>
-                        ) : (
-                          formatarMoeda(projeto.saldoFaturar)
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap">
-                        {formatarMoeda(projeto.saldoReceber)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <TabelaStatusGeral
+          linhas={statusProjetosPMIS}
+          carregando={carregando}
+          falhou={falhou}
+          mostrarGestor={isAdmin}
+          hojeLocal={hojeLocal}
+          onAbrir={abrirObraPorId}
+        />
 
         {/* Em tela grande o cartao acompanha a altura do Status Geral (absolute inset-0
             dentro do wrapper, cuja altura vem da linha do grid) e rola por dentro; abaixo
@@ -720,7 +653,15 @@ export default function TelaDashboard({
             </h3>
           </div>
           <div className="p-5 grid gap-4 content-start md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-1 max-h-[480px] min-[1700px]:max-h-none min-[1700px]:flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-            {projetosCriticosPMIS.length === 0 ? (
+            {carregando || falhou ? (
+              <div className="col-span-full text-center p-8 text-slate-500">
+                {carregando ? "Carregando..." : "Não foi possível carregar."}
+              </div>
+            ) : semSaude ? (
+              <div className="col-span-full text-center p-8 text-slate-500">
+                Não foi possível carregar a saúde das obras.
+              </div>
+            ) : projetosCriticosPMIS.length === 0 ? (
               <div className="col-span-full text-center p-8 text-slate-500">
                 <CheckCircle2
                   size={42}
@@ -769,6 +710,46 @@ export default function TelaDashboard({
         </div>
       </div>
 
+      {/* fases do cronograma que vencem de hoje ate +7 dias (mesma conta da saude da obra) */}
+      <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+        <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
+          <CalendarClock size={20} className="text-amber-500" /> Fases que vencem em 7 dias
+        </h3>
+        {carregando ? (
+          <p className="text-sm text-slate-500 p-2">Carregando...</p>
+        ) : falhou ? (
+          <p className="text-sm text-slate-500 p-2">Não foi possível carregar.</p>
+        ) : semSaude ? (
+          <p className="text-sm text-slate-500 p-2">Não foi possível carregar.</p>
+        ) : fasesSemana.length === 0 ? (
+          <p className="text-sm text-slate-500 p-2">Nenhuma fase vence nos próximos 7 dias.</p>
+        ) : (
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {fasesSemana.map((f, idx) => {
+              const prazo = prazoEntrega(f.fim_previsto, hojeLocal);
+              return (
+                <li key={`${f.idObra}-${f.fase}-${idx}`}>
+                  <button
+                    type="button"
+                    onClick={() => onAbrirObra(f.obraOriginal)}
+                    className="w-full text-left border rounded-lg p-3 hover:border-[#2A6377] hover:bg-slate-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]"
+                  >
+                    <p className="font-bold text-[#2A6377] text-sm break-words">
+                      {f.codigo} - {f.nome}
+                    </p>
+                    <p className="text-sm text-slate-700">{labelFase(f.fase)}</p>
+                    <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                      <Clock size={12} /> {formatarDataSegura(f.fim_previsto)}
+                      {prazo && <span>· {prazo.texto.replace("vence hoje", "hoje")}</span>}
+                    </p>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
       <div className={`grid grid-cols-1 ${isAdmin ? "xl:grid-cols-3" : "xl:grid-cols-2"} gap-6 items-start`}>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
@@ -776,7 +757,13 @@ export default function TelaDashboard({
             Fase
           </h3>
           <div className="h-72 w-full">
-            {dadosGrafico.length === 0 ? (
+            {carregando ? (
+              <div className="h-full rounded-lg bg-slate-50 animate-pulse flex items-center justify-center text-slate-500">
+                Carregando...
+              </div>
+            ) : falhou ? (
+              avisoFalha
+            ) : dadosGrafico.length === 0 ? (
               <div className="h-full flex items-center justify-center text-slate-500">
                 Sem dados.
               </div>
@@ -796,7 +783,11 @@ export default function TelaDashboard({
             Atualizações
           </h3>
           <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-            {feedGlobal.length === 0 ? (
+            {carregando ? (
+              <div className="text-center p-8 text-slate-500">Carregando...</div>
+            ) : falhou ? (
+              avisoFalha
+            ) : feedGlobal.length === 0 ? (
               <div className="text-center p-8 text-slate-500 italic">
                 O feed está silencioso.
               </div>
