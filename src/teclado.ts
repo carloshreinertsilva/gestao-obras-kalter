@@ -92,9 +92,16 @@ function confirmarDescarte(): Promise<boolean> {
   });
 }
 
+// Campo que grava na hora (ex.: prazo da tarefa) leva data-sem-rascunho: alterar nao deixa nada
+// pendente, entao nao conta como "digitado".
+export function contaComoRascunho(alvo: { closest(seletor: string): unknown } | null): boolean {
+  return !alvo?.closest("[data-sem-rascunho]");
+}
+
 function instalarAvisoDeRascunho() {
   // qualquer digitacao/alteracao dentro de um modal marca o modal como rascunho
   const marcar = (ev: Event) => {
+    if (!contaComoRascunho(ev.target as Element)) return;
     const modal = modalDe(ev.target as Element);
     if (modal && !modal.hasAttribute("data-confirmacao")) modal.dataset[MARCA] = "1";
   };

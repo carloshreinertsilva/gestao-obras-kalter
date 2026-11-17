@@ -2730,6 +2730,7 @@ export default function App() {
                   </p>
                   <input
                     type="date"
+                    data-sem-rascunho
                     value={
                       tarefaSelecionada.data_vencimento
                         ? tarefaSelecionada.data_vencimento.split("T")[0]
