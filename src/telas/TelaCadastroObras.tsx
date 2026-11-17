@@ -665,13 +665,13 @@ export default function TelaCadastroObras({
   const pe_obra_responsavel = propsErroCampo(errosCampo, "obra-responsavel", !novaObra.id_responsavel);
 
   return (
-    <div className="animate-in fade-in dash-main-wrapper max-w-5xl">
+    <div className="animate-in fade-in dash-main-wrapper">
       <h2 className="text-2xl md:text-3xl font-bold mb-6 text-slate-800">Cadastros &rarr; Obras</h2>
 
       <form
         id="form-cadastro-obra"
         onSubmit={salvarObra}
-        className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6 md:mb-8 max-w-full overflow-hidden"
+        className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6 md:mb-8 max-w-5xl overflow-hidden"
       >
         <div className="flex items-start justify-between gap-3 px-4 md:px-6 py-4 border-b bg-slate-50/70">
           <div className="min-w-0">
@@ -986,13 +986,13 @@ export default function TelaCadastroObras({
                     className={`border-b last:border-0 hover:bg-slate-50 ${novaObra.id === obra.id ? "bg-[#2A6377]/[0.05]" : ""}`}
                   >
                     <td className="px-4 py-3 font-semibold text-slate-700 tabular-nums">{obra.codigo_externo}</td>
-                    <td className="px-4 py-3 font-semibold text-[#2A6377] max-w-[260px] truncate" title={obra.nome}>
+                    <td className="px-4 py-3 font-semibold text-[#2A6377] max-w-[420px] truncate" title={obra.nome}>
                       {obra.nome}
                     </td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{labelFase(obra.fase_atual || "processo_inicial")}</td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{(obra as any).usuarios?.nome || "-"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[11px] font-semibold px-2 py-1 rounded border uppercase ${classeStatusObra(obra.status ?? "")}`}>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`whitespace-nowrap text-[11px] font-semibold px-2 py-1 rounded border uppercase ${classeStatusObra(obra.status ?? "")}`}>
                         {labelStatusObra(obra.status ?? "")}
                       </span>
                       {obra.status === "finalizada" && obra.data_finalizacao && (
@@ -1012,7 +1012,7 @@ export default function TelaCadastroObras({
                         formatarMoeda(totalVendaObra(obra))
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => abrirPainelObra(obra)}
