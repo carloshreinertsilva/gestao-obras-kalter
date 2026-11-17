@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- 190 funcoes/procedures do schema public, ordenadas por nome + argumentos
+-- 192 funcoes/procedures do schema public, ordenadas por nome + argumentos
 
 -- public.after_insert_obras_criar_pmis_padrao()
 CREATE OR REPLACE FUNCTION public.after_insert_obras_criar_pmis_padrao()
@@ -1809,6 +1809,7 @@ AS $function$
     join public.fretes_transp_tarifas tf on tf.ativo and tf.tipo_veiculo = p_tipo_veiculo
     join public.fornecedores_erp f on f.codigo = tf.transportadora_codigo
     left join public.fretes_transp_historico h on h.transportadora_codigo = f.codigo
+   where (select auth.role() is null or public.eh_logistica() or public.eh_admin_ou_coordenador())
    order by atende desc, preco;
 $function$
 ;
@@ -3174,7 +3175,7 @@ $function$
 
 -- public.obras_saude(p_ids uuid[])
 CREATE OR REPLACE FUNCTION public.obras_saude(p_ids uuid[])
- RETURNS TABLE(id_obra uuid, parcelas_vencidas integer, valor_vencido numeric, tarefas_atrasadas integer, tarefas_7dias integer, fases_atrasadas integer, fases_7dias integer, documentos_atrasados integer, documentos_7dias integer, alertas_abertos integer, alertas_criticos integer, fases_proximas jsonb)
+ RETURNS TABLE(id_obra uuid, parcelas_vencidas integer, tarefas_atrasadas integer, tarefas_7dias integer, fases_atrasadas integer, fases_7dias integer, documentos_atrasados integer, documentos_7dias integer, alertas_abertos integer, alertas_criticos integer, fases_proximas jsonb)
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
@@ -3196,9 +3197,6 @@ AS $function$
   )
   select v.id,
     (select count(*)::int from public.parcelas_cliente p, hoje
-      where p.id_obra = v.id and p.data_prevista < hoje.d
-        and coalesce(p.valor_previsto, 0) - coalesce(p.valor_realizado, 0) > 0),
-    (select coalesce(sum(coalesce(p.valor_previsto, 0) - coalesce(p.valor_realizado, 0)), 0) from public.parcelas_cliente p, hoje
       where p.id_obra = v.id and p.data_prevista < hoje.d
         and coalesce(p.valor_previsto, 0) - coalesce(p.valor_realizado, 0) > 0),
     (select count(*)::int from public.tarefas t, hoje
@@ -4543,6 +4541,42 @@ begin
   end if;
   return new;
 end $function$
+;
+
+-- public.trg_obra_compras_abertas_espelhar_valores()
+CREATE OR REPLACE FUNCTION public.trg_obra_compras_abertas_espelhar_valores()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  insert into public.obra_compras_abertas_valores as v (id_obra, nr_solicitacao, preco_unitario, valor, atualizado_em)
+  values (new.id_obra, new.nr_solicitacao, new.preco_unitario, new.valor, now())
+  on conflict (id_obra, nr_solicitacao) do update
+     set preco_unitario = excluded.preco_unitario, valor = excluded.valor, atualizado_em = now()
+   where (v.preco_unitario, v.valor) is distinct from (excluded.preco_unitario, excluded.valor);
+  return null;
+end;
+$function$
+;
+
+-- public.trg_obras_espelhar_valores_venda()
+CREATE OR REPLACE FUNCTION public.trg_obras_espelhar_valores_venda()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  insert into public.obras_valores_venda as v (id_obra, valor_produto, valor_servico, atualizado_em)
+  values (new.id, new.valor_produto, new.valor_servico, now())
+  on conflict (id_obra) do update
+     set valor_produto = excluded.valor_produto, valor_servico = excluded.valor_servico, atualizado_em = now()
+   where (v.valor_produto, v.valor_servico) is distinct from (excluded.valor_produto, excluded.valor_servico);
+  return null;
+end;
+$function$
 ;
 
 -- public.trg_obras_protege_codigo()

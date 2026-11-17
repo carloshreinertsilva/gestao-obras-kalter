@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- RLS de 72 tabelas e 134 politicas do schema public
+-- RLS de 74 tabelas e 136 politicas do schema public
 
 -- auditoria
 alter table public.auditoria enable row level security;
@@ -190,7 +190,7 @@ create policy faturamentos_insert_admin_or_responsavel on public.faturamentos
 create policy faturamentos_select_authenticated on public.faturamentos
     as permissive for select
     to authenticated
-    using (public.eh_usuario_ativo());
+    using ((( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador) OR public.pode_gerenciar_obra(id_obra)));
 create policy faturamentos_update_admin_or_responsavel on public.faturamentos
     as permissive for update
     to authenticated
@@ -246,7 +246,7 @@ alter table public.fretes_transp_historico enable row level security;
 create policy fretes_transp_historico_select on public.fretes_transp_historico
     as permissive for select
     to authenticated
-    using (public.eh_usuario_ativo());
+    using ((( SELECT public.eh_logistica() AS eh_logistica) OR ( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador)));
 
 -- fretes_transp_tarifas
 alter table public.fretes_transp_tarifas enable row level security;
@@ -261,7 +261,7 @@ create policy fretes_transp_tarifas_insert on public.fretes_transp_tarifas
 create policy fretes_transp_tarifas_select on public.fretes_transp_tarifas
     as permissive for select
     to authenticated
-    using (public.eh_usuario_ativo());
+    using ((( SELECT public.eh_logistica() AS eh_logistica) OR ( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador)));
 create policy fretes_transp_tarifas_update on public.fretes_transp_tarifas
     as permissive for update
     to authenticated
@@ -409,6 +409,13 @@ create policy obra_compras_abertas_select on public.obra_compras_abertas
     to authenticated
     using (public.eh_usuario_ativo());
 
+-- obra_compras_abertas_valores
+alter table public.obra_compras_abertas_valores enable row level security;
+create policy obra_compras_abertas_valores_select on public.obra_compras_abertas_valores
+    as permissive for select
+    to authenticated
+    using ((( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador) OR public.pode_gerenciar_obra(id_obra)));
+
 -- obra_familia_alerta
 alter table public.obra_familia_alerta enable row level security;
 create policy obra_familia_alerta_select on public.obra_familia_alerta
@@ -501,7 +508,7 @@ alter table public.obra_pedido_itens enable row level security;
 create policy obra_pedido_itens_select on public.obra_pedido_itens
     as permissive for select
     to authenticated
-    using (public.eh_usuario_ativo());
+    using ((( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador) OR public.pode_gerenciar_obra(id_obra)));
 
 -- obra_rentabilidade_familias
 alter table public.obra_rentabilidade_familias enable row level security;
@@ -573,6 +580,13 @@ create policy obras_valores_restritos_select on public.obras_valores_restritos
     as permissive for select
     to authenticated
     using ((public.eh_admin_ou_coordenador() OR ((public.perfil_atual() = 'engenheiro'::text) AND public.pode_gerenciar_obra(id_obra))));
+
+-- obras_valores_venda
+alter table public.obras_valores_venda enable row level security;
+create policy obras_valores_venda_select on public.obras_valores_venda
+    as permissive for select
+    to authenticated
+    using ((( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador) OR public.pode_gerenciar_obra(id_obra)));
 
 -- ocorrencias
 alter table public.ocorrencias enable row level security;

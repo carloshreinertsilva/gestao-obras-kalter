@@ -43,6 +43,7 @@ grant select on public.obra_alertas to authenticated;
 grant delete, insert, select, update on public.obra_anexos to authenticated;
 grant select on public.obra_avancos to authenticated;
 grant select on public.obra_compras_abertas to authenticated;
+grant select on public.obra_compras_abertas_valores to authenticated;
 grant select on public.obra_familia_alerta to authenticated;
 grant delete, insert, select, update on public.obra_faturamento_familias to authenticated;
 grant delete, insert, select, update on public.obra_faturamento_grupos to authenticated;
@@ -57,6 +58,7 @@ grant select on public.obra_sma_projecao to authenticated;
 grant delete, insert, select, update on public.obras to authenticated;
 grant select on public.obras_valores_erp to authenticated;
 grant select on public.obras_valores_restritos to authenticated;
+grant select on public.obras_valores_venda to authenticated;
 grant delete, insert, select, update on public.ocorrencias to authenticated;
 grant delete, insert, select, update on public.parcelas_cliente to authenticated;
 grant select on public.projetos_erp to authenticated;
@@ -278,6 +280,8 @@ grant execute on function public.sf_sugestao_conferencia(p_id uuid) to authentic
 -- function public.trg_notif_tarefa_atribuida(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_notificacao_push(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_obra_alertas_avisar(): sem execute para anon, authenticated, PUBLIC
+-- function public.trg_obra_compras_abertas_espelhar_valores(): sem execute para anon, authenticated, PUBLIC
+-- function public.trg_obras_espelhar_valores_venda(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_obras_protege_codigo(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_projetos_erp_obra_criada(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_sf_romaneio_avisos(): sem execute para anon, authenticated, PUBLIC

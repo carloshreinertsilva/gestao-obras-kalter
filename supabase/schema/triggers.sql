@@ -59,6 +59,10 @@ CREATE TRIGGER auditar_obra_anexos AFTER INSERT OR DELETE OR UPDATE ON public.ob
 -- obra_avancos
 CREATE TRIGGER auditar_obra_avancos AFTER INSERT OR DELETE OR UPDATE ON public.obra_avancos FOR EACH ROW EXECUTE FUNCTION public.auditar();
 
+-- obra_compras_abertas
+CREATE TRIGGER trg_obra_compras_abertas_valores_ins AFTER INSERT ON public.obra_compras_abertas FOR EACH ROW EXECUTE FUNCTION public.trg_obra_compras_abertas_espelhar_valores();
+CREATE TRIGGER trg_obra_compras_abertas_valores_upd AFTER UPDATE OF preco_unitario, valor ON public.obra_compras_abertas FOR EACH ROW WHEN (old.preco_unitario IS DISTINCT FROM new.preco_unitario OR old.valor IS DISTINCT FROM new.valor) EXECUTE FUNCTION public.trg_obra_compras_abertas_espelhar_valores();
+
 -- obra_faturamento_familias
 CREATE TRIGGER auditar_obra_faturamento_familias AFTER INSERT OR DELETE OR UPDATE ON public.obra_faturamento_familias FOR EACH ROW EXECUTE FUNCTION public.auditar();
 CREATE TRIGGER trg_invalida_impressao AFTER INSERT OR DELETE OR UPDATE ON public.obra_faturamento_familias FOR EACH ROW EXECUTE FUNCTION public.trg_invalida_impressao_obra('espelho_faturamento');
@@ -85,6 +89,8 @@ CREATE TRIGGER trg_after_insert_obras_criar_pmis_padrao AFTER INSERT ON public.o
 CREATE TRIGGER trg_notif_fase_obra AFTER UPDATE OF fase_atual ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_notif_fase_obra();
 CREATE TRIGGER trg_notif_obra_nova AFTER INSERT ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_notif_obra_nova();
 CREATE TRIGGER trg_obras_protege_codigo BEFORE UPDATE OF codigo_externo ON public.obras FOR EACH ROW WHEN (old.codigo_externo::text IS DISTINCT FROM new.codigo_externo::text) EXECUTE FUNCTION public.trg_obras_protege_codigo();
+CREATE TRIGGER trg_obras_valores_venda_ins AFTER INSERT ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_obras_espelhar_valores_venda();
+CREATE TRIGGER trg_obras_valores_venda_upd AFTER UPDATE OF valor_produto, valor_servico ON public.obras FOR EACH ROW WHEN (old.valor_produto IS DISTINCT FROM new.valor_produto OR old.valor_servico IS DISTINCT FROM new.valor_servico) EXECUTE FUNCTION public.trg_obras_espelhar_valores_venda();
 CREATE TRIGGER trg_projetos_erp_obra_criada AFTER INSERT OR UPDATE OF codigo_externo ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_projetos_erp_obra_criada();
 CREATE TRIGGER trg_validar_responsavel_obra BEFORE INSERT OR UPDATE OF id_responsavel ON public.obras FOR EACH ROW EXECUTE FUNCTION public.validar_responsavel_obra_e_engenheiro();
 CREATE TRIGGER update_obras_modtime BEFORE UPDATE ON public.obras FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -95,6 +101,9 @@ CREATE TRIGGER auditar_obras_valores_erp AFTER INSERT OR DELETE OR UPDATE ON pub
 -- obras_valores_restritos
 CREATE TRIGGER auditar_obras_valores_restritos AFTER INSERT OR DELETE OR UPDATE ON public.obras_valores_restritos FOR EACH ROW EXECUTE FUNCTION public.auditar();
 CREATE TRIGGER update_obras_valores_restritos_modtime BEFORE UPDATE ON public.obras_valores_restritos FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- obras_valores_venda
+CREATE TRIGGER auditar_obras_valores_venda AFTER INSERT OR DELETE OR UPDATE ON public.obras_valores_venda FOR EACH ROW EXECUTE FUNCTION public.auditar('chave=id_obra');
 
 -- ocorrencias
 CREATE TRIGGER auditar_ocorrencias AFTER INSERT OR DELETE OR UPDATE ON public.ocorrencias FOR EACH ROW EXECUTE FUNCTION public.auditar();

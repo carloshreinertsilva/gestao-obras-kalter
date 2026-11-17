@@ -617,6 +617,17 @@ create table public.obra_compras_abertas (
     constraint obra_compras_abertas_id_obra_fkey FOREIGN KEY (id_obra) REFERENCES public.obras(id) ON DELETE CASCADE
 );
 
+create table public.obra_compras_abertas_valores (
+    id_obra uuid not null,
+    nr_solicitacao bigint not null,
+    preco_unitario numeric(15,6),
+    valor numeric(15,2),
+    atualizado_em timestamp with time zone default now() not null,
+    constraint obra_compras_abertas_valores_pkey PRIMARY KEY (id_obra, nr_solicitacao),
+    constraint obra_compras_abertas_valores_compra_fkey FOREIGN KEY (id_obra, nr_solicitacao) REFERENCES public.obra_compras_abertas(id_obra, nr_solicitacao) ON UPDATE CASCADE ON DELETE CASCADE
+);
+comment on table public.obra_compras_abertas_valores is 'Preco unitario e valor das compras em aberto (espelho de obra_compras_abertas mantido pelo gatilho trg_obra_compras_abertas_valores_*). Leitura: admin/coordenador, gestor da obra e assistente dele. Ninguem do app grava direto.';
+
 create table public.obra_familia_alerta (
     id_obra uuid not null,
     codigo_projeto text not null,
@@ -907,6 +918,16 @@ comment on column public.obras_valores_restritos.margem_prevista_erp is 'Margem 
 comment on column public.obras_valores_restritos.venda_sem_impostos_erp is 'Valor de venda sem impostos do pedido no ERP (pedven.pv_meta_venda via cadproj2). Base do % de margem. Sincronizado pelo robo.';
 comment on column public.obras_valores_restritos.margem_contribuicao_erp is 'cadproj.cpj_valor_proprio da obra.';
 comment on column public.obras_valores_restritos.rentabilidade_erp is 'cadproj.cpj_valor_terceiro da obra.';
+
+create table public.obras_valores_venda (
+    id_obra uuid not null,
+    valor_produto numeric,
+    valor_servico numeric,
+    atualizado_em timestamp with time zone default now() not null,
+    constraint obras_valores_venda_pkey PRIMARY KEY (id_obra),
+    constraint obras_valores_venda_id_obra_fkey FOREIGN KEY (id_obra) REFERENCES public.obras(id) ON DELETE CASCADE
+);
+comment on table public.obras_valores_venda is 'Valor de venda (produto/servico) da obra, espelho de obras.valor_produto/valor_servico mantido pelo gatilho trg_obras_valores_venda_*. Leitura: admin/coordenador, gestor da obra e assistente dele. Ninguem do app grava direto.';
 
 create table public.ocorrencias (
     id uuid default gen_random_uuid() not null,
