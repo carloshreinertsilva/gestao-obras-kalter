@@ -34,7 +34,7 @@ create policy documentos_projeto_storage_delete_authenticated on storage.objects
 create policy documentos_projeto_storage_insert_authenticated on storage.objects
     as permissive for insert
     to authenticated
-    with check (((bucket_id = 'documentos-projeto'::text) AND public.eh_usuario_ativo() AND (NOT public.arquivo_extensao_bloqueada(name))));
+    with check (((bucket_id = 'documentos-projeto'::text) AND public.pode_gerenciar_arquivo(name) AND (NOT public.arquivo_extensao_bloqueada(name))));
 create policy documentos_projeto_storage_select_authenticated on storage.objects
     as permissive for select
     to authenticated
@@ -63,7 +63,7 @@ create policy obra_anexos_storage_delete_authenticated on storage.objects
 create policy obra_anexos_storage_insert_authenticated on storage.objects
     as permissive for insert
     to authenticated
-    with check (((bucket_id = 'obra-anexos'::text) AND public.eh_usuario_ativo() AND (NOT public.arquivo_extensao_bloqueada(name))));
+    with check (((bucket_id = 'obra-anexos'::text) AND public.pode_gerenciar_arquivo(name) AND (NOT public.arquivo_extensao_bloqueada(name))));
 create policy obra_anexos_storage_select_authenticated on storage.objects
     as permissive for select
     to authenticated

@@ -66,7 +66,8 @@ const MARCA_NIVEL = { vermelho: "✖", amarelo: "!", verde: "✓" } as const;
 
 export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
   const botaoFechar = useRef<HTMLButtonElement>(null);
-  const margem = p.modo === "interno" ? p.margem : null;
+  const interno = p.modo === "interno";
+  const margem = interno ? p.margem : null;
   const estado = useRef(p.onFechar);
   useEffect(() => {
     estado.current = p.onFechar;
@@ -139,7 +140,7 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
         <p className="w-full text-xs text-slate-500">
           No computador, escolha “Salvar como PDF” como impressora.{" "}
           {p.modo === "cliente"
-            ? "Versão para o cliente: sem margem, custos, verba ou compras."
+            ? "Versão para o cliente: sem margem, custos, verba, compras, saúde da obra, pendências internas e anotações do diário."
             : "Versão interna: inclui a margem quando você tem acesso a ela."}
         </p>
       </div>
@@ -161,6 +162,8 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
         </header>
 
         <div className="rso-grade">
+          {/* para o cliente nao vao saude, pendencias, fases atrasadas nem diario (decisao do Carlos, 17/11/2026) */}
+          {interno && (
           <section className="rso-bloco">
             <Titulo>Saúde da obra</Titulo>
             {p.saude ? (
@@ -189,6 +192,7 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
               <SemDado />
             )}
           </section>
+          )}
 
           <section className="rso-bloco">
             <Titulo>Prazo de entrega</Titulo>
@@ -211,6 +215,7 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
                     : "—"
                 }
               />
+              {interno && (
               <Linha
                 rotulo="Fases atrasadas"
                 valor={
@@ -219,6 +224,7 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
                     : "nenhuma"
                 }
               />
+              )}
             </div>
           </section>
 
@@ -273,6 +279,7 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
             </section>
           )}
 
+          {interno && (
           <section className="rso-bloco">
             <Titulo>Principais pendências</Titulo>
             {p.pendencias.length ? (
@@ -285,8 +292,10 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
               <SemDado texto="Nenhuma pendência vencida." />
             )}
           </section>
+          )}
         </div>
 
+        {interno && (
         <section className="rso-bloco mt-3">
           <Titulo>Últimas anotações do diário</Titulo>
           {!p.diario ? (
@@ -307,6 +316,7 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
             </ul>
           )}
         </section>
+        )}
 
         <footer className="mt-3 pt-1 border-t text-[10px] text-slate-500">
           Gerado pelo sistema Gestão de Obras Kalter em {isoParaDataBR(p.emitidoEm)}. Valores conforme o sistema nesta data.
