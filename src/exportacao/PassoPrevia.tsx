@@ -389,9 +389,11 @@ interface Props {
   onPedirRascunho: () => void;
   onBaixar: (d: DocumentoLista) => void;
   onVerRevisao: () => void;
+  // gestor/assistente da obra (17/11): so acompanha; sem pedir rascunho nem aprovar
+  somenteLeitura?: boolean;
 }
 
-export function PassoPrevia({ idObra, proc, revisao, aprovado, aprovacao, podeAprovar, ocupado, rascunho, mensagem, onAprovar, onPedirRascunho, onBaixar, onVerRevisao }: Props) {
+export function PassoPrevia({ idObra, proc, revisao, aprovado, aprovacao, podeAprovar, ocupado, rascunho, mensagem, onAprovar, onPedirRascunho, onBaixar, onVerRevisao, somenteLeitura = false }: Props) {
   const emite = emiteCertificado(proc);
   const abas = [
     { id: "proforma", nome: "Proforma Invoice" },
@@ -427,9 +429,11 @@ export function PassoPrevia({ idObra, proc, revisao, aprovado, aprovacao, podeAp
       {mensagem && <Aviso tom={mensagem.tom}>{mensagem.texto}</Aviso>}
       <HistoricoProcesso idObra={idObra} proc={proc} aprovado={aprovado} aprovacao={aprovacao} />
       <div className="flex flex-wrap items-center gap-2">
-        <Botao onClick={onPedirRascunho} desabilitado={ocupado}>
-          <FileSpreadsheet size={15} /> Baixar rascunho (Excel)
-        </Botao>
+        {!somenteLeitura && (
+          <Botao onClick={onPedirRascunho} desabilitado={ocupado}>
+            <FileSpreadsheet size={15} /> Baixar rascunho (Excel)
+          </Botao>
+        )}
         {rascunho && (
           <span className="text-xs text-slate-500 inline-flex items-center gap-1.5">
             {rascunho.situacao === "pendente" && (
@@ -446,14 +450,20 @@ export function PassoPrevia({ idObra, proc, revisao, aprovado, aprovacao, podeAp
           </span>
         )}
         <span className="flex-1" />
-        <Botao
-          tipo="primario"
-          desabilitado={aprovado || !podeAprovar || revisao.bloqueado || ocupado}
-          titulo={revisao.bloqueado ? "Corrija os erros da revisão antes de aprovar" : undefined}
-          onClick={onAprovar}
-        >
-          <CheckCircle2 size={15} /> {aprovado ? "Aprovado" : "Aprovar estes documentos"}
-        </Botao>
+        {somenteLeitura ? (
+          <span className="text-sm font-semibold text-slate-600 inline-flex items-center gap-1.5">
+            <CheckCircle2 size={15} className={aprovado ? "text-emerald-600" : "text-slate-400"} /> {aprovado ? "Aprovado" : "Ainda não aprovado"}
+          </span>
+        ) : (
+          <Botao
+            tipo="primario"
+            desabilitado={aprovado || !podeAprovar || revisao.bloqueado || ocupado}
+            titulo={revisao.bloqueado ? "Corrija os erros da revisão antes de aprovar" : undefined}
+            onClick={onAprovar}
+          >
+            <CheckCircle2 size={15} /> {aprovado ? "Aprovado" : "Aprovar estes documentos"}
+          </Botao>
+        )}
       </div>
       <div className="flex flex-wrap gap-1 border-b border-slate-200">
         {abas.map((a) => {

@@ -3325,7 +3325,8 @@ CREATE OR REPLACE FUNCTION public.pode_ver_exportacao(p_id_obra uuid DEFAULT NUL
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-  select public.eh_admin_ou_coordenador() or public.eh_fiscal();
+  select public.eh_admin_ou_coordenador() or public.eh_fiscal()
+      or (p_id_obra is not null and coalesce(public.pode_gerenciar_obra(p_id_obra), false));
 $function$
 ;
 

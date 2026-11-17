@@ -8,13 +8,16 @@ import { mensagemErro } from "../erros";
 import { anexarValoresVenda, buscarValoresVenda, totalVendaObra, TITULO_SEM_ACESSO_VALOR } from "../valoresObra";
 import { useDialogos } from "../Dialogos";
 import {
+  anexarValoresProjetos,
   COLUNAS_PROJETO_ERP,
   localDoCliente,
   normalizarCodigoErp,
   planejarPreenchimento,
   resumoGravacaoErp,
+  totalProjetoErp,
   type CampoPreenchivel,
   type LinhaResumoErp,
+  type LinhaValoresProjetoErp,
   type ProjetoErp,
 } from "../calculoObraErp";
 
@@ -206,6 +209,17 @@ export default function TelaCadastroObras({
   const [filtroListaErp, setFiltroListaErp] = useState("");
   const codigoBuscadoRef = useRef("");
 
+  // valores de venda dos projetos ficam em projetos_erp_valores (17/11: so admin/coordenador recebem linhas); quem nao
+  // recebe fica com os valores null e pre-preenche so os outros campos. Erro = sem valores, sem atrapalhar o cadastro
+  const comValoresDosProjetos = async (projetos: Omit<ProjetoErp, "valor_produto" | "valor_servico">[]): Promise<ProjetoErp[]> => {
+    if (projetos.length === 0) return [];
+    const { data, error } = await (supabase as any)
+      .from("projetos_erp_valores")
+      .select("codigo, valor_produto, valor_servico")
+      .in("codigo", projetos.map((p) => p.codigo));
+    return anexarValoresProjetos(projetos, error ? [] : ((data as LinhaValoresProjetoErp[]) || []));
+  };
+
   const carregarProjetosErp = async () => {
     if (!podeCadastrar) return;
     // cast: tabela nova ainda fora do database.types.ts gerado
@@ -215,7 +229,7 @@ export default function TelaCadastroObras({
       .order("data_aprovacao", { ascending: false, nullsFirst: false })
       .limit(300);
     // erro (ex.: tabela ainda nao criada) = sem lista; nao atrapalha o cadastro manual
-    setProjetosErp(error ? [] : ((data as ProjetoErp[]) || []));
+    setProjetosErp(error ? [] : await comValoresDosProjetos(data || []));
   };
 
   const buscarProjetoErp = async (texto: string) => {
@@ -232,7 +246,11 @@ export default function TelaCadastroObras({
       setBuscaErp(null);
       return;
     }
-    if (data) setBuscaErp({ codigo, estado: "achou", projeto: data as ProjetoErp });
+    if (data) {
+      const [projeto] = await comValoresDosProjetos([data]);
+      if (codigoBuscadoRef.current !== codigo) return;
+      setBuscaErp({ codigo, estado: "achou", projeto });
+    }
     // lista vazia = robo ainda nao sincronizou nada: nao mostra "nao encontrei"
     else setBuscaErp(projetosErp.length > 0 ? { codigo, estado: "nao_achou" } : null);
   };
@@ -1025,7 +1043,8 @@ export default function TelaCadastroObras({
   );
 }
 
-const totalProjeto = (p: ProjetoErp) => Number(p.valor_produto || 0) + Number(p.valor_servico || 0);
+// valor null = sem acesso (so admin/coordenador recebem os valores do projeto): mostra "—", nunca R$ 0,00
+const valorProjeto = (v: number | string | null) => (v == null ? "—" : formatarMoeda(Number(v || 0)));
 
 // C4: resultado da busca do codigo nos projetos do ERP sincronizados pelo robo
 function QuadroProjetoErp({
@@ -1053,9 +1072,9 @@ function QuadroProjetoErp({
     ["Nome", p.nome],
     ["Cliente", [p.cliente_nome, local].filter(Boolean).join(" - ") || "—"],
     ["Pedido de venda", p.pedido_venda ? `${p.pedido_venda}${p.situacao_pedido === "P" ? " (pendente)" : p.situacao_pedido === "L" ? " (liberado)" : ""}` : "—"],
-    ["Materiais", formatarMoeda(Number(p.valor_produto || 0))],
-    ["Serviço", formatarMoeda(Number(p.valor_servico || 0))],
-    ["Total da venda", formatarMoeda(totalProjeto(p))],
+    ["Materiais", valorProjeto(p.valor_produto)],
+    ["Serviço", valorProjeto(p.valor_servico)],
+    ["Total da venda", valorProjeto(totalProjetoErp(p))],
     ["Aprovação do pedido", p.data_aprovacao ? formatarDataSegura(p.data_aprovacao) : p.data_pedido ? `${formatarDataSegura(p.data_pedido)} (cadastro)` : "—"],
     ["Entrega prevista", p.data_entrega_prevista ? formatarDataSegura(p.data_entrega_prevista) : "—"],
   ];
@@ -1141,7 +1160,7 @@ function ListaProjetosErp({
                   <span className="min-w-0 font-semibold text-slate-800 truncate">
                     <span className="tabular-nums text-[#2A6377]">{p.codigo}</span> · {p.nome}
                   </span>
-                  <span className="shrink-0 text-sm font-semibold text-slate-700 tabular-nums">{formatarMoeda(totalProjeto(p))}</span>
+                  <span className="shrink-0 text-sm font-semibold text-slate-700 tabular-nums">{valorProjeto(totalProjetoErp(p))}</span>
                 </span>
                 <span className="flex justify-between gap-3 text-xs text-slate-500">
                   <span className="min-w-0 truncate">{[p.cliente_nome, localDoCliente(p)].filter(Boolean).join(" - ") || "Cliente não informado"}</span>

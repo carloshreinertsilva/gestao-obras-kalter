@@ -1,5 +1,7 @@
 // Aba "Exportacao" da obra: assistente em 11 passos que monta a Proforma, a Commercial Invoice, a Packing List e os dados do
-// Certificado de Origem. So admin, coordenador e fiscal veem. O ERP e so lido (pelo robo, que grava o instantaneo em
+// Certificado de Origem. Admin, coordenador e fiscal editam; o gestor da obra e o assistente dele so leem (17/11, somenteLeitura:
+// campos desabilitados, sem salvar, pedir documento ou aprovar; baixar o que ja foi gerado pode).
+// O ERP e so lido (pelo robo, que grava o instantaneo em
 // exportacao_erp); o rascunho fica em exportacao_processos (autosave com pausa de 2 s, so quando o conteudo muda); a aprovacao
 // vale por hash calculado no banco; o Excel e gerado pelo robo (fila exportacao_documentos).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -49,7 +51,15 @@ function MarcaPasso({ s, ativo }: { s: SituacaoPasso; ativo: boolean }) {
   return null;
 }
 
-export default function Exportacao({ obra, usuario }: { obra: { id: string; codigo_externo?: string; nome?: string }; usuario: Usuario | null }) {
+export default function Exportacao({
+  obra,
+  usuario,
+  somenteLeitura = false,
+}: {
+  obra: { id: string; codigo_externo?: string; nome?: string };
+  usuario: Usuario | null;
+  somenteLeitura?: boolean;
+}) {
   const [carregando, setCarregando] = useState(true);
   const [erroCarga, setErroCarga] = useState("");
   const [linhaErp, setLinhaErp] = useState<LinhaErp | null>(null);
@@ -86,7 +96,10 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   const versaoRef = useRef<number | null>(null); // versao do processo no banco que esta tela conhece (null = ainda nao existe)
   const conflitoRef = useRef(false);
 
-  const podeAprovar = PERFIS_EXPORTACAO.includes(String(usuario?.perfil || ""));
+  const podeAprovar = !somenteLeitura && PERFIS_EXPORTACAO.includes(String(usuario?.perfil || ""));
+  // leitor nunca grava: nem no auto-salvar, nem ao sair da aba (o banco recusaria de qualquer forma). A tela e recriada
+  // por obra (key no App), entao o valor inicial basta
+  const leitorRef = useRef(somenteLeitura);
 
   // ------------------------------------------------------------------ carga
   const carregarDocs = useCallback(async () => {
@@ -156,7 +169,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
 
   const salvarUmaVez = useCallback(async (): Promise<string | null> => {
     const atual = procRef.current;
-    if (!atual) return hashRef.current || null;
+    if (!atual || leitorRef.current) return hashRef.current || null;
     const json = JSON.stringify(atual);
     if (json === ultimoSalvo.current && hashRef.current) return hashRef.current;
     if (conflitoRef.current) return null; // travado ate o usuario recarregar: nao fica tentando
@@ -195,7 +208,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   }, [salvarAgora]);
 
   useEffect(() => {
-    if (!proc) return;
+    if (!proc || somenteLeitura) return;
     if (JSON.stringify(proc) === ultimoSalvo.current) {
       setSujo(false);
       return;
@@ -204,7 +217,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
     if (conflito) return; // sem auto-salvar enquanto o conflito nao for resolvido
     const t = setTimeout(() => void salvarAgora(), 2000);
     return () => clearTimeout(t);
-  }, [proc, salvarAgora, conflito]);
+  }, [proc, salvarAgora, conflito, somenteLeitura]);
 
   // sair da aba ou fechar a pagina com alteracao pendente: tenta salvar e avisa
   useEffect(() => {
@@ -218,7 +231,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   }, [sujo]);
   useEffect(
     () => () => {
-      if (procRef.current && JSON.stringify(procRef.current) !== ultimoSalvo.current) void salvarAgoraRef.current();
+      if (!leitorRef.current && procRef.current && JSON.stringify(procRef.current) !== ultimoSalvo.current) void salvarAgoraRef.current();
     },
     [],
   );
@@ -240,6 +253,11 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
     [proc?.itens],
   );
   useEffect(() => {
+    // o cadastro de NCM nao e lido pelo leitor: null = nao confere (sem acusar NCM "nao cadastrado" que nao conferiu)
+    if (somenteLeitura) {
+      setNcmCadastro(null);
+      return;
+    }
     if (!chaveNcm) {
       setNcmCadastro(new Set());
       return;
@@ -255,7 +273,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
     return () => {
       vivo = false;
     };
-  }, [chaveNcm]);
+  }, [chaveNcm, somenteLeitura]);
 
   const erp = linhaErp?.pedido.erp ?? {};
   const revisao = useMemo(() => (proc ? revisar(proc, erp, ncmCadastro) : null), [proc, erp, ncmCadastro]);
@@ -420,6 +438,8 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
           <Aviso tom="aviso" acao={<Botao tamanho="pequeno" onClick={() => void carregar()}>Verificar de novo</Botao>}>
             O robô ainda não leu o pedido desta obra no ERP (até 5 minutos). Quando ele ler, o processo de exportação pode ser iniciado aqui.
           </Aviso>
+        ) : somenteLeitura ? (
+          <Aviso tom="aviso">O processo de exportação desta obra ainda não foi iniciado pela coordenação ou pelo fiscal.</Aviso>
         ) : (
           <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
             <p className="text-sm text-slate-600">
@@ -440,7 +460,9 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   const prontos = PASSOS_DE_PREENCHER.filter((p) => situacoes[p].tipo !== "erro").length;
   const pendente = proximaPendencia(situacoes, passo);
   const rascunho = docs.find((d) => d.tipo === "rascunho") ?? null;
-  const status = conflito ? (
+  const status = somenteLeitura ? (
+    <span className="text-slate-500">Somente leitura</span>
+  ) : conflito ? (
     <span className="text-red-600 font-semibold" role="alert">NÃO SALVOU: alterado em outra janela</span>
   ) : erroSalvar ? (
     <span className="text-red-600 font-semibold" role="alert">NÃO SALVOU: {erroSalvar}</span>
@@ -456,6 +478,12 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
   return (
     <div className="space-y-4">
       <ListasDeSugestoes />
+      {somenteLeitura && (
+        <Aviso tom="aviso">
+          Somente leitura: você acompanha o processo de exportação desta obra e pode baixar os documentos já gerados. Quem altera e
+          aprova é a coordenação ou o fiscal.
+        </Aviso>
+      )}
       {conflito && (
         <Aviso
           tom="erro"
@@ -521,6 +549,8 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
         </nav>
 
         <div className="flex-1 min-w-0 w-full">
+          {/* leitor: fieldset desabilitado = nenhum campo ou botao dos passos de preencher funciona */}
+          <fieldset disabled={somenteLeitura} className="min-w-0 border-0 p-0 m-0">
           {passo === "erp" && <PassoErp {...base} erp={erp} linha={linhaErp} onAtualizarErp={() => void atualizarErp()} atualizandoErp={atualizandoErp} />}
           {passo === "exportador" && <PassoExportador {...base} />}
           {passo === "importador" && <PassoImportador {...base} />}
@@ -530,6 +560,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
           {passo === "volumes" && <PassoPacking {...base} modificar={modificar} tabela={tabela} podeReler={Boolean(linhaErp)} onReler={reler} onIrPara={ir} />}
           {passo === "certificado" && <PassoCertificado {...base} />}
           {passo === "revisao" && <PassoRevisao proc={proc} revisao={revisao} aoIrPara={ir} />}
+          </fieldset>
           {passo === "previa" && (
             <PassoPrevia
               idObra={obra.id}
@@ -545,6 +576,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
               onPedirRascunho={() => void pedirDocumento("rascunho")}
               onBaixar={(d) => void baixar(d)}
               onVerRevisao={() => ir("revisao")}
+              somenteLeitura={somenteLeitura}
             />
           )}
           {passo === "documentos" && (
@@ -557,6 +589,7 @@ export default function Exportacao({ obra, usuario }: { obra: { id: string; codi
               onGerarFinal={() => void pedirDocumento("final")}
               onBaixar={(d) => void baixar(d)}
               onIrPara={ir}
+              somenteLeitura={somenteLeitura}
             />
           )}
 

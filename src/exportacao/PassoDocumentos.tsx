@@ -16,15 +16,17 @@ interface Props {
   onGerarFinal: () => void;
   onBaixar: (d: DocumentoLista) => void;
   onIrPara: (passo: "revisao" | "previa") => void;
+  // gestor/assistente da obra (17/11): so acompanha e baixa o que ja foi gerado
+  somenteLeitura?: boolean;
 }
 
-export function PassoDocumentos({ docs, aprovado, bloqueado, ocupado, mensagem, onGerarFinal, onBaixar, onIrPara }: Props) {
+export function PassoDocumentos({ docs, aprovado, bloqueado, ocupado, mensagem, onGerarFinal, onBaixar, onIrPara, somenteLeitura = false }: Props) {
   const liberado = aprovado && !bloqueado;
   const pendenteFinal = docs.some((d) => d.tipo === "final" && d.situacao === "pendente");
   return (
     <div className="space-y-4">
       <Titulo titulo="Documentos" descricao="O Excel final só sai sem erros e com a pré-visualização aprovada. O robô gera em até 5 minutos e o arquivo aparece na lista abaixo." />
-      {!liberado && (
+      {!liberado && !somenteLeitura && (
         <Aviso tom="aviso">
           {bloqueado ? (
             <>
@@ -46,11 +48,13 @@ export function PassoDocumentos({ docs, aprovado, bloqueado, ocupado, mensagem, 
         </Aviso>
       )}
       {mensagem && <Aviso tom={mensagem.tom}>{mensagem.texto}</Aviso>}
-      <div>
-        <Botao tipo="primario" desabilitado={!liberado || ocupado || pendenteFinal} onClick={onGerarFinal}>
-          <FileSpreadsheet size={15} /> Gerar documentos finais
-        </Botao>
-      </div>
+      {!somenteLeitura && (
+        <div>
+          <Botao tipo="primario" desabilitado={!liberado || ocupado || pendenteFinal} onClick={onGerarFinal}>
+            <FileSpreadsheet size={15} /> Gerar documentos finais
+          </Botao>
+        </div>
+      )}
       <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
         <table className="w-full text-sm min-w-[620px] border-collapse">
           <thead>

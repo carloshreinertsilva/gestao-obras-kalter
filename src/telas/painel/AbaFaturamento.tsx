@@ -1,7 +1,7 @@
 import FaturamentosRealizados from "../../FaturamentosRealizados";
 import ValorAjustavel from "../../ValorAjustavel";
 import { formatarMoeda, formatarCompetencia, formatarPercentual } from "../../utils";
-import { Activity, Receipt } from "lucide-react";
+import { Activity, Lock, Receipt } from "lucide-react";
 import type { ObraFaturamentoFamilia, ObraFaturamentoGrupo, ObraFaturamentoPrevisao, ObraFaturamentoRealizado } from "../../types";
 
 // Aba "faturamento" do painel da obra. So exibicao: estado e funcoes ficam no App.tsx
@@ -22,6 +22,9 @@ export interface PropsAbaFaturamento {
   totalRealizadoFaturamento: number;
   valorPrevistoGrupoCompetencia: (grupoCodigo: string, competencia: string) => number;
   valorRealizadoGrupoCompetencia: (grupoCodigo: string, competencia: string) => number;
+  // 17/11 (decisao do Carlos): o espelho (escopo, previsoes, NFs da obra) so e lido por quem gerencia a obra;
+  // para os demais o banco devolve lista vazia, que aqui nao pode parecer "obra sem faturamento"
+  semAcesso?: boolean;
 }
 
 export default function AbaFaturamento({
@@ -40,7 +43,21 @@ export default function AbaFaturamento({
   totalRealizadoFaturamento,
   valorPrevistoGrupoCompetencia,
   valorRealizadoGrupoCompetencia,
+  semAcesso = false,
 }: PropsAbaFaturamento) {
+  if (semAcesso)
+    return (
+      <div className="bg-white rounded-xl shadow-sm border p-5 flex items-start gap-3">
+        <Lock size={18} className="text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
+        <div>
+          <p className="font-bold text-slate-800">Sem acesso ao espelho de faturamento desta obra</p>
+          <p className="text-sm text-slate-500 mt-1">
+            Escopo, previsões e notas emitidas da obra são vistos só pelo gestor da obra, pelo assistente dele e pela
+            coordenação. As solicitações de faturamento continuam acima.
+          </p>
+        </div>
+      </div>
+    );
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 2xl:grid-cols-5 gap-4">

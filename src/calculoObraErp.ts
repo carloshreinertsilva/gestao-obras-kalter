@@ -1,6 +1,8 @@
 // Regras puras do cadastro de obra ligadas ao ERP (Pacote 4):
 // - C4: projeto do ERP sem obra no app (tabela projetos_erp, gravada pelo robo) -> campos do formulario de obra nova;
 //   "Preencher com os dados do ERP" so preenche os vazios e devolve as diferencas dos ja digitados para perguntar.
+//   Valores de venda ficam em projetos_erp_valores (17/11: so admin/coordenador leem); sem linha = sem acesso = null,
+//   e null nunca vira R$ 0,00 nem preenche o formulario.
 // - C9: resumo do que vai ser gravado no ERP (margem, rentabilidade, faturamento sem impostos) antes de enviar.
 
 export interface ProjetoErp {
@@ -11,6 +13,7 @@ export interface ProjetoErp {
   cliente_nome: string | null;
   cidade: string | null;
   uf: string | null;
+  // null = sem acesso ao valor (projetos_erp_valores)
   valor_produto: number | string | null;
   valor_servico: number | string | null;
   data_pedido: string | null;
@@ -31,7 +34,31 @@ export const ROTULO_CAMPO: Record<CampoPreenchivel, string> = {
 };
 
 export const COLUNAS_PROJETO_ERP =
-  "codigo, nome, pedido_venda, situacao_pedido, cliente_nome, cidade, uf, valor_produto, valor_servico, data_pedido, data_aprovacao, data_entrega_prevista";
+  "codigo, nome, pedido_venda, situacao_pedido, cliente_nome, cidade, uf, data_pedido, data_aprovacao, data_entrega_prevista";
+
+export interface LinhaValoresProjetoErp {
+  codigo: string;
+  valor_produto: number | string | null;
+  valor_servico: number | string | null;
+}
+
+/** Junta os valores (tabela restrita) aos projetos pelo codigo; projeto sem linha = sem acesso = valores null. */
+export function anexarValoresProjetos<T extends { codigo: string }>(
+  projetos: T[],
+  valores: LinhaValoresProjetoErp[],
+): (T & { valor_produto: number | string | null; valor_servico: number | string | null })[] {
+  const porCodigo = new Map(valores.map((v) => [v.codigo, v]));
+  return projetos.map((p) => {
+    const v = porCodigo.get(p.codigo);
+    return { ...p, valor_produto: v ? v.valor_produto : null, valor_servico: v ? v.valor_servico : null };
+  });
+}
+
+/** Venda total do projeto; null = sem acesso aos valores. */
+export function totalProjetoErp(p: Pick<ProjetoErp, "valor_produto" | "valor_servico">): number | null {
+  if (p.valor_produto == null && p.valor_servico == null) return null;
+  return Number(p.valor_produto || 0) + Number(p.valor_servico || 0);
+}
 
 /** Codigo como o ERP guarda: sem espacos (o robo grava o codigo "trim"). */
 export const normalizarCodigoErp = (texto: string | null | undefined) => String(texto ?? "").trim();

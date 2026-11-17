@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- RLS de 74 tabelas e 136 politicas do schema public
+-- RLS de 75 tabelas e 137 politicas do schema public
 
 -- auditoria
 alter table public.auditoria enable row level security;
@@ -436,7 +436,7 @@ create policy obra_faturamento_familias_insert_admin_or_responsavel on public.ob
 create policy obra_faturamento_familias_select_authenticated on public.obra_faturamento_familias
     as permissive for select
     to authenticated
-    using (public.eh_usuario_ativo());
+    using ((( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador) OR public.pode_gerenciar_obra(id_obra)));
 create policy obra_faturamento_familias_update_admin_or_responsavel on public.obra_faturamento_familias
     as permissive for update
     to authenticated
@@ -456,7 +456,7 @@ create policy obra_faturamento_grupos_insert_admin_or_responsavel on public.obra
 create policy obra_faturamento_grupos_select_authenticated on public.obra_faturamento_grupos
     as permissive for select
     to authenticated
-    using (public.eh_usuario_ativo());
+    using ((( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador) OR public.pode_gerenciar_obra(id_obra)));
 create policy obra_faturamento_grupos_update_admin_or_responsavel on public.obra_faturamento_grupos
     as permissive for update
     to authenticated
@@ -476,7 +476,7 @@ create policy obra_faturamento_previsoes_insert_admin_or_responsavel on public.o
 create policy obra_faturamento_previsoes_select_authenticated on public.obra_faturamento_previsoes
     as permissive for select
     to authenticated
-    using (public.eh_usuario_ativo());
+    using ((( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador) OR public.pode_gerenciar_obra(id_obra)));
 create policy obra_faturamento_previsoes_update_admin_or_responsavel on public.obra_faturamento_previsoes
     as permissive for update
     to authenticated
@@ -496,7 +496,7 @@ create policy obra_faturamento_realizados_insert_admin_or_responsavel on public.
 create policy obra_faturamento_realizados_select_authenticated on public.obra_faturamento_realizados
     as permissive for select
     to authenticated
-    using (public.eh_usuario_ativo());
+    using ((( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador) OR public.pode_gerenciar_obra(id_obra)));
 create policy obra_faturamento_realizados_update_admin_or_responsavel on public.obra_faturamento_realizados
     as permissive for update
     to authenticated
@@ -529,7 +529,7 @@ alter table public.obra_servicos_parcelas enable row level security;
 create policy osp_select on public.obra_servicos_parcelas
     as permissive for select
     to authenticated
-    using (public.eh_usuario_ativo());
+    using (public.pode_ver_nf_terceiros(id_obra));
 
 -- obra_sma_materiais
 alter table public.obra_sma_materiais enable row level security;
@@ -634,6 +634,13 @@ create policy projetos_erp_select on public.projetos_erp
     as permissive for select
     to authenticated
     using ((public.perfil_atual() = ANY (ARRAY['admin'::text, 'coordenador'::text, 'engenheiro'::text, 'assistente'::text])));
+
+-- projetos_erp_valores
+alter table public.projetos_erp_valores enable row level security;
+create policy projetos_erp_valores_select on public.projetos_erp_valores
+    as permissive for select
+    to authenticated
+    using (( SELECT public.eh_admin_ou_coordenador() AS eh_admin_ou_coordenador));
 
 -- push_inscricoes
 alter table public.push_inscricoes enable row level security;

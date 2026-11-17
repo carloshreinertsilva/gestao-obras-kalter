@@ -972,19 +972,27 @@ create table public.projetos_erp (
     cliente_nome text,
     cidade text,
     uf text,
-    valor_produto numeric(14,2) default 0 not null,
-    valor_servico numeric(14,2) default 0 not null,
     data_pedido date,
     data_aprovacao date,
     data_entrega_prevista date,
     atualizado_em timestamp with time zone default now() not null,
     constraint projetos_erp_pkey PRIMARY KEY (codigo)
 );
-comment on table public.projetos_erp is 'Projetos vivos do ERP (CADPROJ situacao A, pedido de venda P/L mexido nos ultimos 12 meses) que ainda nao tem obra no app. Gravado so pelo robo (sync_projetos_erp, so o que mudou). Usado para pre-preencher o cadastro de obra nova.';
-comment on column public.projetos_erp.valor_produto is 'Venda de material do pedido (com IPI, sem cancelados, com desconto) - mesma conta do Estagio 1.';
-comment on column public.projetos_erp.valor_servico is 'Venda de servico do pedido (mater.mt_tipo_item = 9) - mesma conta do Estagio 1.';
+comment on table public.projetos_erp is 'Projetos vivos do ERP (CADPROJ situacao A, pedido de venda P/L mexido nos ultimos 12 meses) que ainda nao tem obra no app. Gravado so pelo robo (sync_projetos_erp, so o que mudou). Usado para pre-preencher o cadastro de obra nova. Os valores de venda ficam em projetos_erp_valores (so admin/coordenador).';
 comment on column public.projetos_erp.data_aprovacao is 'Primeira aprovacao do pedido (pv_dt_prim_aprov; sem ela, a ultima aprovacao).';
 comment on column public.projetos_erp.data_entrega_prevista is 'CADPROJ.cpj_aaaammdd_entr (99991231 = sem data -> nulo).';
+
+create table public.projetos_erp_valores (
+    codigo text not null,
+    valor_produto numeric(14,2) default 0 not null,
+    valor_servico numeric(14,2) default 0 not null,
+    atualizado_em timestamp with time zone default now() not null,
+    constraint projetos_erp_valores_pkey PRIMARY KEY (codigo),
+    constraint projetos_erp_valores_codigo_fkey FOREIGN KEY (codigo) REFERENCES public.projetos_erp(codigo) ON UPDATE CASCADE ON DELETE CASCADE
+);
+comment on table public.projetos_erp_valores is 'Valores de venda (material/servico) dos projetos de projetos_erp. Gravado so pelo robo (sync_projetos_erp). Leitura: admin e coordenador. Sai junto com o projeto (FK em cascata).';
+comment on column public.projetos_erp_valores.valor_produto is 'Venda de material do pedido (com IPI, sem cancelados, com desconto) - mesma conta do Estagio 1.';
+comment on column public.projetos_erp_valores.valor_servico is 'Venda de servico do pedido (mater.mt_tipo_item = 9) - mesma conta do Estagio 1.';
 
 create table public.push_inscricoes (
     id uuid default gen_random_uuid() not null,

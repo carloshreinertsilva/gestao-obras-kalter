@@ -70,7 +70,8 @@ export default function AbaComprasObra({
     <div className="space-y-4">
       <div className="flex gap-2">
         {usuario?.perfil !== "financeiro" && botao("material", "Material", Package)}
-        {botao("servicos", "Serviços (terceiros)", Wrench)}
+        {/* 17/11 (decisao do Carlos): pedidos de servico seguem a regra das NFs de terceiros; a logistica nao le */}
+        {usuario?.perfil !== "logistica" && botao("servicos", "Serviços (terceiros)", Wrench)}
       </div>
       {secao === "material" ? (
         <ComprasMaterial idObra={idObra} codigoObra={codigoObra} />

@@ -62,6 +62,7 @@ grant select on public.obras_valores_venda to authenticated;
 grant delete, insert, select, update on public.ocorrencias to authenticated;
 grant delete, insert, select, update on public.parcelas_cliente to authenticated;
 grant select on public.projetos_erp to authenticated;
+grant select on public.projetos_erp_valores to authenticated;
 grant select on public.push_inscricoes to authenticated;
 grant delete, insert, select, update on public.reunioes to authenticated;
 grant delete, insert, select, update on public.reunioes_sessoes to authenticated;

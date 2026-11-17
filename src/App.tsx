@@ -579,10 +579,12 @@ export default function App() {
   const podeVerCompras = ehLogistica || veTudo;
   const veTodasObras = veTudo || ehLogistica || ehFiscal || ehFinanceiro;
   const abaInicialObra = ehFinanceiro ? "compras" : ehLogistica || ehFiscal ? "faturamento" : "resumo";
-  // exportacao (Proforma, Invoice, Packing List): so admin, coordenador e fiscal (decisao do Carlos em 27/10)
+  // exportacao (Proforma, Invoice, Packing List): admin, coordenador e fiscal editam (decisao do Carlos em 27/10); o gestor
+  // da obra e o assistente dele so leem (17/11). podeEditarObraSelecionada e lido na hora da chamada (definido abaixo)
   const podeVerExportacao = veTudo || ehFiscal;
+  const podeLerExportacaoDaObra = () => podeVerExportacao || podeEditarObraSelecionada;
   const abaObraPermitida = (aba: string) => {
-    if (aba === "exportacao") return podeVerExportacao;
+    if (aba === "exportacao") return podeLerExportacaoDaObra();
     if (ehFiscal) return aba === "faturamento" || aba === "compras";
     if (ehFinanceiro) return aba === "compras";
     if (ehLogistica) return ["faturamento", "lista_materiais", "compras", "diario_tarefas", "previsoes"].includes(aba);
@@ -4030,11 +4032,12 @@ export default function App() {
                 totalRealizadoFaturamento={totalRealizadoFaturamento}
                 valorPrevistoGrupoCompetencia={valorPrevistoGrupoCompetencia}
                 valorRealizadoGrupoCompetencia={valorRealizadoGrupoCompetencia}
+                semAcesso={!podeEditarObraSelecionada}
               />
             )}
 
-            {abaPainelObra === "exportacao" && podeVerExportacao && obraEcoSelecionada?.exportacao && (
-              <Exportacao key={obraEcoSelecionada.id} obra={obraEcoSelecionada} usuario={usuarioAtual} />
+            {abaPainelObra === "exportacao" && podeLerExportacaoDaObra() && obraEcoSelecionada?.exportacao && (
+              <Exportacao key={obraEcoSelecionada.id} obra={obraEcoSelecionada} usuario={usuarioAtual} somenteLeitura={!podeVerExportacao} />
             )}
             {abaPainelObra === "lista_materiais" && (
               <ListaMateriaisSMA materiais={materiaisSma} />
