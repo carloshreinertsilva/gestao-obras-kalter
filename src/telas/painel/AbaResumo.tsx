@@ -45,6 +45,7 @@ import {
 } from "../../calculoResumoObra";
 import { calcularLinha, formatarPct, formatarPp, type ValoresRestritos } from "../../painel/calculoMargemCarteira";
 import type { ModoRelatorio } from "../../RelatorioStatusObra";
+import { TITULO_SEM_ACESSO_VALOR } from "../../valoresObra";
 
 const RelatorioStatusObra = lazy(() => import("../../RelatorioStatusObra"));
 
@@ -61,9 +62,10 @@ export interface PropsAbaResumo {
   parcelasVencidas: number;
   percentualCronograma: number;
   percentualDocumentos: number;
-  saldoReceberParcelas: number;
+  saldoReceberParcelas: number | null;
   totalRealizadoParcelas: number;
-  totalVendaGeral: number;
+  // null = sem acesso ao valor de venda da obra (valoresObra.ts)
+  totalVendaGeral: number | null;
   // troca de aba do painel; sem ela o "ver detalhes" clica no botao da aba (id aba-obra-<aba>)
   irParaAba?: (aba: string) => void;
 }
@@ -341,7 +343,8 @@ export default function AbaResumo({
   // mesma conta da aba Rentabilidade e do Painel (calcularPanorama via calcularLinha)
   const margem = useMemo(() => {
     if (!rent) return null;
-    const l = calcularLinha({ id: idObra, codigo: "", nome: "" }, rent.familias, totalVendaGeral, rent.restritos);
+    // sem acesso a venda a base e 0: sem margem no ERP a linha sai "sem dado" e o bloco nao aparece
+    const l = calcularLinha({ id: idObra, codigo: "", nome: "" }, rent.familias, totalVendaGeral ?? 0, rent.restritos);
     return l.semDado ? null : l;
   }, [rent, idObra, totalVendaGeral]);
   // verba tem a mesma regra de leitura da rentabilidade: sem familias visiveis = sem acesso
@@ -509,13 +512,17 @@ export default function AbaResumo({
           {recebimento && (
             <>
               <Linha rotulo="Venda total">
-                {formatarMoeda(totalVendaGeral)}
+                {totalVendaGeral === null ? <span title={TITULO_SEM_ACESSO_VALOR}>—</span> : formatarMoeda(totalVendaGeral)}
               </Linha>
               <Linha rotulo="Recebido" classe="text-emerald-700">
                 {formatarMoeda(recebimento.recebido)}
               </Linha>
               <Linha rotulo="A receber" classe="text-amber-700">
-                {formatarMoeda(recebimento.aReceber)}
+                {recebimento.aReceber === null ? (
+                  <span title={TITULO_SEM_ACESSO_VALOR}>—</span>
+                ) : (
+                  formatarMoeda(recebimento.aReceber)
+                )}
               </Linha>
               <Linha rotulo="Vencido" classe={recebimento.vencido > 0 ? "text-red-700" : "text-slate-500"}>
                 {recebimento.vencido > 0

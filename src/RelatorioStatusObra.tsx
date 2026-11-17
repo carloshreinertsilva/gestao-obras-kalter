@@ -251,7 +251,7 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
             {p.recebimento ? (
               <>
                 <Linha rotulo="Recebido" valor={formatarMoeda(p.recebimento.recebido)} forte />
-                <Linha rotulo="A receber" valor={formatarMoeda(p.recebimento.aReceber)} />
+                <Linha rotulo="A receber" valor={p.recebimento.aReceber === null ? "—" : formatarMoeda(p.recebimento.aReceber)} />
                 <Linha
                   rotulo="Vencido"
                   valor={p.recebimento.vencido > 0 ? `${formatarMoeda(p.recebimento.vencido)} (${p.recebimento.parcelasVencidas} parcela(s))` : "nada vencido"}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Activity, ArrowDown, ArrowUp, ArrowUpDown, Download, Search } from "lucide-react";
 import { fasesProjeto } from "../constants";
 import { formatarDataSegura, formatarMoeda, labelFase } from "../utils";
+import { TITULO_SEM_ACESSO_VALOR } from "../valoresObra";
 import { linhaClicavel } from "../teclado";
 import { AREAS_SAUDE, EXPLICACAO_SAUDE, ROTULO_SAUDE, prazoEntrega, type AreaSaude, type NivelArea } from "../saudeObra";
 import {
@@ -377,7 +378,15 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
                         formatarMoeda(projeto.saldoFaturar)
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap">{formatarMoeda(projeto.saldoReceber)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-slate-700 whitespace-nowrap">
+                      {projeto.saldoReceber === null ? (
+                        <span className="font-normal text-slate-500" title={TITULO_SEM_ACESSO_VALOR}>
+                          —
+                        </span>
+                      ) : (
+                        formatarMoeda(projeto.saldoReceber)
+                      )}
+                    </td>
                   </tr>
                 );
               })
@@ -448,7 +457,13 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
                   </div>
                   <div className="text-right">
                     <p className="text-slate-500">A receber</p>
-                    <p className="font-bold text-slate-700">{formatarMoeda(projeto.saldoReceber)}</p>
+                    <p className="font-bold text-slate-700">
+                      {projeto.saldoReceber === null ? (
+                        <span title={TITULO_SEM_ACESSO_VALOR}>—</span>
+                      ) : (
+                        formatarMoeda(projeto.saldoReceber)
+                      )}
+                    </p>
                   </div>
                 </div>
               </button>

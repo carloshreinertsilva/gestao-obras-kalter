@@ -3,6 +3,10 @@ import ValorAjustavel from "../../ValorAjustavel";
 import { formatarDataSegura, formatarMoeda, selecionarTextoAoFocar, formatarEntradaDataBR, labelStatusParcelaCalculado, classeStatusParcela } from "../../utils";
 import { Plus, Save, Trash2 } from "lucide-react";
 import type { ParcelaCliente } from "../../types";
+import { TITULO_SEM_ACESSO_VALOR } from "../../valoresObra";
+
+// sem acesso ao valor de venda (null): "—" no lugar do numero, nunca R$ 0,00
+const SemAcesso = () => <span title={TITULO_SEM_ACESSO_VALOR}>—</span>;
 
 // Aba "financeiro" do painel da obra. So exibicao: estado e funcoes ficam no App.tsx
 // (passados por props com os mesmos nomes).
@@ -14,12 +18,12 @@ export interface PropsAbaFinanceiro {
   parcelasCliente: ParcelaCliente[];
   podeEditarObraSelecionada: boolean;
   reabrirParcelaCliente: (parcela: any) => Promise<void>;
-  saldoReceberParcelas: number;
+  saldoReceberParcelas: number | null;
   salvarParcelaCliente: () => Promise<void>;
   setNovaParcelaCliente: Dispatch<any>;
   totalPrevistoParcelas: number;
   totalRealizadoParcelas: number;
-  totalVendaGeral: number;
+  totalVendaGeral: number | null;
   valorDistribuidoExcedente: number;
   valorRestanteDistribuirPositivo: number;
 }
@@ -49,7 +53,7 @@ export default function AbaFinanceiro({
             Venda Total Prevista
           </p>
           <ValorAjustavel className="text-2xl font-bold text-slate-800">
-            {formatarMoeda(totalVendaGeral)}
+            {totalVendaGeral === null ? <SemAcesso /> : formatarMoeda(totalVendaGeral)}
           </ValorAjustavel>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border">
@@ -65,7 +69,7 @@ export default function AbaFinanceiro({
             Saldo a Receber
           </p>
           <ValorAjustavel className="text-2xl font-bold text-amber-700">
-            {formatarMoeda(Math.max(saldoReceberParcelas, 0))}
+            {saldoReceberParcelas === null ? <SemAcesso /> : formatarMoeda(Math.max(saldoReceberParcelas, 0))}
           </ValorAjustavel>
         </div>
         <div
@@ -77,9 +81,13 @@ export default function AbaFinanceiro({
           <p
             className={`text-2xl font-bold ${valorDistribuidoExcedente > 0 ? "text-red-600" : "text-blue-700"}`}
           >
-            {valorDistribuidoExcedente > 0
-              ? `-${formatarMoeda(valorDistribuidoExcedente)}`
-              : formatarMoeda(valorRestanteDistribuirPositivo)}
+            {totalVendaGeral === null ? (
+              <SemAcesso />
+            ) : valorDistribuidoExcedente > 0 ? (
+              `-${formatarMoeda(valorDistribuidoExcedente)}`
+            ) : (
+              formatarMoeda(valorRestanteDistribuirPositivo)
+            )}
           </p>
         </div>
       </div>
@@ -157,7 +165,7 @@ export default function AbaFinanceiro({
                 Venda total
               </span>
               <span className="font-bold text-slate-700">
-                {formatarMoeda(totalVendaGeral)}
+                {totalVendaGeral === null ? <SemAcesso /> : formatarMoeda(totalVendaGeral)}
               </span>
             </div>
             <div className="bg-slate-50 border rounded-lg p-3">
@@ -177,13 +185,18 @@ export default function AbaFinanceiro({
               <span
                 className={`font-bold ${valorDistribuidoExcedente > 0 ? "text-red-600" : "text-blue-700"}`}
               >
-                {valorDistribuidoExcedente > 0
-                  ? `Excedeu ${formatarMoeda(valorDistribuidoExcedente)}`
-                  : formatarMoeda(valorRestanteDistribuirPositivo)}
+                {totalVendaGeral === null ? (
+                  <SemAcesso />
+                ) : valorDistribuidoExcedente > 0 ? (
+                  `Excedeu ${formatarMoeda(valorDistribuidoExcedente)}`
+                ) : (
+                  formatarMoeda(valorRestanteDistribuirPositivo)
+                )}
               </span>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 mt-3">
+            {totalVendaGeral !== null && (
             <button
               type="button"
               onClick={() =>
@@ -198,6 +211,7 @@ export default function AbaFinanceiro({
             >
               Usar saldo restante
             </button>
+            )}
             <p className="text-xs text-slate-500">
               A data é digitada no formato dd/mm/aaaa para evitar o
               problema do seletor nativo de data no StackBlitz.

@@ -56,15 +56,15 @@ export interface ParcelaResumo {
 }
 export interface ResumoRecebimento {
   recebido: number;
-  // venda - recebido (o "Saldo a receber" da aba Financeiro), nunca negativo
-  aReceber: number;
+  // venda - recebido (o "Saldo a receber" da aba Financeiro), nunca negativo; null = sem acesso a venda
+  aReceber: number | null;
   // saldo das parcelas com data passada (mesma regra do indicador de saude e do Painel)
   vencido: number;
   parcelasVencidas: number;
   proxima: { descricao: string; data: string; valor: number } | null;
 }
 
-export function resumirRecebimento(parcelas: ParcelaResumo[], valorVenda: number, hojeISO: string): ResumoRecebimento {
+export function resumirRecebimento(parcelas: ParcelaResumo[], valorVenda: number | null, hojeISO: string): ResumoRecebimento {
   let recebidoC = 0;
   let vencidoC = 0;
   let parcelasVencidas = 0;
@@ -84,7 +84,7 @@ export function resumirRecebimento(parcelas: ParcelaResumo[], valorVenda: number
   }
   return {
     recebido: reais(recebidoC),
-    aReceber: reais(Math.max(centavos(valorVenda) - recebidoC, 0)),
+    aReceber: valorVenda === null ? null : reais(Math.max(centavos(valorVenda) - recebidoC, 0)),
     vencido: reais(vencidoC),
     parcelasVencidas,
     proxima,

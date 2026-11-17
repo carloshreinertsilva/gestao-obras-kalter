@@ -14,7 +14,8 @@ export interface LinhaStatus {
   gravidade: number;
   motivosCriticos: string[];
   saldoFaturar: number | null;
-  saldoReceber: number;
+  // null = sem acesso ao valor de venda da obra (vai para o fim na ordenacao e sai vazio no CSV)
+  saldoReceber: number | null;
   valorVencido: number;
 }
 

@@ -5,6 +5,7 @@ import type { Obra, Usuario } from "../types";
 import { formatarDataSegura, formatarMoeda, labelFase, labelStatusObra, classeStatusObra } from "../utils";
 import { Save, AlertTriangle, Edit2, X, FolderOpen, Loader2, CheckCircle2, Clock, Search, List } from "lucide-react";
 import { mensagemErro } from "../erros";
+import { anexarValoresVenda, buscarValoresVenda, totalVendaObra, TITULO_SEM_ACESSO_VALOR } from "../valoresObra";
 import { useDialogos } from "../Dialogos";
 import {
   COLUNAS_PROJETO_ERP,
@@ -35,9 +36,11 @@ interface Props {
   onAviso: (mensagem: string, tipo?: string) => void;
 }
 
-// Campos de obras que este formulario edita (status nao: finalizar/cancelar/reabrir tem tela propria)
+// Campos de obras que este formulario edita (status nao: finalizar/cancelar/reabrir tem tela propria).
+// valor_produto/valor_servico sao LIDOS de obras_valores_venda (restrita) e continuam GRAVADOS em obras
+// (o gatilho espelha na tabela restrita).
 const CAMPOS_FORMULARIO =
-  "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, exportacao";
+  "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, exportacao";
 
 const dadosDoFormulario = (o: any, idResponsavel: any) => ({
   codigo_externo: o.codigo_externo,
@@ -332,7 +335,7 @@ export default function TelaCadastroObras({
       let query = supabase
         .from("obras")
         .select(
-          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, exportacao, usuarios(nome)",
+          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, exportacao, usuarios(nome)",
         )
         .order("created_at", { ascending: false });
       if (filtroStatusCadastroObras !== "todas")
@@ -340,7 +343,9 @@ export default function TelaCadastroObras({
       query = noEscopoDoUsuario(query);
       const { data, error } = await query;
       if (error) throw error;
-      setObrasCadastroLista(data || []);
+      const lista = data || [];
+      const valores = await buscarValoresVenda(lista.map((o: any) => o.id));
+      setObrasCadastroLista(anexarValoresVenda(lista, valores));
     } catch (error) {
       falhaAoCarregar("o cadastro de obras", error);
     }
@@ -420,6 +425,11 @@ export default function TelaCadastroObras({
             ([k, v]) => !original || String(v ?? "") !== String((original as any)[k] ?? ""),
           ),
         );
+        // sem acesso aos valores de venda o formulario nao os conhece: nunca grava (nem zera) esses campos
+        if (novaObra.valores_ocultos) {
+          delete mudancas.valor_produto;
+          delete mudancas.valor_servico;
+        }
         if (Object.keys(mudancas).length > 0) {
           const { error } = await supabase
             .from("obras")
@@ -434,7 +444,7 @@ export default function TelaCadastroObras({
         const { data: obraCriada, error } = await supabase
           .from("obras")
           .insert([{ ...dadosObra, status: "em_andamento" }])
-          .select()
+          .select("id") // so o id e usado; nao devolve os valores de venda
           .single();
         if (error) throw error;
         idObraSalva = obraCriada?.id || null;
@@ -530,8 +540,14 @@ export default function TelaCadastroObras({
 
   const editarObra = async (obraDaLista: any) => {
     // rele do banco: a copia da lista (ou a que veio do painel, as vezes sem descricao/observacoes) pode estar velha
-    const { data: atual } = await supabase.from("obras").select(CAMPOS_FORMULARIO).eq("id", obraDaLista.id).maybeSingle();
-    const obra: any = atual || obraDaLista;
+    // valores de venda vem da tabela restrita; falha ou sem acesso = valores desconhecidos (ficam fora da gravacao)
+    const [{ data: atual }, valores] = await Promise.all([
+      supabase.from("obras").select(CAMPOS_FORMULARIO).eq("id", obraDaLista.id).maybeSingle(),
+      buscarValoresVenda([obraDaLista.id]).catch(() => null),
+    ]);
+    const obraBase: any = atual || obraDaLista;
+    const obra: any = valores ? anexarValoresVenda([obraBase], valores)[0] : obraBase;
+    const valoresOcultos = obra.valor_produto == null && obra.valor_servico == null;
     const noFormulario = {
       id: obra.id,
       codigo_externo: obra.codigo_externo || "",
@@ -545,6 +561,7 @@ export default function TelaCadastroObras({
       valor_servico: obra.valor_servico ?? "",
       observacoes: obra.observacoes || "",
       exportacao: Boolean(obra.exportacao),
+      valores_ocultos: valoresOcultos,
     };
     setNovaObra(noFormulario);
     // sem a releitura nao da para saber o que a pessoa mudou: entao manda todos os campos do formulario (sem status)
@@ -825,6 +842,9 @@ export default function TelaCadastroObras({
           </Secao>
 
           <Secao titulo="Valores de venda" descricao="Valor vendido ao cliente, com impostos.">
+            {novaObra.id && novaObra.valores_ocultos && (
+              <p className="text-xs text-slate-500 mb-3">Você não tem acesso aos valores de venda desta obra; eles não serão alterados.</p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <Rotulo htmlFor="obra-valor-produto" texto="Materiais" />
@@ -966,7 +986,13 @@ export default function TelaCadastroObras({
                     </td>
                     <td className="px-4 py-3 text-slate-600 tabular-nums whitespace-nowrap">{formatarDataSegura(obra.data_previsao_fim)}</td>
                     <td className="px-4 py-3 text-right text-slate-700 tabular-nums whitespace-nowrap">
-                      {formatarMoeda(Number(obra.valor_produto || 0) + Number(obra.valor_servico || 0))}
+                      {totalVendaObra(obra) === null ? (
+                        <span className="text-slate-500" title={TITULO_SEM_ACESSO_VALOR}>
+                          —
+                        </span>
+                      ) : (
+                        formatarMoeda(totalVendaObra(obra))
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">

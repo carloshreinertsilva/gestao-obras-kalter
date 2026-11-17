@@ -3,6 +3,7 @@ import HistoricoRentabilidade from "./HistoricoRentabilidade";
 import { calcularPanorama, familiasVisiveis } from "./calculoRentabilidade";
 import { Download, Plus, Search } from "lucide-react";
 import { formatarMoeda } from "./utils";
+import { TITULO_SEM_ACESSO_VALOR } from "./valoresObra";
 import { supabase } from "./supabase";
 import type { Obra, ObraRentabilidadeFamilia, Usuario } from "./types";
 import GraficoRentabilidade from "./GraficoRentabilidade";
@@ -11,7 +12,8 @@ import { ModalItensSma, SeloAlertaFamilia, type AlertaFamilia, type ItemSmaACami
 
 interface Props {
   familias: ObraRentabilidadeFamilia[];
-  valorVendido: number;
+  // null = sem acesso ao valor de venda da obra (valoresObra.ts)
+  valorVendido: number | null;
   obra?: Obra | null;
   usuario?: Usuario | null;
 }
@@ -122,7 +124,8 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
   );
 
   const panorama = useMemo(
-    () => calcularPanorama(familias, valorVendido, margemErp),
+    // sem acesso a venda: base 0 (sem margem no ERP o % nao sai), nunca um valor inventado
+    () => calcularPanorama(familias, valorVendido ?? 0, margemErp),
     [familias, valorVendido, margemErp],
   );
 
@@ -221,7 +224,9 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <div className="bg-white p-5 rounded-xl shadow-sm border">
           <p className="text-xs text-slate-400 font-bold uppercase">Valor Vendido</p>
-          <p className="text-2xl font-bold text-slate-800">{formatarMoeda(valorVendido)}</p>
+          <p className="text-2xl font-bold text-slate-800">
+            {valorVendido === null ? <span title={TITULO_SEM_ACESSO_VALOR}>—</span> : formatarMoeda(valorVendido)}
+          </p>
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border">
           <p className="text-xs text-slate-400 font-bold uppercase">Custo Previsto</p>

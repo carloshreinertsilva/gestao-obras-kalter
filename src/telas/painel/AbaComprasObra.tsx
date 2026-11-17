@@ -4,11 +4,13 @@ import { supabase } from "../../supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda } from "../../utils";
 import { ServicosTerceirosObra } from "../../NfsTerceiros";
 import type { Usuario } from "../../types";
+import { anexarValoresCompras, buscarValoresCompras } from "../../valoresObra";
 
 // Aba "Compras" da obra, em duas secoes:
 // - Material: solicitacoes de compra em aberto no ERP (tabela obra_compras_abertas, espelhada pelo
 //   robo). E a mesma regra que deixa a fase Compras do cronograma "em andamento": solicitacao ativa
-//   sem pedido de compra encerrado. So consulta.
+//   sem pedido de compra encerrado. So consulta. Preco e valor vem de obra_compras_abertas_valores (so quem
+//   gerencia a obra le); sem acesso, as colunas de preco/valor e as somas somem (nao viram zero), inclusive no CSV.
 // - Servicos (terceiros): pedidos de servico com NFs/pagamentos e o "Encaminhar NF" (NfsTerceiros.tsx).
 interface CompraAberta {
   nr_solicitacao: number;
@@ -35,6 +37,10 @@ const SITUACAO: Record<CompraAberta["situacao"], { rotulo: string; classe: strin
   aguardando: { rotulo: "Aguardando entrega", classe: "bg-blue-50 text-blue-700 border-blue-200", dica: "Pedido de compra ativo, material ainda não recebido (ou recebido em parte)" },
   recebido: { rotulo: "Recebido", classe: "bg-emerald-50 text-emerald-700 border-emerald-200", dica: "Item recebido, mas o pedido ainda não foi encerrado no ERP (outros itens dele pendentes)" },
 };
+
+// colunas sem preco/valor (esses vem da tabela restrita, juntados por nr_solicitacao)
+const COLUNAS_COMPRA =
+  "nr_solicitacao, codigo_material, descricao_material, codigo_projeto, quantidade, quantidade_recebida, situacao, nr_pedido, data_pedido, fornecedor, data_solicitacao, data_entrega, nr_sma, servico";
 
 const num = (v: unknown) => Number(v || 0);
 const fmtQtd = (v: number) => num(v).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
@@ -77,6 +83,8 @@ export default function AbaComprasObra({
 
 function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: string }) {
   const [compras, setCompras] = useState<CompraAberta[] | null>(null);
+  // false = usuario sem acesso aos precos desta obra: esconde colunas de preco/valor e as somas
+  const [comValores, setComValores] = useState(true);
   const [erro, setErro] = useState("");
   const [situacao, setSituacao] = useState("pendentes"); // pendentes = tudo menos "recebido"
   const [familia, setFamilia] = useState("todas");
@@ -86,16 +94,26 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
     let ativo = true;
     setCompras(null);
     setErro("");
-    supabase
-      .from("obra_compras_abertas")
-      .select("*")
-      .eq("id_obra", idObra)
-      .eq("servico", false)
-      .order("data_entrega", { ascending: true, nullsFirst: false })
-      .then(({ data, error }) => {
+    Promise.all([
+      supabase
+        .from("obra_compras_abertas")
+        .select(COLUNAS_COMPRA)
+        .eq("id_obra", idObra)
+        .eq("servico", false)
+        .order("data_entrega", { ascending: true, nullsFirst: false }),
+      buscarValoresCompras(idObra),
+    ])
+      .then(([{ data, error }, valores]) => {
         if (!ativo) return;
         if (error) setErro("Não foi possível carregar as compras da obra.");
-        setCompras((data as CompraAberta[]) || []);
+        const junto = anexarValoresCompras((data || []) as Omit<CompraAberta, "preco_unitario" | "valor">[], valores);
+        setComValores(junto.valoresVisiveis);
+        setCompras(junto.compras);
+      })
+      .catch(() => {
+        if (!ativo) return;
+        setErro("Não foi possível carregar as compras da obra.");
+        setCompras([]);
       });
     return () => {
       ativo = false;
@@ -139,7 +157,7 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
 
   const indicadores: [string, string, string, string][] = [
     ["Sem pedido", String(compras.filter((c) => c.situacao === "sem_pedido").length), "em cotação", "text-red-600"],
-    ["Aguardando entrega", String(aguardando.length), formatarMoeda(soma(aguardando)), "text-blue-700"],
+    ["Aguardando entrega", String(aguardando.length), comValores ? formatarMoeda(soma(aguardando)) : "pedidos emitidos", "text-blue-700"],
     ["Entrega atrasada", String(compras.filter(atrasada).length), "previsão de entrega vencida", "text-red-600"],
     ["Recebidos, pedido aberto", String(compras.filter((c) => c.situacao === "recebido").length), "aguardam encerramento no ERP", "text-slate-600"],
   ];
@@ -196,11 +214,17 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
               onClick={() =>
                 exportarCsv(
                   `compras_obra_${codigoObra}`,
-                  ["Solicitação", "Data", "Material", "Descrição", "Família", "Qtd.", "Qtd. recebida", "Preço unit.", "Valor", "Situação", "Pedido", "Data pedido", "Fornecedor", "Entrega prevista", "SMA"],
+                  [
+                    "Solicitação", "Data", "Material", "Descrição", "Família", "Qtd.", "Qtd. recebida",
+                    ...(comValores ? ["Preço unit.", "Valor"] : []),
+                    "Situação", "Pedido", "Data pedido", "Fornecedor", "Entrega prevista", "SMA",
+                  ],
                   filtradas.map((c) => [
                     c.nr_solicitacao, c.data_solicitacao ? formatarDataSegura(c.data_solicitacao) : "", c.codigo_material || "",
                     c.descricao_material || "", c.codigo_projeto || "", fmtQtd(c.quantidade), fmtQtd(c.quantidade_recebida),
-                    c.preco_unitario != null ? String(c.preco_unitario).replace(".", ",") : "", c.valor != null ? String(c.valor).replace(".", ",") : "",
+                    ...(comValores
+                      ? [c.preco_unitario != null ? String(c.preco_unitario).replace(".", ",") : "", c.valor != null ? String(c.valor).replace(".", ",") : ""]
+                      : []),
                     SITUACAO[c.situacao].rotulo, c.nr_pedido || "", c.data_pedido ? formatarDataSegura(c.data_pedido) : "", c.fornecedor || "",
                     c.data_entrega ? formatarDataSegura(c.data_entrega) : "", c.nr_sma || "",
                   ]),
@@ -246,8 +270,12 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
                       ? `${fmtQtd(c.quantidade_recebida)} recebida de ${fmtQtd(c.quantidade)}`
                       : fmtQtd(c.quantidade)}
                   </dd>
-                  <dt className="text-slate-500">Valor</dt>
-                  <dd className="text-right font-semibold">{c.valor != null ? formatarMoeda(c.valor) : "a cotar"}</dd>
+                  {comValores && (
+                    <>
+                      <dt className="text-slate-500">Valor</dt>
+                      <dd className="text-right font-semibold">{c.valor != null ? formatarMoeda(c.valor) : "a cotar"}</dd>
+                    </>
+                  )}
                   <dt className="text-slate-500">Pedido</dt>
                   <dd className="text-right">
                     {c.nr_pedido ? `${c.nr_pedido}${c.data_pedido ? ` · ${formatarDataSegura(c.data_pedido)}` : ""}` : "—"}
@@ -276,7 +304,7 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
                 <th className="px-3 py-2 text-left">Material</th>
                 <th className="px-3 py-2 text-left">Família</th>
                 <th className="px-3 py-2 text-right">Qtd.</th>
-                <th className="px-3 py-2 text-right">Valor</th>
+                {comValores && <th className="px-3 py-2 text-right">Valor</th>}
                 <th className="px-3 py-2 text-left">Pedido / fornecedor</th>
                 <th className="px-3 py-2 text-center">Entrega prevista</th>
                 <th className="px-3 py-2 text-center">Situação</th>
@@ -285,7 +313,7 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
             <tbody>
               {filtradas.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-slate-500">
+                  <td colSpan={comValores ? 8 : 7} className="p-6 text-center text-slate-500">
                     {compras.length === 0 ? "Nenhuma compra em aberto para esta obra no ERP." : "Nenhuma compra com esses filtros."}
                   </td>
                 </tr>
@@ -310,9 +338,11 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
                         fmtQtd(c.quantidade)
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">
-                      {c.valor != null ? formatarMoeda(c.valor) : <span className="text-slate-500 font-normal">a cotar</span>}
-                    </td>
+                    {comValores && (
+                      <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">
+                        {c.valor != null ? formatarMoeda(c.valor) : <span className="text-slate-500 font-normal">a cotar</span>}
+                      </td>
+                    )}
                     <td className="px-3 py-2">
                       {c.nr_pedido ? (
                         <span className="font-semibold">
@@ -340,7 +370,8 @@ function ComprasMaterial({ idObra, codigoObra }: { idObra: string; codigoObra: s
           </table>
         </div>
         <p className="px-4 py-2 text-xs text-slate-500 border-t">
-          {filtradas.length} de {compras.length} solicitação(ões) · pendentes somam {formatarMoeda(soma(pendentes))} (itens com preço) · atualizado pelo ERP a cada 5 minutos.
+          {filtradas.length} de {compras.length} solicitação(ões)
+          {comValores && <> · pendentes somam {formatarMoeda(soma(pendentes))} (itens com preço)</>} · atualizado pelo ERP a cada 5 minutos.
         </p>
       </div>
     </div>

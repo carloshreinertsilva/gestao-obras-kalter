@@ -20,7 +20,7 @@ export interface ValoresRestritos {
   venda_sem_impostos_erp: number | string | null;
 }
 
-// Linha de obras (valor vendido = produto + servico, igual ao painel da obra)
+// Valor vendido da obra (produto + servico, igual ao painel da obra), lido de obras_valores_venda
 export interface ValoresVenda {
   id: string;
   valor_produto: number | string | null;

@@ -72,6 +72,15 @@ describe("ordenarLinhas", () => {
     expect(ids(ordenarLinhas([a, b, c], { chave: "faturar", sentido: "desc" }))).toEqual(["3", "1", "2"]);
     expect(ids(ordenarLinhas([a, b, c], { chave: "faturar", sentido: "asc" }))).toEqual(["1", "3", "2"]);
   });
+  it("a receber: sem acesso ao valor de venda (null) no fim e vazio no CSV (nunca 0)", () => {
+    const a = linha("1", { saldoReceber: 100 });
+    const b = linha("2", { saldoReceber: null });
+    const c = linha("3", { saldoReceber: 0 });
+    expect(ids(ordenarLinhas([a, b, c], { chave: "receber", sentido: "desc" }))).toEqual(["1", "3", "2"]);
+    expect(ids(ordenarLinhas([a, b, c], { chave: "receber", sentido: "asc" }))).toEqual(["3", "1", "2"]);
+    const csv = montarCsv([b], { hojeISO: HOJE, labelFase: (f) => f });
+    expect(csv.trimEnd().split("\r\n")[1].endsWith(";;0,00")).toBe(true);
+  });
   it("fase segue a ordem do fluxo e empate cai no codigo", () => {
     const fluxo = ["projeto", "producao", "entrega"];
     const a = linha("5", { fase: "entrega" });

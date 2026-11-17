@@ -7,6 +7,7 @@ import { Briefcase, CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2
 import type { Usuario } from "../types";
 import TabelaStatusGeral from "../painel/TabelaStatusGeral";
 import { ROTULO_SAUDE, avaliarSaude, hojeLocalISO, prazoEntrega } from "../saudeObra";
+import { anexarValoresVenda, buscarValoresVenda, somarCarteira, totalVendaObra, TITULO_SEM_ACESSO_VALOR } from "../valoresObra";
 
 const GraficoObrasPorFase = lazy(() => import("./GraficoObrasPorFase"));
 // cartoes da carteira (Pacote 2): cada um busca os proprios dados para as obras que o Painel ja listou
@@ -44,6 +45,8 @@ export default function TelaDashboard({
   const [resumoPMIS, setResumoPMIS] = useState<any>({
     obrasAtivas: 0,
     carteiraTotal: 0,
+    // obras sem acesso ao valor de venda ficam fora da carteira e do saldo a receber
+    carteiraObrasSemValor: 0,
     recebidoTotal: 0,
     saldoReceber: 0,
     valorVencido: 0,
@@ -108,7 +111,7 @@ export default function TelaDashboard({
         let queryObras = supabase
           .from("obras")
           .select(
-            "id, codigo_externo, nome, fase_atual, data_previsao_fim, id_responsavel, valor_produto, valor_servico, usuarios(nome)",
+            "id, codigo_externo, nome, fase_atual, data_previsao_fim, id_responsavel, usuarios(nome)",
           )
           .eq("status", "em_andamento")
           .order("created_at", { ascending: false });
@@ -118,7 +121,8 @@ export default function TelaDashboard({
         const { data: obrasDashboard, error: obrasErro } = await queryObras;
         if (obrasErro) throw obrasErro;
 
-        const obras = obrasDashboard || [];
+        // valor de venda vem da tabela restrita (anexado abaixo); sem acesso fica null
+        let obras: any[] = obrasDashboard || [];
         const idsObras = obras.map((o: any) => o.id);
 
         let parcelasData: any[] = [];
@@ -131,7 +135,7 @@ export default function TelaDashboard({
         let saudePorObra: Record<string, any> | null = {};
 
         if (idsObras.length > 0) {
-          const [parcelasResp, documentosResp, cronogramaResp, tarefasResp, escopoResp, faturadoResp, saudeResp] =
+          const [parcelasResp, documentosResp, cronogramaResp, tarefasResp, escopoResp, faturadoResp, saudeResp, valoresVenda] =
             await Promise.all([
               supabase
                 .from("parcelas_cliente")
@@ -167,7 +171,9 @@ export default function TelaDashboard({
                 .in("id_obra", idsObras)
                 .not("id_obra_faturamento_familia", "is", null),
               (supabase as any).rpc("obras_saude", { p_ids: idsObras }),
+              buscarValoresVenda(idsObras),
             ]);
+          obras = anexarValoresVenda(obras, valoresVenda);
 
           // sem os indicadores o resto do painel ainda serve: a saude fica "Sem dados"
           if (saudeResp.error) {
@@ -192,18 +198,20 @@ export default function TelaDashboard({
           tarefasData = tarefasResp.data || [];
         }
 
-        const carteiraTotal = obras.reduce(
-          (acc: number, obra: any) =>
-            acc +
-            Number(obra.valor_produto || 0) +
-            Number(obra.valor_servico || 0),
-          0,
-        );
+        const carteira = somarCarteira(obras);
+        const carteiraTotal = carteira.total;
         const recebidoTotal = parcelasData.reduce(
           (acc: number, parcela: any) =>
             acc + Number(parcela.valor_realizado || 0),
           0,
         );
+        // saldo a receber so das obras com valor de venda visivel (sem acesso = fora da conta)
+        const idsSemValor = new Set(obras.filter((o: any) => totalVendaObra(o) === null).map((o: any) => o.id));
+        const recebidoComValor = carteira.parcial
+          ? parcelasData
+              .filter((p: any) => !idsSemValor.has(p.id_obra))
+              .reduce((acc: number, p: any) => acc + Number(p.valor_realizado || 0), 0)
+          : recebidoTotal;
         const valorVencido = parcelasData.reduce(
           (acc: number, parcela: any) => {
             const previsto = Number(parcela.valor_previsto || 0);
@@ -248,8 +256,9 @@ export default function TelaDashboard({
         setResumoPMIS({
           obrasAtivas: obras.length,
           carteiraTotal,
+          carteiraObrasSemValor: carteira.semAcesso,
           recebidoTotal,
-          saldoReceber: Math.max(carteiraTotal - recebidoTotal, 0),
+          saldoReceber: Math.max(carteiraTotal - recebidoComValor, 0),
           valorVencido,
           documentosPendentes,
           fasesAtrasadas,
@@ -271,13 +280,13 @@ export default function TelaDashboard({
           const tarefasObra = tarefasData.filter(
             (t: any) => t.id_obra === obra.id,
           );
-          const totalVenda =
-            Number(obra.valor_produto || 0) + Number(obra.valor_servico || 0);
+          // null = sem acesso ao valor de venda desta obra
+          const totalVenda = totalVendaObra(obra);
           const totalRecebido = parcelasObra.reduce(
             (acc: number, p: any) => acc + Number(p.valor_realizado || 0),
             0,
           );
-          const saldoReceber = Math.max(totalVenda - totalRecebido, 0);
+          const saldoReceber = totalVenda === null ? null : Math.max(totalVenda - totalRecebido, 0);
           // a faturar = escopo de faturamento - NFs emitidas (null: obra sem escopo cadastrado)
           const escopoObra = escopoData
             .filter((f: any) => f.id_obra === obra.id)
@@ -548,6 +557,11 @@ export default function TelaDashboard({
             {formatarMoeda(resumoPMIS.carteiraTotal)}
           </ValorAjustavel>,
           )}
+          {!carregando && resumoPMIS.carteiraObrasSemValor > 0 && (
+            <p className="text-xs text-slate-500 mt-1" title={TITULO_SEM_ACESSO_VALOR}>
+              Parcial: sem {resumoPMIS.carteiraObrasSemValor} obra{resumoPMIS.carteiraObrasSemValor > 1 ? "s" : ""} (sem acesso ao valor)
+            </p>
+          )}
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-green-500">
           <div className="flex items-center justify-between mb-3">
@@ -573,6 +587,11 @@ export default function TelaDashboard({
           <ValorAjustavel className="text-2xl font-bold text-orange-700">
             {formatarMoeda(resumoPMIS.saldoReceber)}
           </ValorAjustavel>,
+          )}
+          {!carregando && resumoPMIS.carteiraObrasSemValor > 0 && (
+            <p className="text-xs text-slate-500 mt-1" title={TITULO_SEM_ACESSO_VALOR}>
+              Parcial: só obras com valor de venda visível
+            </p>
           )}
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-red-500">

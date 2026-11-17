@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { supabase } from "../supabase";
 import { formatarMoeda } from "../utils";
+import { buscarValoresVenda } from "../valoresObra";
 import type { ObraRentabilidadeFamilia } from "../types";
 import {
   chaveIds,
@@ -93,9 +94,10 @@ export default function MargemCarteira({
           if (ativo) setEstado({ fase: "pronto", linhas: [] });
           return;
         }
-        const [familias, vendasResp, restritosResp] = await Promise.all([
+        const [familias, vendas, restritosResp] = await Promise.all([
           buscarFamilias(ids),
-          supabase.from("obras").select("id, valor_produto, valor_servico").in("id", ids),
+          // valor vendido vem da tabela restrita (obras_valores_venda); obra sem linha = sem acesso
+          buscarValoresVenda(ids),
           // cast: tabela fora do database.types.ts gerado (mesmo cast da aba Rentabilidade)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any)
@@ -103,7 +105,6 @@ export default function MargemCarteira({
             .select("id_obra, margem_prevista_erp, venda_sem_impostos_erp")
             .in("id_obra", ids),
         ]);
-        if (vendasResp.error) throw vendasResp.error;
         if (restritosResp.error) throw restritosResp.error;
         const restritos = (restritosResp.data || []) as ValoresRestritos[];
         // engenheiro: a RLS so devolve as obras que ele gerencia; obra sem nenhuma linha visivel
@@ -117,7 +118,12 @@ export default function MargemCarteira({
           if (ativo) setEstado({ fase: "sem_acesso" });
           return;
         }
-        const linhas = montarLinhas(lista, familias, (vendasResp.data || []) as ValoresVenda[], restritos);
+        const linhas = montarLinhas(
+          lista,
+          familias,
+          vendas.map((v): ValoresVenda => ({ id: v.id_obra, valor_produto: v.valor_produto, valor_servico: v.valor_servico })),
+          restritos,
+        );
         if (ativo) setEstado({ fase: "pronto", linhas });
       } catch (erro) {
         console.error("Margem das obras:", erro);

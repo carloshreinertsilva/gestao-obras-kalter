@@ -25,6 +25,7 @@ import { tipoParaEnvio } from "./tiposArquivoAnexo";
 import { JanelaDuasEtapas, TelaAtivarObrigatoria, TelaCodigoLogin, mfaExigidoParaMim } from "./DuasEtapas";
 import { decidirEtapaMfa, nivelDaSessao, temFatorVerificado, type EtapaMfa } from "./calculoDuasEtapas";
 import StatusSync from "./StatusSync";
+import { anexarValoresVenda, buscarValoresVenda, totalVendaObra, TITULO_SEM_ACESSO_VALOR } from "./valoresObra";
 import type {
   Notificacao,
   SyncStatus,
@@ -872,7 +873,7 @@ export default function App() {
       let query = supabase
         .from("obras")
         .select(
-          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, usuarios(nome)",
+          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, usuarios(nome)",
         )
         .eq("status", "em_andamento")
         .order("created_at", { ascending: false });
@@ -880,7 +881,9 @@ export default function App() {
       const { data, error } = await query;
       if (error) throw error;
       if (data) {
-        setObrasLista(data);
+        // valor de venda vem da tabela restrita; sem acesso os campos ficam null (nao R$ 0,00)
+        const valores = await buscarValoresVenda(data.map((o: any) => o.id));
+        setObrasLista(anexarValoresVenda(data, valores));
       }
     } catch (error) {
       falhaAoCarregar("as obras", error);
@@ -1584,14 +1587,17 @@ export default function App() {
     setAbaPainelObra(abaSalva && abaSalva !== "exportacao" && abaObraPermitida(abaSalva) ? abaSalva : abaInicialObra);
     setTelaAtiva("painel_obra");
     try {
-      const { data } = await supabase
-        .from("obras")
-        .select(
-          "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, valor_produto, valor_servico, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, exportacao, usuarios(nome)",
-        )
-        .eq("id", obra.id)
-        .single();
-      if (data) setObraEcoSelecionada(data);
+      const [{ data }, valores] = await Promise.all([
+        supabase
+          .from("obras")
+          .select(
+            "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, status, data_finalizacao, observacao_finalizacao, data_cancelamento, motivo_cancelamento, observacao_cancelamento, exportacao, usuarios(nome)",
+          )
+          .eq("id", obra.id)
+          .single(),
+        buscarValoresVenda([obra.id]),
+      ]);
+      if (data) setObraEcoSelecionada(anexarValoresVenda([data], valores)[0]);
     } catch (error) {
       falhaAoCarregar("os dados da obra", error);
     }
@@ -1945,9 +1951,8 @@ export default function App() {
   });
 
   // CÁLCULOS DO FINANCEIRO
-  const totalVendaProduto = Number(obraEcoSelecionada?.valor_produto) || 0;
-  const totalVendaServico = Number(obraEcoSelecionada?.valor_servico) || 0;
-  const totalVendaGeral = totalVendaProduto + totalVendaServico;
+  // null = usuario sem acesso ao valor de venda desta obra: nada de "R$ 0,00" nem conta com zero
+  const totalVendaGeral = totalVendaObra(obraEcoSelecionada);
 
   const totalPrevistoParcelas = parcelasCliente.reduce(
     (acc, curr) => acc + Number(curr.valor_previsto || 0),
@@ -1957,10 +1962,11 @@ export default function App() {
     (acc, curr) => acc + Number(curr.valor_realizado || 0),
     0,
   );
-  const saldoReceberParcelas = totalVendaGeral - totalRealizadoParcelas;
-  const valorRestanteDistribuir = totalVendaGeral - totalPrevistoParcelas;
+  const saldoReceberParcelas = totalVendaGeral === null ? null : totalVendaGeral - totalRealizadoParcelas;
+  // sem acesso a venda: nada a distribuir nem excedente (a tela mostra "—")
+  const valorRestanteDistribuir = totalVendaGeral === null ? 0 : totalVendaGeral - totalPrevistoParcelas;
   const valorRestanteDistribuirPositivo = Math.max(valorRestanteDistribuir, 0);
-  const valorDistribuidoExcedente = Math.max(
+  const valorDistribuidoExcedente = totalVendaGeral === null ? 0 : Math.max(
     totalPrevistoParcelas - totalVendaGeral,
     0,
   );
@@ -3250,7 +3256,11 @@ export default function App() {
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">Saldo a receber em aberto</label>
                   <div className="w-full border rounded-lg p-3 bg-slate-50 font-bold text-slate-700">
-                    {formatarMoeda(Math.max(saldoReceberParcelas, 0))}
+                    {saldoReceberParcelas === null ? (
+                      <span title={TITULO_SEM_ACESSO_VALOR}>—</span>
+                    ) : (
+                      formatarMoeda(Math.max(saldoReceberParcelas, 0))
+                    )}
                   </div>
                 </div>
               </div>

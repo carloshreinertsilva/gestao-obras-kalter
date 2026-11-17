@@ -42,6 +42,13 @@ describe("valorVendaObra", () => {
       ]),
     ).toBe(300);
   });
+  it("sem acesso ao valor de venda (os dois null): 0, sem cair nas parcelas", () => {
+    expect(
+      valorVendaObra({ valor_produto: null, valor_servico: null }, [
+        { data_prevista: "2026-01-01", data_realizada: null, valor_previsto: 300, valor_realizado: 0 },
+      ]),
+    ).toBe(0);
+  });
 });
 
 describe("montarCurvaAvanco", () => {

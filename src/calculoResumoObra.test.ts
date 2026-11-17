@@ -70,6 +70,12 @@ describe("resumirRecebimento", () => {
     expect(r.aReceber).toBe(0);
     expect(r.vencido).toBe(0);
   });
+
+  it("sem acesso ao valor de venda: a receber fica null (nao vira a venda inteira nem zero)", () => {
+    const r = resumirRecebimento([{ data_prevista: "2026-01-01", valor_previsto: 100, valor_realizado: 40 }], null, HOJE);
+    expect(r.aReceber).toBeNull();
+    expect(r.recebido).toBe(40);
+  });
 });
 
 describe("resumirCompras", () => {

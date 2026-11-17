@@ -6,6 +6,7 @@
 //   (soma de obra_faturamento_familias.valor_total_escopo); escopo zero = serie ausente (sem dividir por zero);
 // - recebido: parcelas_cliente.valor_realizado acumulado pela data_realizada (recebimento) sobre o valor de venda
 //   (valor_produto + valor_servico da obra; se zerado, soma das parcelas previstas nao canceladas).
+//   Sem acesso ao valor de venda (os dois null, ver valoresObra.ts) a serie fica de fora.
 //   A parcela so guarda UMA data de recebimento: parcela paga em partes conta o valor todo na ultima data.
 // Datas comparadas como texto AAAA-MM-DD (new Date("AAAA-MM-DD") escorrega um dia no fuso do Brasil).
 import { lerNumero } from "./numero";
@@ -67,6 +68,8 @@ export function valorVendaObra(
   obra: { valor_produto?: number | string | null; valor_servico?: number | string | null } | null | undefined,
   parcelas: ParcelaRecebimentoLinha[],
 ): number {
+  // null nos dois = usuario sem acesso a venda: base 0 tira a serie "recebido" da curva (nao usa as parcelas)
+  if (obra && obra.valor_produto === null && obra.valor_servico === null) return 0;
   const venda = num(obra?.valor_produto) + num(obra?.valor_servico);
   if (venda > 0) return venda;
   return parcelas.filter((p) => p.status !== "cancelado").reduce((s, p) => s + num(p.valor_previsto), 0);
