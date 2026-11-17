@@ -11,6 +11,10 @@ export interface LinhaValoresVenda {
   valor_servico: number | string | null;
   // Valor de Faturamento Direto (17/11/2026): so registrado e mostrado no cadastro; nao entra em conta nenhuma
   valor_faturamento_direto?: number | string | null;
+  // envio do faturamento direto ao ERP (p11, 17/11/2026): situacao mostrada ao lado do campo no cadastro
+  faturamento_direto_erp_situacao?: string | null;
+  faturamento_direto_erp_erro?: string | null;
+  faturamento_direto_erp_em?: string | null;
 }
 
 export interface LinhaValoresCompra {
@@ -34,7 +38,9 @@ export async function buscarValoresVenda(ids: string[]): Promise<LinhaValoresVen
   if (unicos.length === 0) return [];
   const { data, error } = await sb()
     .from("obras_valores_venda")
-    .select("id_obra, valor_produto, valor_servico, valor_faturamento_direto")
+    .select(
+      "id_obra, valor_produto, valor_servico, valor_faturamento_direto, faturamento_direto_erp_situacao, faturamento_direto_erp_erro, faturamento_direto_erp_em",
+    )
     .in("id_obra", unicos);
   if (error) throw error;
   return (data || []) as LinhaValoresVenda[];

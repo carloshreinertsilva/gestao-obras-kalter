@@ -6,6 +6,7 @@ import { formatarDataSegura, formatarMoeda, labelFase, labelStatusObra, classeSt
 import { Save, AlertTriangle, Edit2, X, FolderOpen, Loader2, CheckCircle2, Clock, Search, List } from "lucide-react";
 import { mensagemErro } from "../erros";
 import { anexarValoresVenda, buscarValoresVenda, totalVendaObra, TITULO_SEM_ACESSO_VALOR, valoresVendaMudaram } from "../valoresObra";
+import { ajudaFaturamentoDireto, situacaoEnvioFaturamentoDireto, type EnvioFaturamentoDireto } from "../calculoFaturamentoDireto";
 import { useDialogos } from "../Dialogos";
 import {
   anexarValoresProjetos,
@@ -213,6 +214,9 @@ export default function TelaCadastroObras({
   const [valoresErp, setValoresErp] = useState(VALORES_ERP_VAZIOS);
   const [valoresErpOriginais, setValoresErpOriginais] = useState(VALORES_ERP_VAZIOS);
   const [ultimoPedidoErp, setUltimoPedidoErp] = useState<any>(null);
+  // faturamento direto: chave do envio ao ERP (null = ainda nao leu) e situacao do ultimo envio da obra aberta
+  const [fatDiretoErpLigado, setFatDiretoErpLigado] = useState<boolean | null>(null);
+  const [envioFatDireto, setEnvioFatDireto] = useState<EnvioFaturamentoDireto | null>(null);
   const { confirmar } = useDialogos();
 
   // C4: projetos do ERP ainda sem obra no app (tabela projetos_erp, gravada pelo robo). Enquanto o robo novo nao roda
@@ -635,6 +639,7 @@ export default function TelaCadastroObras({
       valores_ocultos: valoresOcultos,
     };
     setNovaObra(noFormulario);
+    setEnvioFatDireto(valores?.find((v) => v.id_obra === obra.id) ?? null);
     // sem a releitura nao da para saber o que a pessoa mudou: entao manda todos os campos do formulario (sem status)
     setObraOriginal(atual ? noFormulario : null);
     setErroObra("");
@@ -680,6 +685,7 @@ export default function TelaCadastroObras({
     setValoresErp(VALORES_ERP_VAZIOS);
     setValoresErpOriginais(VALORES_ERP_VAZIOS);
     setUltimoPedidoErp(null);
+    setEnvioFatDireto(null);
     setObraOriginal(null);
     setErroObra("");
     setErrosCampo({});
@@ -694,6 +700,13 @@ export default function TelaCadastroObras({
   useEffect(() => {
     carregarProjetosErp();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuarioAtual?.id]);
+
+  // cast: funcao nova ainda fora do database.types.ts gerado; erro na leitura = trata como desligado
+  useEffect(() => {
+    (supabase as any)
+      .rpc("faturamento_direto_erp_ligado")
+      .then(({ data }: { data: unknown }) => setFatDiretoErpLigado(data === true));
   }, [usuarioAtual?.id]);
 
   const filtroErp = filtroListaErp.trim().toLowerCase();
@@ -945,10 +958,18 @@ export default function TelaCadastroObras({
                   titulo={isAdmin ? undefined : "Só administradores alteram este valor"}
                 />
               </div>
-              <p className="sm:col-span-2 text-xs text-slate-500 sm:self-end sm:pb-3">
-                Valor faturado direto ao cliente por terceiros. Fica registrado aqui; ainda não é enviado ao ERP.
-                {!isAdmin && " Só administradores alteram este valor."}
-              </p>
+              <div className="sm:col-span-2 text-xs sm:self-end sm:pb-3 space-y-1">
+                <p className="text-slate-500">
+                  {ajudaFaturamentoDireto(fatDiretoErpLigado)}
+                  {!isAdmin && " Só administradores alteram este valor."}
+                </p>
+                {(() => {
+                  const envio = novaObra.id ? situacaoEnvioFaturamentoDireto(envioFatDireto, fatDiretoErpLigado) : null;
+                  if (!envio) return null;
+                  const cor = envio.tom === "erro" ? "text-red-700" : envio.tom === "ok" ? "text-emerald-700" : "text-amber-700";
+                  return <p className={`font-medium ${cor}`}>{envio.texto}</p>;
+                })()}
+              </div>
             </div>
           </Secao>
 

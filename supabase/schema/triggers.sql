@@ -103,7 +103,8 @@ CREATE TRIGGER auditar_obras_valores_restritos AFTER INSERT OR DELETE OR UPDATE 
 CREATE TRIGGER update_obras_valores_restritos_modtime BEFORE UPDATE ON public.obras_valores_restritos FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- obras_valores_venda
-CREATE TRIGGER auditar_obras_valores_venda AFTER INSERT OR DELETE OR UPDATE ON public.obras_valores_venda FOR EACH ROW EXECUTE FUNCTION public.auditar('chave=id_obra');
+CREATE TRIGGER auditar_obras_valores_venda AFTER INSERT OR DELETE OR UPDATE ON public.obras_valores_venda FOR EACH ROW EXECUTE FUNCTION public.auditar('chave=id_obra', 'ignorar=faturamento_direto_alterado_por,faturamento_direto_alterado_em,faturamento_direto_erp_situacao,faturamento_direto_erp_erro,faturamento_direto_erp_em,faturamento_direto_erp_tentativas,faturamento_direto_erp_anterior');
+CREATE TRIGGER trg_obras_valores_venda_fat_direto BEFORE INSERT OR UPDATE OF valor_faturamento_direto ON public.obras_valores_venda FOR EACH ROW EXECUTE FUNCTION public.trg_obras_valores_venda_fat_direto();
 
 -- ocorrencias
 CREATE TRIGGER auditar_ocorrencias AFTER INSERT OR DELETE OR UPDATE ON public.ocorrencias FOR EACH ROW EXECUTE FUNCTION public.auditar();

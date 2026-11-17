@@ -925,11 +925,23 @@ create table public.obras_valores_venda (
     valor_servico numeric,
     atualizado_em timestamp with time zone default now() not null,
     valor_faturamento_direto numeric default 0 not null,
+    faturamento_direto_alterado_por uuid,
+    faturamento_direto_alterado_em timestamp with time zone,
+    faturamento_direto_erp_situacao text,
+    faturamento_direto_erp_erro text,
+    faturamento_direto_erp_em timestamp with time zone,
+    faturamento_direto_erp_tentativas integer default 0 not null,
+    faturamento_direto_erp_anterior numeric,
     constraint obras_valores_venda_pkey PRIMARY KEY (id_obra),
+    constraint obras_valores_venda_fat_direto_situacao_check CHECK (faturamento_direto_erp_situacao IS NULL OR (faturamento_direto_erp_situacao = ANY (ARRAY['pendente'::text, 'gravado'::text, 'erro'::text]))),
+    constraint obras_valores_venda_faturamento_direto_alterado_por_fkey FOREIGN KEY (faturamento_direto_alterado_por) REFERENCES public.usuarios(id) ON DELETE SET NULL,
     constraint obras_valores_venda_id_obra_fkey FOREIGN KEY (id_obra) REFERENCES public.obras(id) ON DELETE CASCADE
 );
 comment on table public.obras_valores_venda is 'Valor de venda (produto/servico) da obra, espelho de obras.valor_produto/valor_servico mantido pelo gatilho trg_obras_valores_venda_*. Leitura: admin/coordenador, gestor da obra e assistente dele. Ninguem do app grava direto.';
-comment on column public.obras_valores_venda.valor_faturamento_direto is 'Valor faturado direto ao cliente por terceiros (R$). So registrado no app; ainda nao enviado ao ERP. Altera: so admin.';
+comment on column public.obras_valores_venda.valor_faturamento_direto is 'Valor faturado direto ao cliente por terceiros (R$). Vai ao ERP em CADPROJ.cpj_vlr_hora_proj (robo, enquanto faturamento_direto_erp_ligado() = true). Altera: so admin.';
+comment on column public.obras_valores_venda.faturamento_direto_alterado_por is 'Quem alterou por ultimo o faturamento direto (gatilho). O robo grava no ERP com o login_erp dessa pessoa.';
+comment on column public.obras_valores_venda.faturamento_direto_erp_situacao is 'Envio do faturamento direto ao ERP: nulo (nunca alterado no app), pendente, gravado, erro. Mantido pelo gatilho e pelo robo.';
+comment on column public.obras_valores_venda.faturamento_direto_erp_anterior is 'Valor que estava no ERP (cpj_vlr_hora_proj) antes da ultima gravacao do robo - para desfazer.';
 
 create table public.ocorrencias (
     id uuid default gen_random_uuid() not null,

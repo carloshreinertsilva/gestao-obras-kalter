@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- 193 funcoes/procedures do schema public, ordenadas por nome + argumentos
+-- 195 funcoes/procedures do schema public, ordenadas por nome + argumentos
 
 -- public.after_insert_obras_criar_pmis_padrao()
 CREATE OR REPLACE FUNCTION public.after_insert_obras_criar_pmis_padrao()
@@ -1209,6 +1209,16 @@ begin
   end if;
 end $function$
 ;
+
+-- public.faturamento_direto_erp_ligado()
+CREATE OR REPLACE FUNCTION public.faturamento_direto_erp_ligado()
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public'
+AS $function$ select false $function$
+;
+comment on function public.faturamento_direto_erp_ligado() is 'Chave do envio do faturamento direto ao ERP (CADPROJ.cpj_vlr_hora_proj). false = o robo so simula. Ligar: supabase/pendentes/p11_ligar_faturamento_direto_erp.sql, na 1a gravacao acompanhada com o Carlos.';
 
 -- public.faturamento_logistica_aprovar(p_id uuid, p_itens jsonb, p_peso_bruto numeric, p_peso_liquido numeric, p_volumes integer, p_especie text, p_codigo_transportadora integer, p_transportadora text, p_observacao text)
 CREATE OR REPLACE FUNCTION public.faturamento_logistica_aprovar(p_id uuid, p_itens jsonb, p_peso_bruto numeric, p_peso_liquido numeric, p_volumes integer, p_especie text, p_codigo_transportadora integer, p_transportadora text, p_observacao text)
@@ -4656,6 +4666,32 @@ begin
   end if;
   return new;
 end $function$
+;
+
+-- public.trg_obras_valores_venda_fat_direto()
+CREATE OR REPLACE FUNCTION public.trg_obras_valores_venda_fat_direto()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if tg_op = 'INSERT' then
+    if coalesce(new.valor_faturamento_direto, 0) = 0 then
+      return new;
+    end if;
+  elsif new.valor_faturamento_direto is not distinct from old.valor_faturamento_direto then
+    return new;
+  end if;
+  new.faturamento_direto_alterado_por := public.usuario_atual_id();
+  new.faturamento_direto_alterado_em := now();
+  new.faturamento_direto_erp_situacao := 'pendente';
+  new.faturamento_direto_erp_erro := null;
+  new.faturamento_direto_erp_em := null;
+  new.faturamento_direto_erp_tentativas := 0;
+  return new;
+end;
+$function$
 ;
 
 -- public.trg_projetos_erp_obra_criada()

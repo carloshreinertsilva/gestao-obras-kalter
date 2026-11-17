@@ -154,6 +154,7 @@ grant execute on function public.exportacao_salvar(p_id_obra uuid, p_dados jsonb
 -- function public.familia_com_nome(p_id_obra uuid, p_familia text): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.faturamento_cancelar(p_id uuid, p_motivo text) to authenticated;
 grant execute on function public.faturamento_devolver(p_id uuid, p_motivo text) to authenticated;
+grant execute on function public.faturamento_direto_erp_ligado() to authenticated;
 grant execute on function public.faturamento_logistica_aprovar(p_id uuid, p_itens jsonb, p_peso_bruto numeric, p_peso_liquido numeric, p_volumes integer, p_especie text, p_codigo_transportadora integer, p_transportadora text, p_observacao text) to authenticated;
 grant execute on function public.faturamento_salvar(p_id uuid, p_id_obra uuid, p_tipo text, p_data_desejada date, p_observacao text, p_itens jsonb, p_enviar boolean, p_anexos jsonb) to authenticated;
 grant execute on function public.finalizar_obra_pmis(p_id_obra uuid, p_data_finalizacao date, p_observacao text) to authenticated;
@@ -285,6 +286,7 @@ grant execute on function public.sf_sugestao_conferencia(p_id uuid) to authentic
 -- function public.trg_obra_compras_abertas_espelhar_valores(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_obras_espelhar_valores_venda(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_obras_protege_codigo(): sem execute para anon, authenticated, PUBLIC
+-- function public.trg_obras_valores_venda_fat_direto(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_projetos_erp_obra_criada(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_sf_romaneio_avisos(): sem execute para anon, authenticated, PUBLIC
 -- function public.trg_solicitacao_faturamento_avisos(): sem execute para anon, authenticated, PUBLIC
