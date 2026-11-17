@@ -628,23 +628,6 @@ export default function TelaDashboard({
       </div>
       )}
 
-      {/* carteira: previsao de faturamento/recebimento por mes e margem prevista x atual (a margem so aparece
-          para quem o banco deixa ver: admin, coordenador e o gestor da obra) */}
-      {estadoCarga === "ok" && obrasCarteira.length > 0 && (
-        <Suspense fallback={null}>
-          <PrevisaoMensal obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
-          <MargemCarteira obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
-        </Suspense>
-      )}
-
-      {/* carteira (Pacote 4): compras/entregas atrasadas das obras e cronograma em barras (comeca recolhido) */}
-      {estadoCarga === "ok" && obrasCarteira.length > 0 && (
-        <Suspense fallback={null}>
-          <ComprasAtrasadas obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
-          <GanttCarteira obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
-        </Suspense>
-      )}
-
       {/* Status geral ocupa o espaco que sobra; Projetos Criticos fica numa coluna
           estreita (os motivos sao textos curtos) so em tela grande (>= 1700px, onde a
           tabela inteira cabe). Abaixo disso empilha: a tabela pega a largura toda e os
@@ -768,6 +751,23 @@ export default function TelaDashboard({
           </ul>
         )}
       </div>
+
+      {/* carteira: previsao de faturamento/recebimento por mes e margem prevista x atual (a margem so aparece
+          para quem o banco deixa ver: admin, coordenador e o gestor da obra) */}
+      {estadoCarga === "ok" && obrasCarteira.length > 0 && (
+        <Suspense fallback={null}>
+          <PrevisaoMensal obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
+          <MargemCarteira obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
+        </Suspense>
+      )}
+
+      {/* carteira (Pacote 4): compras/entregas atrasadas das obras e cronograma em barras (comeca recolhido) */}
+      {estadoCarga === "ok" && obrasCarteira.length > 0 && (
+        <Suspense fallback={null}>
+          <ComprasAtrasadas obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
+          <GanttCarteira obras={obrasCarteira} onAbrirObra={abrirObraPorId} />
+        </Suspense>
+      )}
 
       <div className={`grid grid-cols-1 ${isAdmin ? "xl:grid-cols-3" : "xl:grid-cols-2"} gap-6 items-start`}>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { AlertTriangle, ChevronRight, Truck } from "lucide-react";
 import { supabase } from "../supabase";
 import { formatarDataSegura } from "../utils";
@@ -22,8 +22,16 @@ export type { ObraPainel } from "./calculoComprasAtrasadas";
 // atraso e a mesma da obra (calculoComprasAtrasadas.ts). Sem preco: so o que a aba Compras da obra ja mostra.
 
 const PAGINA = 1000;
-const OBRAS_INICIAIS = 5;
-const ITENS_POR_OBRA = 3;
+const OBRAS_INICIAIS = 8;
+const ITENS_POR_OBRA = 10;
+
+// liga/desliga um id no conjunto (estado local por obra; o pai re-renderiza a cada 60 s e nao pode fechar o que o usuario abriu)
+const alternar = (set: Dispatch<SetStateAction<Set<string>>>, id: string) =>
+  set((ant) => {
+    const novo = new Set(ant);
+    if (!novo.delete(id)) novo.add(id);
+    return novo;
+  });
 
 async function buscarPaginado<T>(consulta: (inicio: number, fim: number) => PromiseLike<{ data: unknown; error: unknown }>) {
   const todas: T[] = [];
@@ -41,6 +49,8 @@ export default function ComprasAtrasadas({ obras, onAbrirObra }: { obras: ObraPa
   const chave = chaveObras(obras);
   const [dados, setDados] = useState<{ chave: string; compras: CompraAberta[]; smas: SmaMaterial[] } | null>(null);
   const [todas, setTodas] = useState(false);
+  const [abertas, setAbertas] = useState<Set<string>>(() => new Set());
+  const [itensTodos, setItensTodos] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     const ids = chave ? chave.split(",") : [];
@@ -109,60 +119,74 @@ export default function ComprasAtrasadas({ obras, onAbrirObra }: { obras: ObraPa
         </p>
       </div>
 
-      <div className="space-y-3">
-        {visiveis.map(({ obra, itens, piorAtraso }) => (
-          <div key={obra.id} className="border rounded-lg overflow-hidden">
-            <button
-              type="button"
-              onClick={() => onAbrirObra(obra.id)}
-              className="w-full text-left px-3 py-2 bg-slate-50 hover:bg-slate-100 flex items-center gap-2"
-              title="Abrir a obra"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-slate-800 truncate">
-                  {obra.codigo} · {obra.nome}
+      <div className="space-y-2">
+        {visiveis.map(({ obra, itens, piorAtraso }) => {
+          const aberta = abertas.has(obra.id);
+          const todosItens = itensTodos.has(obra.id);
+          const itensVisiveis = todosItens ? itens : itens.slice(0, ITENS_POR_OBRA);
+          const idLista = `compras-atrasadas-${obra.id}`;
+          return (
+            <div key={obra.id} className="border rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => alternar(setAbertas, obra.id)}
+                aria-expanded={aberta}
+                aria-controls={idLista}
+                className="w-full text-left px-3 py-2 bg-slate-50 hover:bg-slate-100 flex items-center gap-2"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-slate-800 truncate">
+                    {obra.codigo} · {obra.nome}
+                  </span>
+                  <span className="block text-xs text-slate-500">
+                    {itens.length} {itens.length === 1 ? "item atrasado" : "itens atrasados"} · pior: {textoDias(piorAtraso)}
+                  </span>
                 </span>
-                <span className="block text-xs text-slate-500">
-                  {itens.length} {itens.length === 1 ? "item atrasado" : "itens atrasados"} · pior: {textoDias(piorAtraso)}
-                </span>
-              </span>
-              <ChevronRight size={16} className="shrink-0 text-slate-400" aria-hidden="true" />
-            </button>
-            <ul className="divide-y">
-              {itens.slice(0, ITENS_POR_OBRA).map((i) => (
-                <li key={i.chave}>
-                  <button type="button" onClick={() => onAbrirObra(obra.id)} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-start gap-3">
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm text-slate-800 truncate" title={i.descricao || undefined}>
-                        {i.codigo_material && <span className="text-xs text-slate-500">{i.codigo_material} </span>}
-                        {i.descricao || "Material sem descrição"}
-                      </span>
-                      <span className="block text-xs text-slate-500 break-words">
-                        {i.urgente && <span className="font-semibold text-red-700">Urgente · </span>}
-                        {i.nr_sma != null && <>SMA {i.nr_sma} · </>}
-                        {i.nr_pedido ? <>Pedido {i.nr_pedido}{i.fornecedor ? ` · ${i.fornecedor}` : ""} · </> : null}
-                        {i.situacao} · {i.tipo === "compra" ? "entrega prevista" : "necessidade"} {formatarDataSegura(i.data)}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-xs font-semibold text-red-700 whitespace-nowrap">{textoDias(i.dias)}</span>
-                  </button>
-                </li>
-              ))}
-              {itens.length > ITENS_POR_OBRA && (
-                <li>
-                  <button type="button" onClick={() => onAbrirObra(obra.id)} className="w-full text-left px-3 py-1.5 text-xs font-semibold text-[#2A6377] hover:bg-slate-50">
-                    + {itens.length - ITENS_POR_OBRA} {itens.length - ITENS_POR_OBRA === 1 ? "item" : "itens"} — ver na obra
-                  </button>
-                </li>
+                <ChevronRight size={16} className={`shrink-0 text-slate-400 transition-transform ${aberta ? "rotate-90" : ""}`} aria-hidden="true" />
+              </button>
+              {aberta && (
+                <div id={idLista}>
+                  <ul className="divide-y">
+                    {itensVisiveis.map((i) => (
+                      <li key={i.chave} className="px-3 py-2 flex items-start gap-3">
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm text-slate-800 truncate" title={i.descricao || undefined}>
+                            {i.codigo_material && <span className="text-xs text-slate-500">{i.codigo_material} </span>}
+                            {i.descricao || "Material sem descrição"}
+                          </span>
+                          <span className="block text-xs text-slate-500 break-words">
+                            {i.urgente && <span className="font-semibold text-red-700">Urgente · </span>}
+                            {i.nr_sma != null && <>SMA {i.nr_sma} · </>}
+                            {i.nr_pedido ? <>Pedido {i.nr_pedido}{i.fornecedor ? ` · ${i.fornecedor}` : ""} · </> : null}
+                            {i.situacao} · {i.tipo === "compra" ? "entrega prevista" : "necessidade"} {formatarDataSegura(i.data)}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs font-semibold text-red-700 whitespace-nowrap">{textoDias(i.dias)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 border-t">
+                    {itens.length > ITENS_POR_OBRA ? (
+                      <button type="button" onClick={() => alternar(setItensTodos, obra.id)} className="text-xs font-semibold text-[#2A6377] hover:underline">
+                        {todosItens ? "Mostrar menos" : `Ver mais ${itens.length - ITENS_POR_OBRA}`}
+                      </button>
+                    ) : (
+                      <span />
+                    )}
+                    <button type="button" onClick={() => onAbrirObra(obra.id)} className="text-xs font-semibold text-[#2A6377] hover:underline">
+                      Abrir a obra
+                    </button>
+                  </div>
+                </div>
               )}
-            </ul>
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
 
       {resumo.obras.length > OBRAS_INICIAIS && (
         <button type="button" onClick={() => setTodas((v) => !v)} className="mt-3 text-sm font-semibold text-[#2A6377] hover:underline">
-          {todas ? "Mostrar menos" : `Ver todas as obras (${resumo.obras.length})`}
+          {todas ? "Mostrar menos" : `Ver todas (${resumo.obras.length})`}
         </button>
       )}
     </section>
