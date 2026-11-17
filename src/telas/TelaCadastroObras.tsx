@@ -127,7 +127,21 @@ function lerReais(texto: string): string {
   return isNaN(n) ? "" : String(Math.round(n * 100) / 100);
 }
 
-function CampoMoeda({ id, valor, onChange, placeholder = "0,00" }: { id: string; valor: string; onChange: (v: string) => void; placeholder?: string }) {
+function CampoMoeda({
+  id,
+  valor,
+  onChange,
+  placeholder = "0,00",
+  desabilitado,
+  titulo,
+}: {
+  id: string;
+  valor: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  desabilitado?: boolean;
+  titulo?: string;
+}) {
   const [focado, setFocado] = useState(false);
   const [texto, setTexto] = useState("");
   return (
@@ -148,7 +162,9 @@ function CampoMoeda({ id, valor, onChange, placeholder = "0,00" }: { id: string;
           onChange(lerReais(e.target.value));
         }}
         onBlur={() => setFocado(false)}
-        className={`${classeCampo} pl-9 text-right tabular-nums`}
+        disabled={desabilitado}
+        title={titulo}
+        className={`${classeCampo} pl-9 text-right tabular-nums disabled:bg-slate-50 disabled:text-slate-600 disabled:cursor-not-allowed`}
       />
     </div>
   );
@@ -179,6 +195,7 @@ export default function TelaCadastroObras({
     id_responsavel: "",
     valor_produto: "",
     valor_servico: "",
+    valor_faturamento_direto: "",
     observacoes: "",
   });
   // como a obra estava no banco ao abrir a edicao: o update manda so o que mudou em relacao a isto
@@ -504,14 +521,20 @@ export default function TelaCadastroObras({
           p_id_obra: idObraSalva,
           p_valor_produto: Number(novaObra.valor_produto || 0),
           p_valor_servico: Number(novaObra.valor_servico || 0),
+          // faturamento direto: so admin altera (o banco recusa os demais); sem o parametro o banco nao mexe nele
+          ...(isAdmin ? { p_valor_faturamento_direto: Number(novaObra.valor_faturamento_direto || 0) } : {}),
         });
         if (erroVenda) {
           // a obra ja foi salva; so os valores de venda ficaram de fora. O formulario passa a editar a obra salva,
           // com os valores que estao no banco como originais: salvar de novo so tenta os valores (nao cadastra outra obra)
           const salva = { ...novaObra, id: idObraSalva, id_responsavel: responsavelObra };
           const noBanco = novaObra.id && obraOriginal
-            ? { valor_produto: obraOriginal.valor_produto, valor_servico: obraOriginal.valor_servico }
-            : { valor_produto: "", valor_servico: "" };
+            ? {
+                valor_produto: obraOriginal.valor_produto,
+                valor_servico: obraOriginal.valor_servico,
+                valor_faturamento_direto: obraOriginal.valor_faturamento_direto,
+              }
+            : { valor_produto: "", valor_servico: "", valor_faturamento_direto: "" };
           setNovaObra(salva);
           setObraOriginal({ ...salva, ...noBanco });
           setBuscaErp(null);
@@ -565,6 +588,7 @@ export default function TelaCadastroObras({
         id_responsavel: "",
         valor_produto: "",
         valor_servico: "",
+        valor_faturamento_direto: "",
         observacoes: "",
       });
       setBuscaErp(null);
@@ -605,6 +629,7 @@ export default function TelaCadastroObras({
       id_responsavel: obra.id_responsavel || "",
       valor_produto: obra.valor_produto ?? "",
       valor_servico: obra.valor_servico ?? "",
+      valor_faturamento_direto: obra.valor_faturamento_direto ?? "",
       observacoes: obra.observacoes || "",
       exportacao: Boolean(obra.exportacao),
       valores_ocultos: valoresOcultos,
@@ -649,6 +674,7 @@ export default function TelaCadastroObras({
       id_responsavel: "",
       valor_produto: "",
       valor_servico: "",
+      valor_faturamento_direto: "",
       observacoes: "",
     });
     setValoresErp(VALORES_ERP_VAZIOS);
@@ -906,6 +932,23 @@ export default function TelaCadastroObras({
                   {formatarMoeda(totalVenda)}
                 </div>
               </div>
+            </div>
+            {/* registrado a parte: nao entra no total da venda nem em conta nenhuma do app; so admin altera */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+              <div>
+                <Rotulo htmlFor="obra-valor-faturamento-direto" texto="Valor de Faturamento Direto" />
+                <CampoMoeda
+                  id="obra-valor-faturamento-direto"
+                  valor={String(novaObra.valor_faturamento_direto ?? "")}
+                  onChange={(v) => setNovaObra({ ...novaObra, valor_faturamento_direto: v })}
+                  desabilitado={!isAdmin}
+                  titulo={isAdmin ? undefined : "Só administradores alteram este valor"}
+                />
+              </div>
+              <p className="sm:col-span-2 text-xs text-slate-500 sm:self-end sm:pb-3">
+                Valor faturado direto ao cliente por terceiros. Fica registrado aqui; ainda não é enviado ao ERP.
+                {!isAdmin && " Só administradores alteram este valor."}
+              </p>
             </div>
           </Secao>
 

@@ -924,10 +924,12 @@ create table public.obras_valores_venda (
     valor_produto numeric,
     valor_servico numeric,
     atualizado_em timestamp with time zone default now() not null,
+    valor_faturamento_direto numeric default 0 not null,
     constraint obras_valores_venda_pkey PRIMARY KEY (id_obra),
     constraint obras_valores_venda_id_obra_fkey FOREIGN KEY (id_obra) REFERENCES public.obras(id) ON DELETE CASCADE
 );
 comment on table public.obras_valores_venda is 'Valor de venda (produto/servico) da obra, espelho de obras.valor_produto/valor_servico mantido pelo gatilho trg_obras_valores_venda_*. Leitura: admin/coordenador, gestor da obra e assistente dele. Ninguem do app grava direto.';
+comment on column public.obras_valores_venda.valor_faturamento_direto is 'Valor faturado direto ao cliente por terceiros (R$). So registrado no app; ainda nao enviado ao ERP. Altera: so admin.';
 
 create table public.ocorrencias (
     id uuid default gen_random_uuid() not null,

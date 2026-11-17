@@ -3144,8 +3144,8 @@ begin
 end $function$
 ;
 
--- public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric)
-CREATE OR REPLACE FUNCTION public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric)
+-- public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric, p_valor_faturamento_direto numeric)
+CREATE OR REPLACE FUNCTION public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric, p_valor_faturamento_direto numeric DEFAULT NULL::numeric)
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -3155,6 +3155,8 @@ declare
   v_resp uuid;
   v_produto numeric := coalesce(p_valor_produto, 0);
   v_servico numeric := coalesce(p_valor_servico, 0);
+  v_fat_atual numeric;
+  v_fat numeric;
 begin
   select o.id_responsavel into v_resp from public.obras o where o.id = p_id_obra for update;
   if not found then
@@ -3170,8 +3172,31 @@ begin
   if v_produto >= 1e12 or v_servico >= 1e12 then
     raise exception 'Valor de venda inválido.' using errcode = '22023';
   end if;
+  if p_valor_faturamento_direto < 0 then
+    raise exception 'O valor de faturamento direto não pode ser negativo.' using errcode = '22023';
+  end if;
+  if p_valor_faturamento_direto >= 1e12 then
+    raise exception 'Valor de faturamento direto inválido.' using errcode = '22023';
+  end if;
 
-  -- fase 3: ainda grava em obras; o gatilho trg_obras_valores_venda_upd espelha em obras_valores_venda
+  select v.valor_faturamento_direto into v_fat_atual from public.obras_valores_venda v where v.id_obra = p_id_obra for update;
+  -- nulo = nao mexe no campo
+  v_fat := coalesce(p_valor_faturamento_direto, v_fat_atual, 0);
+  if p_valor_faturamento_direto is not null and p_valor_faturamento_direto is distinct from coalesce(v_fat_atual, 0)
+     and not coalesce(public.eh_admin(), false) then
+    raise exception 'Só administradores alteram o valor de faturamento direto.' using errcode = '42501';
+  end if;
+
+  -- grava a tabela restrita de uma vez (uma linha so no historico quando muda mais de um valor) ...
+  insert into public.obras_valores_venda as v (id_obra, valor_produto, valor_servico, valor_faturamento_direto, atualizado_em)
+  values (p_id_obra, v_produto, v_servico, v_fat, now())
+  on conflict (id_obra) do update
+     set valor_produto = excluded.valor_produto, valor_servico = excluded.valor_servico,
+         valor_faturamento_direto = excluded.valor_faturamento_direto, atualizado_em = now()
+   where (v.valor_produto, v.valor_servico, v.valor_faturamento_direto)
+         is distinct from (excluded.valor_produto, excluded.valor_servico, excluded.valor_faturamento_direto);
+
+  -- ... e, enquanto as colunas existirem, obras (o gatilho espelho encontra tudo igual e nao regrava)
   update public.obras o
      set valor_produto = v_produto, valor_servico = v_servico
    where o.id = p_id_obra
@@ -3179,7 +3204,7 @@ begin
 end;
 $function$
 ;
-comment on function public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric) is 'Grava o valor de venda (material/servico) da obra. Quem pode: quem pode alterar a obra (pode_gerenciar_responsavel). Nulo = 0; negativo = erro. Fase 3: grava em obras e o gatilho espelha em obras_valores_venda.';
+comment on function public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric, p_valor_faturamento_direto numeric) is 'Grava o valor de venda (material/servico) e o faturamento direto da obra. Quem pode: quem pode alterar a obra (pode_gerenciar_responsavel); faturamento direto so admin. Nulo em produto/servico = 0; faturamento direto nulo = nao mexe. Negativo = erro. Fase 3: grava em obras_valores_venda e em obras (espelho).';
 
 -- public.obras_resumo_cartao(p_ids uuid[])
 CREATE OR REPLACE FUNCTION public.obras_resumo_cartao(p_ids uuid[])

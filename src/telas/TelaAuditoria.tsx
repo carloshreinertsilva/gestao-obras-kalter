@@ -71,6 +71,14 @@ const CAMPOS_NOME = ["titulo", "nome", "item", "descricao", "descricao_familia",
   "transportadora_nome", "familia", "codigo_obra", "tipo_veiculo", "situacao"];
 const LIMITE = 200;
 
+// nome amigavel de alguns campos (os demais aparecem com o nome da coluna)
+const NOMES_CAMPOS: Record<string, string> = {
+  valor_produto: "Valor de venda (materiais)",
+  valor_servico: "Valor de venda (serviço)",
+  valor_faturamento_direto: "Valor de faturamento direto",
+};
+const nomeCampo = (c: string) => NOMES_CAMPOS[c] || c;
+
 const valorTexto = (v: unknown) => {
   if (v === null || v === undefined || v === "") return "—";
   if (typeof v === "object") return JSON.stringify(v);
@@ -143,7 +151,7 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
   };
 
   const resumo = (r: Registro) =>
-    r.operacao === "alteracao" ? `Campos: ${Object.keys(r.depois || {}).join(", ")}` : nomeDoRegistro(r);
+    r.operacao === "alteracao" ? `Campos: ${Object.keys(r.depois || {}).map(nomeCampo).join(", ")}` : nomeDoRegistro(r);
 
   // planilha (abre no Excel): uma linha por registro visivel, com antes/depois de cada campo
   const exportar = () =>
@@ -290,7 +298,7 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
                                 <tbody>
                                   {campos.map((c) => (
                                     <tr key={c} className="border-t border-slate-200 align-top">
-                                      <td className="pr-4 py-1 font-semibold text-slate-600">{c}</td>
+                                      <td className="pr-4 py-1 font-semibold text-slate-600">{nomeCampo(c)}</td>
                                       {r.operacao !== "inclusao" && (
                                         <td className="pr-4 py-1 text-red-700 break-all">{valorTexto(r.antes?.[c])}</td>
                                       )}

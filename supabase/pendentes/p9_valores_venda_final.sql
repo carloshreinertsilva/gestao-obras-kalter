@@ -12,8 +12,11 @@
 --  4. Depois: regenerar supabase/schema e src/database.types.ts do app.
 
 -- ------------------------------------------------------------------ 1. funcao grava direto na tabela restrita
--- Mesmas regras e mensagens da fase 3 (p8); so muda o destino.
-create or replace function public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric)
+-- Mesmas regras, mensagens e assinatura da fase 3 (p8 + p10, com o faturamento direto: nulo = nao mexe, so admin
+-- altera); so muda o destino. O drop da assinatura antiga de 3 parametros e so por seguranca (o p10 ja a removeu).
+drop function if exists public.obra_valores_venda_salvar(uuid, numeric, numeric);
+create or replace function public.obra_valores_venda_salvar(
+  p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric, p_valor_faturamento_direto numeric default null)
  returns void
  language plpgsql
  security definer
@@ -23,6 +26,8 @@ declare
   v_resp uuid;
   v_produto numeric := coalesce(p_valor_produto, 0);
   v_servico numeric := coalesce(p_valor_servico, 0);
+  v_fat_atual numeric;
+  v_fat numeric;
 begin
   select o.id_responsavel into v_resp from public.obras o where o.id = p_id_obra for update;
   if not found then
@@ -37,23 +42,40 @@ begin
   if v_produto >= 1e12 or v_servico >= 1e12 then
     raise exception 'Valor de venda inválido.' using errcode = '22023';
   end if;
+  if p_valor_faturamento_direto < 0 then
+    raise exception 'O valor de faturamento direto não pode ser negativo.' using errcode = '22023';
+  end if;
+  if p_valor_faturamento_direto >= 1e12 then
+    raise exception 'Valor de faturamento direto inválido.' using errcode = '22023';
+  end if;
 
-  insert into public.obras_valores_venda as v (id_obra, valor_produto, valor_servico, atualizado_em)
-  values (p_id_obra, v_produto, v_servico, now())
+  select v.valor_faturamento_direto into v_fat_atual from public.obras_valores_venda v where v.id_obra = p_id_obra for update;
+  v_fat := coalesce(p_valor_faturamento_direto, v_fat_atual, 0);
+  if p_valor_faturamento_direto is not null and p_valor_faturamento_direto is distinct from coalesce(v_fat_atual, 0)
+     and not coalesce(public.eh_admin(), false) then
+    raise exception 'Só administradores alteram o valor de faturamento direto.' using errcode = '42501';
+  end if;
+
+  insert into public.obras_valores_venda as v (id_obra, valor_produto, valor_servico, valor_faturamento_direto, atualizado_em)
+  values (p_id_obra, v_produto, v_servico, v_fat, now())
   on conflict (id_obra) do update
-     set valor_produto = excluded.valor_produto, valor_servico = excluded.valor_servico, atualizado_em = now()
-   where (v.valor_produto, v.valor_servico) is distinct from (excluded.valor_produto, excluded.valor_servico);
+     set valor_produto = excluded.valor_produto, valor_servico = excluded.valor_servico,
+         valor_faturamento_direto = excluded.valor_faturamento_direto, atualizado_em = now()
+   where (v.valor_produto, v.valor_servico, v.valor_faturamento_direto)
+         is distinct from (excluded.valor_produto, excluded.valor_servico, excluded.valor_faturamento_direto);
 end;
 $function$;
-comment on function public.obra_valores_venda_salvar(uuid, numeric, numeric) is
-  'Grava o valor de venda (material/servico) da obra em obras_valores_venda. Quem pode: quem pode alterar a obra '
-  '(pode_gerenciar_responsavel). Nulo = 0; negativo = erro.';
-revoke all on function public.obra_valores_venda_salvar(uuid, numeric, numeric) from public, anon;
-grant execute on function public.obra_valores_venda_salvar(uuid, numeric, numeric) to authenticated;
+comment on function public.obra_valores_venda_salvar(uuid, numeric, numeric, numeric) is
+  'Grava o valor de venda (material/servico) e o faturamento direto da obra em obras_valores_venda. Quem pode: quem '
+  'pode alterar a obra (pode_gerenciar_responsavel); faturamento direto so admin. Nulo em produto/servico = 0; '
+  'faturamento direto nulo = nao mexe. Negativo = erro.';
+revoke all on function public.obra_valores_venda_salvar(uuid, numeric, numeric, numeric) from public, anon;
+grant execute on function public.obra_valores_venda_salvar(uuid, numeric, numeric, numeric) to authenticated;
 
 -- ------------------------------------------------------------------ 2. gatilhos espelho
 -- O de update sai. O de insert continua, mas cria a linha com 0: obra sem linha em obras_valores_venda e lida pelo
 -- app como "sem acesso" (null), entao toda obra nova precisa nascer com a linha (o app grava os valores logo depois).
+-- valor_faturamento_direto nao e citado: nasce com o default 0 e nunca e sobrescrito aqui.
 drop trigger if exists trg_obras_valores_venda_upd on public.obras;
 drop trigger if exists trg_obras_valores_venda_ins on public.obras;
 

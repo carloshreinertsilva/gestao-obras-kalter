@@ -9,6 +9,8 @@ export interface LinhaValoresVenda {
   id_obra: string;
   valor_produto: number | string | null;
   valor_servico: number | string | null;
+  // Valor de Faturamento Direto (17/11/2026): so registrado e mostrado no cadastro; nao entra em conta nenhuma
+  valor_faturamento_direto?: number | string | null;
 }
 
 export interface LinhaValoresCompra {
@@ -32,7 +34,7 @@ export async function buscarValoresVenda(ids: string[]): Promise<LinhaValoresVen
   if (unicos.length === 0) return [];
   const { data, error } = await sb()
     .from("obras_valores_venda")
-    .select("id_obra, valor_produto, valor_servico")
+    .select("id_obra, valor_produto, valor_servico, valor_faturamento_direto")
     .in("id_obra", unicos);
   if (error) throw error;
   return (data || []) as LinhaValoresVenda[];
@@ -61,14 +63,14 @@ const numeroOuZero = (v: number | string | null | undefined) => {
 };
 
 /**
- * Anexa valor_produto/valor_servico (mesmos nomes da tabela antiga) a cada obra.
+ * Anexa valor_produto/valor_servico (mesmos nomes da tabela antiga) e valor_faturamento_direto a cada obra.
  * Com linha: valores numericos (nulo no banco = 0, como o app sempre tratou "obra sem valor").
- * Sem linha (sem acesso): os dois ficam null.
+ * Sem linha (sem acesso): os tres ficam null.
  */
 export function anexarValoresVenda<T extends { id: string }>(
   obras: T[],
   valores: LinhaValoresVenda[],
-): (T & { valor_produto: number | null; valor_servico: number | null })[] {
+): (T & { valor_produto: number | null; valor_servico: number | null; valor_faturamento_direto: number | null })[] {
   const porObra = new Map(valores.map((v) => [v.id_obra, v]));
   return obras.map((o) => {
     const v = porObra.get(o.id);
@@ -76,6 +78,7 @@ export function anexarValoresVenda<T extends { id: string }>(
       ...o,
       valor_produto: v ? numeroOuZero(v.valor_produto) : null,
       valor_servico: v ? numeroOuZero(v.valor_servico) : null,
+      valor_faturamento_direto: v ? numeroOuZero(v.valor_faturamento_direto) : null,
     };
   });
 }
@@ -88,15 +91,23 @@ export function totalVendaObra(
   return (Number(obra.valor_produto) || 0) + (Number(obra.valor_servico) || 0);
 }
 
-type ValoresDigitados = { valor_produto?: number | string | null; valor_servico?: number | string | null };
+type ValoresDigitados = {
+  valor_produto?: number | string | null;
+  valor_servico?: number | string | null;
+  valor_faturamento_direto?: number | string | null;
+};
 
 /**
- * Cadastro de obra: os valores de venda mudaram em relacao ao que esta no banco? Vazio/nulo = 0 (o banco grava 0).
+ * Cadastro de obra: os valores de venda (ou o faturamento direto) mudaram em relacao ao que esta no banco? Vazio/nulo = 0 (o banco grava 0).
  * Sem original (obra nova ou releitura falhou) compara com 0: obra nova so chama a gravacao se a pessoa digitou valor.
  */
 export function valoresVendaMudaram(atual: ValoresDigitados, original: ValoresDigitados | null | undefined): boolean {
   const n = (v: number | string | null | undefined) => numeroOuZero(v ?? 0);
-  return n(atual.valor_produto) !== n(original?.valor_produto) || n(atual.valor_servico) !== n(original?.valor_servico);
+  return (
+    n(atual.valor_produto) !== n(original?.valor_produto) ||
+    n(atual.valor_servico) !== n(original?.valor_servico) ||
+    n(atual.valor_faturamento_direto) !== n(original?.valor_faturamento_direto)
+  );
 }
 
 /** Soma da carteira so com as obras que tem valor visivel; parcial = alguma obra ficou de fora. */
