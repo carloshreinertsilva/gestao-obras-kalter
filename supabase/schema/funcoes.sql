@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- 192 funcoes/procedures do schema public, ordenadas por nome + argumentos
+-- 193 funcoes/procedures do schema public, ordenadas por nome + argumentos
 
 -- public.after_insert_obras_criar_pmis_padrao()
 CREATE OR REPLACE FUNCTION public.after_insert_obras_criar_pmis_padrao()
@@ -3143,6 +3143,43 @@ begin
   return v_id;
 end $function$
 ;
+
+-- public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric)
+CREATE OR REPLACE FUNCTION public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_resp uuid;
+  v_produto numeric := coalesce(p_valor_produto, 0);
+  v_servico numeric := coalesce(p_valor_servico, 0);
+begin
+  select o.id_responsavel into v_resp from public.obras o where o.id = p_id_obra for update;
+  if not found then
+    raise exception 'Obra não encontrada.' using errcode = 'P0002';
+  end if;
+  if not coalesce(public.pode_gerenciar_responsavel(v_resp), false) then
+    raise exception 'Você não tem permissão para alterar os valores de venda desta obra.' using errcode = '42501';
+  end if;
+  -- NaN e infinito ordenam acima de qualquer numero: o teste de limite pega os dois
+  if v_produto < 0 or v_servico < 0 then
+    raise exception 'Os valores de venda não podem ser negativos.' using errcode = '22023';
+  end if;
+  if v_produto >= 1e12 or v_servico >= 1e12 then
+    raise exception 'Valor de venda inválido.' using errcode = '22023';
+  end if;
+
+  -- fase 3: ainda grava em obras; o gatilho trg_obras_valores_venda_upd espelha em obras_valores_venda
+  update public.obras o
+     set valor_produto = v_produto, valor_servico = v_servico
+   where o.id = p_id_obra
+     and (o.valor_produto, o.valor_servico) is distinct from (v_produto, v_servico);
+end;
+$function$
+;
+comment on function public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric) is 'Grava o valor de venda (material/servico) da obra. Quem pode: quem pode alterar a obra (pode_gerenciar_responsavel). Nulo = 0; negativo = erro. Fase 3: grava em obras e o gatilho espelha em obras_valores_venda.';
 
 -- public.obras_resumo_cartao(p_ids uuid[])
 CREATE OR REPLACE FUNCTION public.obras_resumo_cartao(p_ids uuid[])

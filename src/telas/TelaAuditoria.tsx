@@ -55,6 +55,8 @@ const TABELAS: Record<string, string> = {
   exportacao_processos: "Processo de exportação",
   exportacao_config: "Dados do exportador",
   obras_valores_erp: "Valores da obra enviados ao ERP",
+  // 17/11: mudanca do valor de venda fica so aqui (o historico de obras ignora essas colunas)
+  obras_valores_venda: "Valores de venda da obra",
 };
 
 const OPERACAO = {

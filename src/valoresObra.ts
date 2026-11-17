@@ -88,6 +88,17 @@ export function totalVendaObra(
   return (Number(obra.valor_produto) || 0) + (Number(obra.valor_servico) || 0);
 }
 
+type ValoresDigitados = { valor_produto?: number | string | null; valor_servico?: number | string | null };
+
+/**
+ * Cadastro de obra: os valores de venda mudaram em relacao ao que esta no banco? Vazio/nulo = 0 (o banco grava 0).
+ * Sem original (obra nova ou releitura falhou) compara com 0: obra nova so chama a gravacao se a pessoa digitou valor.
+ */
+export function valoresVendaMudaram(atual: ValoresDigitados, original: ValoresDigitados | null | undefined): boolean {
+  const n = (v: number | string | null | undefined) => numeroOuZero(v ?? 0);
+  return n(atual.valor_produto) !== n(original?.valor_produto) || n(atual.valor_servico) !== n(original?.valor_servico);
+}
+
 /** Soma da carteira so com as obras que tem valor visivel; parcial = alguma obra ficou de fora. */
 export function somarCarteira(obras: { valor_produto?: number | string | null; valor_servico?: number | string | null }[]) {
   let total = 0;

@@ -5,7 +5,7 @@ import type { Obra, Usuario } from "../types";
 import { formatarDataSegura, formatarMoeda, labelFase, labelStatusObra, classeStatusObra } from "../utils";
 import { Save, AlertTriangle, Edit2, X, FolderOpen, Loader2, CheckCircle2, Clock, Search, List } from "lucide-react";
 import { mensagemErro } from "../erros";
-import { anexarValoresVenda, buscarValoresVenda, totalVendaObra, TITULO_SEM_ACESSO_VALOR } from "../valoresObra";
+import { anexarValoresVenda, buscarValoresVenda, totalVendaObra, TITULO_SEM_ACESSO_VALOR, valoresVendaMudaram } from "../valoresObra";
 import { useDialogos } from "../Dialogos";
 import {
   anexarValoresProjetos,
@@ -40,8 +40,8 @@ interface Props {
 }
 
 // Campos de obras que este formulario edita (status nao: finalizar/cancelar/reabrir tem tela propria).
-// valor_produto/valor_servico sao LIDOS de obras_valores_venda (restrita) e continuam GRAVADOS em obras
-// (o gatilho espelha na tabela restrita).
+// valor_produto/valor_servico ficam FORA de obras: lidos de obras_valores_venda (restrita) e gravados pela funcao
+// obra_valores_venda_salvar depois de salvar a obra (as colunas de obras vao ser removidas).
 const CAMPOS_FORMULARIO =
   "id, codigo_externo, nome, descricao, fase_atual, observacoes, data_inicio, data_previsao_fim, id_responsavel, exportacao";
 
@@ -54,8 +54,6 @@ const dadosDoFormulario = (o: any, idResponsavel: any) => ({
   data_inicio: o.data_inicio,
   data_previsao_fim: o.data_previsao_fim,
   id_responsavel: idResponsavel,
-  valor_produto: o.valor_produto || 0,
-  valor_servico: o.valor_servico || 0,
 });
 
 type ValoresErp = { contribuicao: string; rentabilidade: string; venda: string };
@@ -429,11 +427,15 @@ export default function TelaCadastroObras({
       });
       if (!ok) return;
     }
+    // valores de venda vao por funcao propria, depois da obra. Sem acesso a eles o formulario nao os conhece:
+    // nunca grava (nem zera) esses valores
+    const vendaMudou = !novaObra.valores_ocultos && valoresVendaMudaram(novaObra, novaObra.id ? obraOriginal : null);
     setCarregando(true);
     try {
       const dadosObra = dadosDoFormulario(novaObra, responsavelObra);
 
       let idObraSalva: string | null = novaObra.id;
+      let obraAtualizada = false; // edicao com outros campos mudados ja avisou "Obra atualizada!"
       if (novaObra.id) {
         // so os campos que a pessoa mudou: sem status (editar obra finalizada/cancelada nao pode reabri-la) e sem
         // regravar o que outra tela mudou depois que o formulario foi aberto (ex.: fase avancada no painel)
@@ -443,19 +445,15 @@ export default function TelaCadastroObras({
             ([k, v]) => !original || String(v ?? "") !== String((original as any)[k] ?? ""),
           ),
         );
-        // sem acesso aos valores de venda o formulario nao os conhece: nunca grava (nem zera) esses campos
-        if (novaObra.valores_ocultos) {
-          delete mudancas.valor_produto;
-          delete mudancas.valor_servico;
-        }
         if (Object.keys(mudancas).length > 0) {
           const { error } = await supabase
             .from("obras")
             .update(mudancas)
             .eq("id", novaObra.id);
           if (error) throw error;
+          obraAtualizada = true;
           onAviso("Obra atualizada!");
-        } else if (!valoresErpMudaram) {
+        } else if (!valoresErpMudaram && !vendaMudou) {
           onAviso("Nenhuma alteração para salvar.", "info");
         }
       } else {
@@ -498,6 +496,36 @@ export default function TelaCadastroObras({
         } else {
           onAviso("Obra salva com cronograma e documentos padrão!");
         }
+      }
+
+      if (vendaMudou && idObraSalva) {
+        // cast: funcao nova ainda fora do database.types.ts gerado
+        const { error: erroVenda } = await (supabase as any).rpc("obra_valores_venda_salvar", {
+          p_id_obra: idObraSalva,
+          p_valor_produto: Number(novaObra.valor_produto || 0),
+          p_valor_servico: Number(novaObra.valor_servico || 0),
+        });
+        if (erroVenda) {
+          // a obra ja foi salva; so os valores de venda ficaram de fora. O formulario passa a editar a obra salva,
+          // com os valores que estao no banco como originais: salvar de novo so tenta os valores (nao cadastra outra obra)
+          const salva = { ...novaObra, id: idObraSalva, id_responsavel: responsavelObra };
+          const noBanco = novaObra.id && obraOriginal
+            ? { valor_produto: obraOriginal.valor_produto, valor_servico: obraOriginal.valor_servico }
+            : { valor_produto: "", valor_servico: "" };
+          setNovaObra(salva);
+          setObraOriginal({ ...salva, ...noBanco });
+          setBuscaErp(null);
+          setErroObra(
+            "Obra salva, mas os valores de venda não: " +
+              mensagemErro(erroVenda, "Tente salvar de novo.") +
+              (valoresErpMudaram ? " Os valores do ERP também não foram enviados." : ""),
+          );
+          onObrasAlteradas();
+          buscarObrasCadastro();
+          if (!novaObra.id) carregarProjetosErp();
+          return;
+        }
+        if (novaObra.id && !obraAtualizada) onAviso("Valores de venda atualizados!");
       }
 
       if (valoresErpMudaram && idObraSalva) {

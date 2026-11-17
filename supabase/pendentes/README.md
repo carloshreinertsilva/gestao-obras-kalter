@@ -8,3 +8,10 @@ Aplicar um por vez, com ensaio em transacao desfeita antes, e regenerar `supabas
   (trocar as chamadas em `src/App.tsx` e `src/telas/TelaReunioes.tsx`).
 - `p4_mfa_obrigatorio.sql` - liga a obrigatoriedade da verificacao em duas etapas para admin/aprovadores e passa a
   exigi-la nas funcoes de aprovacao. So depois de o Carlos decidir, avisar as pessoas e dar prazo.
+- `p9_valores_venda_final.sql` - passo final de "fechar valores por obra": `obra_valores_venda_salvar` grava direto
+  em `obras_valores_venda`, sai o espelho de update (o de insert passa a criar a linha com 0), auditoria de `obras`
+  volta ao normal e saem `obras.valor_produto`/`valor_servico`. So depois de: app novo publicado (grava pela funcao,
+  desde 17/11) e ninguem com o app antigo aberto; robo do servidor gravando os valores em `obras_valores_venda`;
+  nada mais lendo as colunas em `obras` (lista completa no cabecalho do arquivo). Depois: ajustar no robo os testes de
+  `tests/test_valores_obra_fechados_banco.py` que leem/gravam `obras.valor_*` (espelho, carga, app antigo e o helper
+  `_valores` da fase 3) e regenerar `database.types.ts`.

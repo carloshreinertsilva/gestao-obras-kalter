@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { anexarValoresCompras, anexarValoresVenda, somarCarteira, totalVendaObra } from "./valoresObra";
+import { anexarValoresCompras, anexarValoresVenda, somarCarteira, totalVendaObra, valoresVendaMudaram } from "./valoresObra";
+
+describe("valoresVendaMudaram", () => {
+  it("obra nova: so muda se digitou valor diferente de zero", () => {
+    expect(valoresVendaMudaram({ valor_produto: "", valor_servico: "" }, null)).toBe(false);
+    expect(valoresVendaMudaram({ valor_produto: "0", valor_servico: 0 }, undefined)).toBe(false);
+    expect(valoresVendaMudaram({ valor_produto: "1500.5", valor_servico: "" }, null)).toBe(true);
+  });
+  it("edicao: compara como numero (texto do campo x numero do banco; vazio = 0)", () => {
+    expect(valoresVendaMudaram({ valor_produto: "1000", valor_servico: "" }, { valor_produto: 1000, valor_servico: 0 })).toBe(false);
+    expect(valoresVendaMudaram({ valor_produto: "1000.1", valor_servico: "" }, { valor_produto: 1000, valor_servico: 0 })).toBe(true);
+    expect(valoresVendaMudaram({ valor_produto: 1000, valor_servico: "5" }, { valor_produto: 1000, valor_servico: null })).toBe(true);
+  });
+});
 
 describe("anexarValoresVenda", () => {
   it("junta pelo id da obra; sem linha (sem acesso) fica null", () => {

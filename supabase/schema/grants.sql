@@ -227,6 +227,7 @@ grant execute on function public.nft_validar_pagamento(p_forma text, p_dados jso
 -- function public.notificar_usuario(p_destino uuid, p_tipo text, p_titulo text, p_detalhe text, p_id_obra uuid, p_id_tarefa uuid, p_financeira boolean, p_chave text): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.obra_avanco_registrar(p_id_obra uuid, p_percentual numeric, p_data date, p_observacao text) to authenticated;
 grant execute on function public.obra_valores_erp_solicitar(p_id_obra uuid, p_margem_contribuicao numeric, p_rentabilidade numeric, p_venda_sem_impostos numeric) to authenticated;
+grant execute on function public.obra_valores_venda_salvar(p_id_obra uuid, p_valor_produto numeric, p_valor_servico numeric) to authenticated;
 grant execute on function public.obras_resumo_cartao(p_ids uuid[]) to authenticated;
 grant execute on function public.obras_saude(p_ids uuid[]) to authenticated;
 grant execute on function public.pedir_desfazer_previsao(p_id uuid) to authenticated;

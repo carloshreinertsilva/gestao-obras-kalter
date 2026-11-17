@@ -84,7 +84,7 @@ CREATE TRIGGER trg_invalida_impressao AFTER INSERT OR DELETE OR UPDATE ON public
 CREATE TRIGGER frete_verba_mudou AFTER INSERT OR UPDATE ON public.obra_rentabilidade_familias FOR EACH ROW EXECUTE FUNCTION public.trg_frete_verba_mudou();
 
 -- obras
-CREATE TRIGGER auditar_obras AFTER INSERT OR DELETE OR UPDATE ON public.obras FOR EACH ROW EXECUTE FUNCTION public.auditar();
+CREATE TRIGGER auditar_obras AFTER INSERT OR DELETE OR UPDATE ON public.obras FOR EACH ROW EXECUTE FUNCTION public.auditar('ignorar=valor_produto,valor_servico');
 CREATE TRIGGER trg_after_insert_obras_criar_pmis_padrao AFTER INSERT ON public.obras FOR EACH ROW EXECUTE FUNCTION public.after_insert_obras_criar_pmis_padrao();
 CREATE TRIGGER trg_notif_fase_obra AFTER UPDATE OF fase_atual ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_notif_fase_obra();
 CREATE TRIGGER trg_notif_obra_nova AFTER INSERT ON public.obras FOR EACH ROW EXECUTE FUNCTION public.trg_notif_obra_nova();
