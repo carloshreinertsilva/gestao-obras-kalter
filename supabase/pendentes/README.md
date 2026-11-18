@@ -24,6 +24,12 @@ Aplicar um por vez, com ensaio em transacao desfeita antes, e regenerar `supabas
   criados (ERP)" do robo (`src/corrigir_materiais_erp.py`: completa CONVUM/INFISCMT/DPMPPROD2, PIS/COFINS e validade EPI
   dos itens criados pelo robo antes do ajuste de 18/11). Pode entrar a qualquer hora (sem a funcao o robo trata como
   desligada); `supabase/schema` ja esta com o resultado. Ligar (`select true`) so depois do 1o `--apply` acompanhado.
+- `p19_romaneio_erp_intencao.sql` - romaneio sem marca do app no ERP: coluna
+  `solicitacoes_faturamento_romaneios.erp_intencao` (intencao de gravacao do robo, anotada antes do commit no ERP) e
+  `sf_descartar_romaneios` manda para `cancelar` (nao `descartado`) a fila que ja tem intencao. Aditivo; aplicar ANTES
+  de publicar o robo novo (`src/sync_romaneios.py` sem a coluna so adia a criacao de romaneios e avisa).
+  `supabase/schema` ja esta com o resultado. Teste: `robo-sync-erp/tests/test_romaneio_intencao_banco.py` (so passa
+  depois de aplicado).
 - `p9_valores_venda_final.sql` - passo final de "fechar valores por obra": `obra_valores_venda_salvar` grava direto
   em `obras_valores_venda`, sai o espelho de update (o de insert passa a criar a linha com 0), auditoria de `obras`
   volta ao normal e saem `obras.valor_produto`/`valor_servico`. So depois de: app novo publicado (grava pela funcao,

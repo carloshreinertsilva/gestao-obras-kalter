@@ -4130,7 +4130,7 @@ CREATE OR REPLACE FUNCTION public.sf_descartar_romaneios(p_id uuid)
  SET search_path TO 'public'
 AS $function$
   update public.solicitacoes_faturamento_romaneios
-     set situacao = case when numero_romaneio is null then 'descartado' else 'cancelar' end
+     set situacao = case when numero_romaneio is null and erp_intencao is null then 'descartado' else 'cancelar' end
    where id_solicitacao = p_id and situacao in ('pendente', 'erro', 'criado');
 $function$
 ;

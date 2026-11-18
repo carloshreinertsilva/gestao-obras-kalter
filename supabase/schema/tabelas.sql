@@ -1170,6 +1170,7 @@ create table public.solicitacoes_faturamento_romaneios (
     created_at timestamp with time zone default now() not null,
     criado_erp_em timestamp with time zone,
     cancelado_em timestamp with time zone,
+    erp_intencao jsonb,
     constraint solicitacoes_faturamento_romaneios_pkey PRIMARY KEY (id),
     constraint solicitacoes_faturamento_romaneios_situacao_check CHECK (situacao = ANY (ARRAY['pendente'::text, 'criado'::text, 'faturado'::text, 'cancelar'::text, 'cancelado'::text, 'descartado'::text, 'erro'::text])),
     constraint solicitacoes_faturamento_romaneios_id_solicitacao_fkey FOREIGN KEY (id_solicitacao) REFERENCES public.solicitacoes_faturamento(id) ON DELETE CASCADE
