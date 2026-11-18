@@ -1214,6 +1214,7 @@ create table public.solicitacoes_material (
     codigo_edit_automatico boolean default true not null,
     erp_erro text,
     erp_tentativas integer default 0 not null,
+    erp_intencao jsonb,
     constraint solicitacoes_material_pkey PRIMARY KEY (id),
     constraint solicitacoes_material_numero_key UNIQUE (numero),
     constraint solicitacoes_material_origem_check CHECK (origem = ANY (ARRAY['comprado'::text, 'produzido'::text, 'servico'::text])),
