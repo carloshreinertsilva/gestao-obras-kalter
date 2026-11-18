@@ -1221,6 +1221,23 @@ create table public.solicitacoes_material (
     constraint solicitacoes_material_id_solicitante_fkey FOREIGN KEY (id_solicitante) REFERENCES public.usuarios(id)
 );
 
+create table public.solicitacoes_material_anexos (
+    id uuid default gen_random_uuid() not null,
+    id_solicitacao uuid not null,
+    nome_arquivo text not null,
+    caminho_storage text not null,
+    tipo_arquivo text,
+    tamanho_bytes bigint,
+    id_usuario uuid,
+    nome_usuario text,
+    created_at timestamp with time zone default now() not null,
+    constraint solicitacoes_material_anexos_pkey PRIMARY KEY (id),
+    constraint solicitacoes_material_anexos_caminho_key UNIQUE (caminho_storage),
+    constraint solicitacoes_material_anexos_caminho_check CHECK (caminho_storage ~~ (('materiais/'::text || id_solicitacao::text) || '/%'::text)),
+    constraint solicitacoes_material_anexos_id_solicitacao_fkey FOREIGN KEY (id_solicitacao) REFERENCES public.solicitacoes_material(id) ON DELETE CASCADE,
+    constraint solicitacoes_material_anexos_id_usuario_fkey FOREIGN KEY (id_usuario) REFERENCES public.usuarios(id) ON DELETE SET NULL
+);
+
 create table public.solicitacoes_material_eventos (
     id bigint default nextval('public.solicitacoes_material_eventos_id_seq'::regclass) not null,
     id_solicitacao uuid not null,

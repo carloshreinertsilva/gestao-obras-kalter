@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Copy, Loader2, Plus, RotateCcw, Search, Send, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Loader2, Paperclip, Plus, RotateCcw, Search, Send, XCircle } from "lucide-react";
 import { supabase } from "./supabase";
 import { linhaClicavel } from "./teclado";
 import { avisar, useAviso } from "./aviso";
@@ -8,6 +8,8 @@ import { Modal } from "./Modal";
 import { SeloDiasParados, useFiltroSalvo } from "./modulos_lista";
 import type { Usuario } from "./types";
 import { mensagemErro } from "./erros";
+import { ArquivosEscolhidos, SecaoAnexosMaterial, enviarAnexosMaterial, juntarEscolhidos, textoFalhas } from "./AnexosMaterial";
+import { contarAnexosPorSolicitacao } from "./calculoAnexosMaterial";
 
 // Solicitacao de cadastro de material (04/11/2026, fase 1). Qualquer usuario pede um item novo; o app mostra os
 // itens parecidos que ja existem no ERP (espelho materiais_erp, robo sync_materiais_erp.py). O responsavel pelo
@@ -132,6 +134,8 @@ const EVENTO: Record<string, string> = {
   cancelada: "Cancelou",
   codigo_alterado: "Alterou o código do ERP",
   erro_erp: "Robô não conseguiu criar no ERP",
+  anexo_incluido: "Anexou arquivo",
+  anexo_excluido: "Excluiu anexo",
 };
 
 // 100230 -> "10/230"; rotulo "10/230 · MATERIA PRIMA / TUBULACOES E CONEXOES" (a classe-mae e a linha xx0000 do CLASTIP)
@@ -328,6 +332,9 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
   const [origem, setOrigem] = useState<string>(devolvida?.origem || "");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // arquivos escolhidos agora: vao para o Storage depois que a solicitacao e gravada (precisa do id)
+  const [arquivos, setArquivos] = useState<File[]>([]);
+  const [progresso, setProgresso] = useState("");
   // alteracao feita pela pessoa (campos e botoes de origem); efeitos automaticos nao marcam
   const [sujo, setSujo] = useState(false);
   const { lista, buscando } = useSimilares(descricao, devolvida?.id);
@@ -352,14 +359,29 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
       p_urgente: urgente,
       p_origem: origem,
     });
-    setEnviando(false);
-    if (error) return setErro(msgErro(error));
+    if (error) {
+      setEnviando(false);
+      return setErro(msgErro(error));
+    }
+    const idSol = data as string;
     aviso.sucesso(
       devolvida
         ? `Solicitação de material nº ${devolvida.numero} corrigida e reenviada ao cadastro.`
         : `Solicitação de material “${descricao.trim()}” enviada ao cadastro.`,
     );
-    onFeito(data as string);
+    // a solicitacao ja foi gravada: anexo que falhar nao desfaz o pedido, a pessoa anexa de novo no detalhe
+    if (arquivos.length && idSol) {
+      const { enviados, falhas } = await enviarAnexosMaterial(idSol, arquivos, setProgresso);
+      if (falhas.length)
+        aviso.erro(
+          (enviados ? `${enviados} de ${arquivos.length} arquivos anexados. ` : "") +
+            textoFalhas(falhas) +
+            " Abra a solicitação e anexe de novo.",
+        );
+    }
+    setEnviando(false);
+    setProgresso("");
+    onFeito(idSol);
   };
 
   // fechar pelo "Cancelar" do rodape tambem pergunta quando ha alteracao (o X / Esc / fundo o Modal ja trata)
@@ -395,7 +417,8 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
             onClick={enviar}
             className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-1 text-sm disabled:opacity-60"
           >
-            {enviando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} {devolvida ? "Reenviar" : "Enviar para o cadastro"}
+            {enviando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}{" "}
+            {enviando && progresso ? `Anexando: ${progresso}` : devolvida ? "Reenviar" : "Enviar para o cadastro"}
           </button>
         </>
       }
@@ -462,6 +485,22 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
               <span className="block text-xs text-slate-500">Compra parada esperando o código - o cadastro e o fiscal veem destacado.</span>
             </span>
           </label>
+        </div>
+        <div>
+          <Rotulo>Anexos (opcional)</Rotulo>
+          <p className="text-xs text-slate-500 mb-1">
+            Fotos, desenhos, catálogo, ficha técnica, planilha… vários arquivos de até 25 MB cada.
+            {devolvida ? " Os arquivos já anexados continuam na solicitação." : ""}
+          </p>
+          <ArquivosEscolhidos
+            arquivos={arquivos}
+            desabilitado={enviando}
+            onAdicionar={(novos) => {
+              setArquivos(juntarEscolhidos(arquivos, novos));
+              setSujo(true);
+            }}
+            onRemover={(i) => setArquivos((atuais) => atuais.filter((_, k) => k !== i))}
+          />
         </div>
         {erro && <p className="text-red-600">{erro}</p>}
       </div>
@@ -1030,6 +1069,21 @@ function DetalheMaterial({
             </div>
           )}
 
+          <SecaoAnexosMaterial
+            solicitacao={s}
+            usuario={usuario}
+            onMudou={() => {
+              // so o historico: recarregar a solicitacao inteira apagaria o que esta sendo revisado nos campos
+              supabase
+                .from("solicitacoes_material_eventos")
+                .select("*")
+                .eq("id_solicitacao", id)
+                .order("id")
+                .then(({ data }) => data && setEventos(data));
+              onAlterada();
+            }}
+          />
+
           <div>
             <p className="text-xs font-bold uppercase text-slate-500 mb-1">Histórico</p>
             <ul className="space-y-1">
@@ -1072,6 +1126,19 @@ function desdeEtapa(s: SolicitacaoMaterial): string | null {
 }
 const ABERTAS: StatusMat[] = ["cadastro", "fiscal", "erp", "devolvida"];
 
+// clipe com a quantidade de anexos ao lado da descricao (nada quando nao tem)
+const SeloAnexos = ({ n }: { n?: number }) =>
+  n ? (
+    <span
+      className="ml-1.5 inline-flex items-center gap-0.5 text-xs font-normal text-slate-500 whitespace-nowrap align-middle"
+      title={n === 1 ? "1 anexo" : `${n} anexos`}
+    >
+      <Paperclip size={12} aria-hidden="true" />
+      {n}
+      <span className="sr-only">{n === 1 ? " anexo" : " anexos"}</span>
+    </span>
+  ) : null;
+
 export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario | null; idAberto: string | null; onAbrir: (id: string | null) => void }) {
   const { classes } = useListas();
   const [lista, setLista] = useState<SolicitacaoMaterial[] | null>(null);
@@ -1081,6 +1148,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
   const [nova, setNova] = useState(false);
   const [corrigir, setCorrigir] = useState<SolicitacaoMaterial | null>(null);
   const [erroCarga, setErroCarga] = useState("");
+  const [qtdAnexos, setQtdAnexos] = useState<Record<string, number>>({});
 
   const admin = usuario?.perfil === "admin";
   const ehCadastro = admin || Boolean(usuario?.cadastra_materiais);
@@ -1100,6 +1168,9 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
     }
     setErroCarga("");
     setLista((data as SolicitacaoMaterial[]) || []);
+    // quantidade de anexos por solicitacao (so o indicador da lista: se falhar, a lista segue sem ele)
+    const anexos = await supabase.from("solicitacoes_material_anexos").select("id_solicitacao").limit(5000);
+    setQtdAnexos(anexos.error ? {} : contarAnexosPorSolicitacao((anexos.data as { id_solicitacao: string }[]) || []));
   };
   useEffect(() => {
     carregar();
@@ -1208,7 +1279,10 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
                     <span className="text-xs font-semibold text-slate-500">Nº {s.numero}</span>
                     <Badge status={s.status} urgente={s.urgente} />
                   </div>
-                  <p className="text-sm font-bold text-slate-800 leading-snug">{s.descricao}</p>
+                  <p className="text-sm font-bold text-slate-800 leading-snug">
+                    {s.descricao}
+                    <SeloAnexos n={qtdAnexos[s.id]} />
+                  </p>
                   <p className="text-xs text-slate-500">
                     {[s.unidade, origemTxt(s.origem), s.nome_solicitante].filter(Boolean).join(" · ")}
                     {cod ? <span className="font-mono"> · {cod}</span> : null}
@@ -1248,6 +1322,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
                   <td className="px-3 py-2 text-slate-500">{s.numero}</td>
                   <td className="px-3 py-2">
                     <b>{s.descricao}</b>
+                    <SeloAnexos n={qtdAnexos[s.id]} />
                     <span className="block text-xs text-slate-500">{[origemTxt(s.origem), nomeClasse(s.classe_tipo)].filter(Boolean).join(" · ")}</span>
                   </td>
                   <td className="px-3 py-2 text-center">{s.unidade}</td>

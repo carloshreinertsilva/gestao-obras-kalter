@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- RLS de 75 tabelas e 137 politicas do schema public
+-- RLS de 76 tabelas e 138 politicas do schema public
 
 -- auditoria
 alter table public.auditoria enable row level security;
@@ -742,6 +742,13 @@ create policy sfr_select on public.solicitacoes_faturamento_romaneios
 -- solicitacoes_material
 alter table public.solicitacoes_material enable row level security;
 create policy solicitacoes_material_select on public.solicitacoes_material
+    as permissive for select
+    to authenticated
+    using (public.eh_usuario_ativo());
+
+-- solicitacoes_material_anexos
+alter table public.solicitacoes_material_anexos enable row level security;
+create policy solicitacoes_material_anexos_select on public.solicitacoes_material_anexos
     as permissive for select
     to authenticated
     using (public.eh_usuario_ativo());

@@ -153,6 +153,9 @@ CREATE INDEX sfr_solicitacao_idx ON public.solicitacoes_faturamento_romaneios US
 -- solicitacoes_material
 CREATE INDEX solicitacoes_material_status ON public.solicitacoes_material USING btree (status);
 
+-- solicitacoes_material_anexos
+CREATE INDEX solicitacoes_material_anexos_sol ON public.solicitacoes_material_anexos USING btree (id_solicitacao);
+
 -- solicitacoes_material_eventos
 CREATE INDEX solicitacoes_material_eventos_sol ON public.solicitacoes_material_eventos USING btree (id_solicitacao);
 

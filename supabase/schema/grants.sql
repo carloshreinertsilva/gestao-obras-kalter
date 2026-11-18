@@ -73,6 +73,7 @@ grant select on public.solicitacoes_faturamento_itens to authenticated;
 grant select on public.solicitacoes_faturamento_nfs to authenticated;
 grant select on public.solicitacoes_faturamento_romaneios to authenticated;
 grant select on public.solicitacoes_material to authenticated;
+grant select on public.solicitacoes_material_anexos to authenticated;
 grant select on public.solicitacoes_material_eventos to authenticated;
 grant insert, select on public.solicitacoes_previsao to authenticated;
 -- public.sync_impressoes: nada para anon, authenticated, PUBLIC
@@ -181,6 +182,9 @@ grant execute on function public.frete_sugestoes(p_origem integer, p_destino int
 -- function public.limpeza_diaria(): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.marcar_notificacoes_lidas(p_ids uuid[]) to authenticated;
 grant execute on function public.mat_alterar_codigo_proposto(p_id uuid, p_codigo_edit text) to authenticated;
+grant execute on function public.mat_anexo_excluir(p_id_anexo uuid) to authenticated;
+grant execute on function public.mat_anexo_id_do_caminho(p_nome text) to authenticated;
+grant execute on function public.mat_anexo_registrar(p_id uuid, p_caminho text, p_nome text, p_tipo text, p_tamanho bigint) to authenticated;
 grant execute on function public.mat_aprovar_cadastro(p_id uuid, p_descricao text, p_classe_tipo integer, p_unidade text, p_obs text, p_origem text) to authenticated;
 grant execute on function public.mat_aprovar_fiscal(p_id uuid, p_ncm text, p_tipo_item integer, p_pct_ipi numeric, p_obs text, p_codigo_edit text) to authenticated;
 -- function public.mat_avisar(p_id uuid, p_para uuid[], p_assunto text, p_titulo text, p_aviso text, p_cor text, p_titulo_push text): sem execute para anon, authenticated, PUBLIC
@@ -198,6 +202,8 @@ grant execute on function public.mat_informar_codigo(p_id uuid, p_codigo text) t
 -- function public.mat_nome_atual(): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.mat_normalizar(p text) to authenticated;
 -- function public.mat_origem_pcp(p_origem text): sem execute para anon, authenticated, PUBLIC
+grant execute on function public.mat_pode_anexar(p_id uuid) to authenticated;
+grant execute on function public.mat_pode_apagar_arquivo(p_nome text, p_dono text) to authenticated;
 -- function public.mat_prefixo_codigo(p_classe_tipo integer): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.mat_proximo_codigo_edit(p_classe_tipo integer, p_excluir uuid) to authenticated;
 grant execute on function public.mat_recusar(p_id uuid, p_motivo text, p_codigo_existente text) to authenticated;

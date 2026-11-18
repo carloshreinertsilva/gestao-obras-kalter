@@ -2,7 +2,7 @@
 -- Copia do esquema do banco Supabase do app (somente estrutura, sem dados).
 -- Mudancas no banco continuam sendo feitas por migracao; depois, regenerar este arquivo.
 
--- 195 funcoes/procedures do schema public, ordenadas por nome + argumentos
+-- 200 funcoes/procedures do schema public, ordenadas por nome + argumentos
 
 -- public.after_insert_obras_criar_pmis_padrao()
 CREATE OR REPLACE FUNCTION public.after_insert_obras_criar_pmis_padrao()
@@ -1889,6 +1889,96 @@ begin
 end $function$
 ;
 
+-- public.mat_anexo_excluir(p_id_anexo uuid)
+CREATE OR REPLACE FUNCTION public.mat_anexo_excluir(p_id_anexo uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_a public.solicitacoes_material_anexos;
+  v_status text;
+begin
+  select * into v_a from public.solicitacoes_material_anexos where id = p_id_anexo for update;
+  if v_a.id is null then raise exception 'Anexo não encontrado.'; end if;
+  select status into v_status from public.solicitacoes_material where id = v_a.id_solicitacao for share;
+  if v_status not in ('cadastro', 'fiscal', 'erp', 'devolvida') then
+    raise exception 'Esta solicitação já foi encerrada: os anexos não podem mais ser excluídos.';
+  end if;
+  if not public.eh_usuario_ativo()
+     or not (v_a.id_usuario = public.usuario_atual_id() or public.eh_admin_ou_coordenador()) then
+    raise exception 'Só quem enviou o arquivo ou a coordenação exclui este anexo.';
+  end if;
+  delete from public.solicitacoes_material_anexos where id = p_id_anexo;
+  perform public.mat_evento(v_a.id_solicitacao, 'anexo_excluido', v_a.nome_arquivo);
+  return v_a.caminho_storage;  -- o app remove o arquivo do Storage com este caminho
+end $function$
+;
+
+-- public.mat_anexo_id_do_caminho(p_nome text)
+CREATE OR REPLACE FUNCTION public.mat_anexo_id_do_caminho(p_nome text)
+ RETURNS uuid
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public'
+AS $function$
+  select case when split_part(p_nome, '/', 1) = 'materiais'
+               and split_part(p_nome, '/', 2) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+               and split_part(p_nome, '/', 3) <> ''
+              then split_part(p_nome, '/', 2)::uuid end;
+$function$
+;
+
+-- public.mat_anexo_registrar(p_id uuid, p_caminho text, p_nome text, p_tipo text, p_tamanho bigint)
+CREATE OR REPLACE FUNCTION public.mat_anexo_registrar(p_id uuid, p_caminho text, p_nome text, p_tipo text DEFAULT NULL::text, p_tamanho bigint DEFAULT NULL::bigint)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_s public.solicitacoes_material;
+  v_obj storage.objects;
+  v_nome text := trim(coalesce(p_nome, ''));
+  v_id uuid;
+begin
+  if v_nome = '' then raise exception 'Informe o nome do arquivo.'; end if;
+  if public.arquivo_extensao_bloqueada(v_nome) or public.arquivo_extensao_bloqueada(coalesce(p_caminho, '')) then
+    raise exception 'Tipo de arquivo não permitido.';
+  end if;
+  if public.mat_anexo_id_do_caminho(p_caminho) is distinct from p_id then
+    raise exception 'Caminho do arquivo inválido.';
+  end if;
+  -- trava a solicitacao contra troca de etapa no meio (ex.: concluida enquanto anexa)
+  select * into v_s from public.solicitacoes_material where id = p_id for share;
+  if v_s.id is null then raise exception 'Solicitação não encontrada.'; end if;
+  if v_s.status not in ('cadastro', 'fiscal', 'erp', 'devolvida') then
+    raise exception 'Esta solicitação já foi encerrada: não dá mais para anexar arquivos.';
+  end if;
+  if not public.mat_pode_anexar(p_id) then
+    raise exception 'Só quem pediu, o cadastro, o fiscal ou a coordenação anexam arquivos nesta solicitação.';
+  end if;
+  -- o arquivo tem que ter sido enviado ao bucket (tamanho e tipo vem do Storage, nao do navegador)
+  select * into v_obj from storage.objects o where o.bucket_id = 'material-anexos' and o.name = p_caminho;
+  if v_obj.id is null then raise exception 'Arquivo não encontrado no armazenamento. Envie de novo.'; end if;
+  if (select count(*) from public.solicitacoes_material_anexos a where a.id_solicitacao = p_id) >= 30 then
+    raise exception 'Esta solicitação já tem 30 anexos (limite). Exclua algum antes de anexar outro.';
+  end if;
+  insert into public.solicitacoes_material_anexos
+    (id_solicitacao, nome_arquivo, caminho_storage, tipo_arquivo, tamanho_bytes, id_usuario, nome_usuario)
+  values (p_id, left(v_nome, 255), p_caminho,
+          coalesce(nullif(v_obj.metadata ->> 'mimetype', ''), nullif(trim(p_tipo), '')),
+          coalesce((v_obj.metadata ->> 'size')::bigint, p_tamanho),
+          public.usuario_atual_id(), public.mat_nome_atual())
+  on conflict (caminho_storage) do nothing
+  returning id into v_id;
+  if v_id is null then raise exception 'Este arquivo já está anexado.'; end if;
+  perform public.mat_evento(p_id, 'anexo_incluido', left(v_nome, 255));
+  return v_id;
+end $function$
+;
+
 -- public.mat_aprovar_cadastro(p_id uuid, p_descricao text, p_classe_tipo integer, p_unidade text, p_obs text, p_origem text)
 CREATE OR REPLACE FUNCTION public.mat_aprovar_cadastro(p_id uuid, p_descricao text, p_classe_tipo integer, p_unidade text, p_obs text DEFAULT NULL::text, p_origem text DEFAULT NULL::text)
  RETURNS void
@@ -2200,6 +2290,42 @@ CREATE OR REPLACE FUNCTION public.mat_origem_pcp(p_origem text)
  SET search_path TO 'public'
 AS $function$
   select case p_origem when 'comprado' then 2 when 'produzido' then 0 when 'servico' then 3 end
+$function$
+;
+
+-- public.mat_pode_anexar(p_id uuid)
+CREATE OR REPLACE FUNCTION public.mat_pode_anexar(p_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1 from public.solicitacoes_material s
+    where s.id = p_id
+      and s.status in ('cadastro', 'fiscal', 'erp', 'devolvida')
+      and (s.id_solicitante = public.usuario_atual_id()
+           or public.mat_eh_cadastro() or public.mat_eh_fiscal() or public.eh_admin_ou_coordenador()));
+$function$
+;
+
+-- public.mat_pode_apagar_arquivo(p_nome text, p_dono text)
+CREATE OR REPLACE FUNCTION public.mat_pode_apagar_arquivo(p_nome text, p_dono text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select case
+    when exists (select 1 from public.solicitacoes_material_anexos a where a.caminho_storage = p_nome) then
+      exists (select 1 from public.solicitacoes_material_anexos a
+              join public.solicitacoes_material s on s.id = a.id_solicitacao
+              where a.caminho_storage = p_nome
+                and s.status in ('cadastro', 'fiscal', 'erp', 'devolvida')
+                and (a.id_usuario = public.usuario_atual_id() or public.eh_admin_ou_coordenador()))
+    else public.eh_usuario_ativo()
+         and (public.eh_admin_ou_coordenador() or (p_dono is not null and p_dono = auth.uid()::text))
+  end;
 $function$
 ;
 

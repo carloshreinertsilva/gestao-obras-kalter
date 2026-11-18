@@ -11,6 +11,11 @@ Aplicar um por vez, com ensaio em transacao desfeita antes, e regenerar `supabas
 - `p11_ligar_faturamento_direto_erp.sql` - liga o envio do Valor de Faturamento Direto ao ERP
   (`CADPROJ.cpj_vlr_hora_proj`, robo `src/sync_faturamento_direto_erp.py`). So na 1a gravacao real acompanhada com o
   Carlos, depois do robo novo no servidor e do app novo publicado. Conferir a fila 'pendente' antes (consulta no arquivo).
+- `p14_anexos_material.sql` - anexos (varios arquivos/imagens) na solicitacao de cadastro de material: bucket privado
+  `material-anexos`, tabela `solicitacoes_material_anexos`, funcoes `mat_anexo_registrar`/`mat_anexo_excluir` e
+  politicas do Storage. So acrescenta (app antigo nao usa). Aplicar ANTES de publicar o app novo (a tela de
+  Materiais nova chama as funcoes); `supabase/schema` ja esta com o resultado. Teste:
+  `robo-sync-erp/tests/test_anexos_material_banco.py` (so passa depois de aplicado).
 - `p9_valores_venda_final.sql` - passo final de "fechar valores por obra": `obra_valores_venda_salvar` grava direto
   em `obras_valores_venda`, sai o espelho de update (o de insert passa a criar a linha com 0), auditoria de `obras`
   volta ao normal e saem `obras.valor_produto`/`valor_servico`. So depois de: app novo publicado (grava pela funcao,
