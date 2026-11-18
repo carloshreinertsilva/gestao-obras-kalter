@@ -190,6 +190,7 @@ grant execute on function public.mat_aprovar_fiscal(p_id uuid, p_ncm text, p_tip
 -- function public.mat_avisar(p_id uuid, p_para uuid[], p_assunto text, p_titulo text, p_aviso text, p_cor text, p_titulo_push text): sem execute para anon, authenticated, PUBLIC
 grant execute on function public.mat_cancelar(p_id uuid, p_motivo text) to authenticated;
 -- function public.mat_classe_rotulo(p integer): sem execute para anon, authenticated, PUBLIC
+grant execute on function public.mat_correcao_erp_ligada() to authenticated;
 grant execute on function public.mat_criacao_erp_ligada() to authenticated;
 grant execute on function public.mat_devolver(p_id uuid, p_motivo text) to authenticated;
 grant execute on function public.mat_eh_cadastro() to authenticated;

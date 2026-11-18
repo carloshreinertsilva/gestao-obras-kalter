@@ -2105,6 +2105,15 @@ CREATE OR REPLACE FUNCTION public.mat_criacao_erp_ligada()
  LANGUAGE sql
  IMMUTABLE
  SET search_path TO 'public'
+AS $function$ select true $function$
+;
+
+-- public.mat_correcao_erp_ligada()
+CREATE OR REPLACE FUNCTION public.mat_correcao_erp_ligada()
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public'
 AS $function$ select false $function$
 ;
 
@@ -5216,6 +5225,7 @@ CREATE OR REPLACE FUNCTION public.trg_solicitacoes_material_avisos()
 AS $function$
 declare v_cad uuid[]; v_fis uuid[]; v_sol uuid[]; v_cop uuid[]; v_ref text := 'Nº ' || new.numero || ' · ' || new.descricao;
   v_urg text := case when new.urgente then 'URGENTE · ' else '' end;
+  v_carlos uuid[];
 begin
   if tg_op = 'UPDATE' and new.status is not distinct from old.status then return new; end if;
   select coalesce(array_agg(id), '{}') into v_cad from public.usuarios where ativo and cadastra_materiais;
@@ -5236,7 +5246,10 @@ begin
       v_urg || 'Material para revisão fiscal · ' || v_ref, 'Solicitação de material para revisão fiscal',
       v_urg || 'AGUARDANDO REVISÃO FISCAL', case when new.urgente then '#b91c1c' else '#b45309' end, 'Material para revisão fiscal');
   elsif new.status = 'concluida' then
-    perform public.mat_avisar(new.id, array(select distinct x from unnest(v_sol || v_cad || v_cop) x),
+    -- 18/11: pedido do Carlos - item concluido tambem para o fiscal e para ele (Carlos Silva, admin)
+    select coalesce(array_agg(id), '{}') into v_carlos from public.usuarios
+     where ativo and id = 'c94da647-d35f-4e9f-93e9-ea6f6eed0618'::uuid;
+    perform public.mat_avisar(new.id, array(select distinct x from unnest(v_sol || v_cad || v_cop || v_fis || v_carlos) x),
       'Material cadastrado no ERP · ' || v_ref, 'Material cadastrado e disponível no ERP',
       'CÓDIGO ' || coalesce(new.codigo_edit, new.codigo_erp::text), '#047857', 'Material cadastrado: ' || coalesce(new.codigo_edit, new.codigo_erp::text));
   elsif new.status = 'devolvida' then

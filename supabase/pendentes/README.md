@@ -16,6 +16,14 @@ Aplicar um por vez, com ensaio em transacao desfeita antes, e regenerar `supabas
   politicas do Storage. So acrescenta (app antigo nao usa). Aplicar ANTES de publicar o app novo (a tela de
   Materiais nova chama as funcoes); `supabase/schema` ja esta com o resultado. Teste:
   `robo-sync-erp/tests/test_anexos_material_banco.py` (so passa depois de aplicado).
+- `p17_aviso_material_destinatarios.sql` - e-mail/aviso "Material cadastrado no ERP" (status `concluida`) passa a ir
+  tambem para o fiscal de material (ativos com `revisa_fiscal_material`) e para o Carlos (id fixo, so se ativo). Texto e
+  demais avisos de material iguais. Independe do app/robo (pode entrar a qualquer hora); `supabase/schema` ja esta com o
+  resultado. Teste: `robo-sync-erp/tests/test_aviso_material_banco.py` (so passa depois de aplicado).
+- `p18_mat_correcao_erp_ligada.sql` - chave `mat_correcao_erp_ligada()` (com `false`) da etapa "Correcao de materiais
+  criados (ERP)" do robo (`src/corrigir_materiais_erp.py`: completa CONVUM/INFISCMT/DPMPPROD2, PIS/COFINS e validade EPI
+  dos itens criados pelo robo antes do ajuste de 18/11). Pode entrar a qualquer hora (sem a funcao o robo trata como
+  desligada); `supabase/schema` ja esta com o resultado. Ligar (`select true`) so depois do 1o `--apply` acompanhado.
 - `p9_valores_venda_final.sql` - passo final de "fechar valores por obra": `obra_valores_venda_salvar` grava direto
   em `obras_valores_venda`, sai o espelho de update (o de insert passa a criar a linha com 0), auditoria de `obras`
   volta ao normal e saem `obras.valor_produto`/`valor_servico`. So depois de: app novo publicado (grava pela funcao,
