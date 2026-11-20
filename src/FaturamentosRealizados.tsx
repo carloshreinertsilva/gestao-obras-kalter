@@ -200,7 +200,7 @@ export default function FaturamentosRealizados({
               <button
                 key={valorAba}
                 onClick={() => setAba(valorAba)}
-                className={`px-4 py-1.5 font-semibold transition ${aba === valorAba ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                className={`px-4 py-1.5 font-semibold transition ${aba === valorAba ? "bg-petroleo text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
               >
                 {rotulo}
               </button>
@@ -216,13 +216,13 @@ export default function FaturamentosRealizados({
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar NF, grupo ou família…"
-              className="border rounded-lg pl-8 pr-3 py-1.5 outline-none focus:border-[#2A6377] w-64 max-w-full"
+              className="border rounded-lg pl-8 pr-3 py-1.5 outline-none focus:border-petroleo w-64 max-w-full"
             />
           </div>
           <select
             value={filtroTipo}
             onChange={(e) => setFiltroTipo(e.target.value as "todos" | Tipo)}
-            className="border rounded-lg px-3 py-1.5 outline-none focus:border-[#2A6377] bg-white"
+            className="border rounded-lg px-3 py-1.5 outline-none focus:border-petroleo bg-white"
           >
             <option value="todos">Todos os tipos</option>
             <option value="material">Material</option>
@@ -277,7 +277,7 @@ export default function FaturamentosRealizados({
                     onAlternar={() => alternar(`nf-${n.nf}`)}
                     cabecalho={
                       <>
-                        <td className="p-3 font-bold text-[#2A6377]">NF {n.nf}</td>
+                        <td className="p-3 font-bold text-petroleo">NF {n.nf}</td>
                         <td className="p-3 text-center">{formatarDataSegura(n.data)}</td>
                         <td className="p-3 text-center">
                           <BadgeTipo tipo={n.tipo} />
@@ -323,7 +323,7 @@ export default function FaturamentosRealizados({
                           {n.itens.map((i) => (
                             <tr key={i.id} className="border-t border-slate-200">
                               <td className="py-1.5 px-2">{rotuloGrupo(i.grupo_faturamento)}</td>
-                              <td className="py-1.5 px-2 text-[#2A6377]">{nomeFamilia(i)}</td>
+                              <td className="py-1.5 px-2 text-petroleo">{nomeFamilia(i)}</td>
                               <td className="py-1.5 px-2 text-center">
                                 <BadgeTipo tipo={tipoDoGrupo(i.grupo_faturamento)} />
                               </td>
@@ -373,7 +373,7 @@ export default function FaturamentosRealizados({
                     onAlternar={() => alternar(`fam-${f.id}`)}
                     cabecalho={
                       <>
-                        <td className="p-3 font-bold text-[#2A6377]">{f.nome}</td>
+                        <td className="p-3 font-bold text-petroleo">{f.nome}</td>
                         <td className="p-3 text-center text-slate-500">{f.qtdNotas}</td>
                         <td className="p-3 text-right text-slate-600">{formatarMoeda(f.escopo)}</td>
                         <td className="p-3 text-right font-bold text-emerald-700">{formatarMoeda(f.total)}</td>

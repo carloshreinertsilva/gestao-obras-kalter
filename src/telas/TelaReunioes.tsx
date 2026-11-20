@@ -26,6 +26,7 @@ import { Save, Clock, User, Loader2, Trash2, Edit2, Mail, CheckCheck, Send, File
 import type { Usuario, Obra } from "../types";
 import { useDialogos } from "../Dialogos";
 import { Modal } from "../Modal";
+import { COR_PETROLEO } from "../cores";
 
 // Reunioes: historico (ReunioesHistorico), nova reuniao (formulario por obra com
 // ocorrencias e tarefas, sessao do dia, contexto da obra, gravacao Plaud) e a ata
@@ -237,13 +238,13 @@ export default function TelaReunioes({
           <title>Ata de Reunião Kalter - ${dataAta}</title>
           <style>
             body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
-            .header { text-align: center; border-bottom: 2px solid #2A6377; padding-bottom: 20px; margin-bottom: 30px; }
+            .header { text-align: center; border-bottom: 2px solid ${COR_PETROLEO}; padding-bottom: 20px; margin-bottom: 30px; }
             .header img { display: block; margin: 0 auto 12px auto; width: 260px; max-width: 100%; height: auto; border-radius: 6px; }
             .data { font-size: 14px; color: #64748b; font-weight: bold; text-transform: uppercase; }
-            .gestor-title { color: #2A6377; font-size: 19px; font-weight: bold; margin: 35px 0 15px 0; border-bottom: 3px solid #2A6377; padding-bottom: 8px; }
+            .gestor-title { color: ${COR_PETROLEO}; font-size: 19px; font-weight: bold; margin: 35px 0 15px 0; border-bottom: 3px solid ${COR_PETROLEO}; padding-bottom: 8px; }
             .gestor-title:first-of-type { margin-top: 0; }
             .obra-section { margin-bottom: 40px; page-break-inside: avoid; }
-            .obra-title { background: #2A6377; color: white; padding: 12px 15px; font-size: 16px; font-weight: bold; margin-bottom: 15px; border-radius: 4px; }
+            .obra-title { background: ${COR_PETROLEO}; color: white; padding: 12px 15px; font-size: 16px; font-weight: bold; margin-bottom: 15px; border-radius: 4px; }
             .info-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
             .info-box p { margin: 5px 0; }
             h4 { color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px; margin-bottom: 10px; }
@@ -259,7 +260,7 @@ export default function TelaReunioes({
              <div class="data">Gestão de Obras • Ata de Reunião • ${dataAta}</div>
              ${
                linkApp
-                 ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:16px auto 0 auto; width:auto;"><tr><td style="border:0; padding:0; border-radius:8px; background:#2A6377;"><a href="${linkApp}" target="_blank" style="display:inline-block; padding:10px 20px; font-family:'Segoe UI',Arial,sans-serif; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:8px;">Ver ata no app</a></td></tr></table>`
+                 ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:16px auto 0 auto; width:auto;"><tr><td style="border:0; padding:0; border-radius:8px; background:${COR_PETROLEO};"><a href="${linkApp}" target="_blank" style="display:inline-block; padding:10px 20px; font-family:'Segoe UI',Arial,sans-serif; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:8px;">Ver ata no app</a></td></tr></table>`
                  : ""
              }
           </div>
@@ -1177,7 +1178,7 @@ export default function TelaReunioes({
                 <button
                   key={valor}
                   onClick={() => setAbaReunioes(valor)}
-                  className={`px-4 py-2 font-semibold transition ${abaReunioes === valor ? "bg-[#2A6377] text-white" : "text-slate-600 hover:bg-slate-50"}`}
+                  className={`px-4 py-2 font-semibold transition ${abaReunioes === valor ? "bg-petroleo text-white" : "text-slate-600 hover:bg-slate-50"}`}
                 >
                   {rotulo}
                   {valor === "nova" && idSessaoAtaAtual ? " •" : ""}
@@ -1196,7 +1197,7 @@ export default function TelaReunioes({
             />
           ) : (
             <>
-          <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border mb-2 border-l-4 border-l-[#2A6377] w-full max-w-full">
+          <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border mb-2 border-l-4 border-l-petroleo w-full max-w-full">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 max-w-full">
               <div className="flex-1 max-w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -1204,7 +1205,7 @@ export default function TelaReunioes({
                     1. Selecione o Gestor
                   </label>
                   <select
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] font-bold bg-gray-50 max-w-full"
+                    className="w-full border rounded-lg p-3 outline-none focus:border-petroleo font-bold bg-gray-50 max-w-full"
                     value={gestorSelecionadoAta}
                     disabled={!!ataEmEdicao}
                     onChange={(e) => {
@@ -1226,7 +1227,7 @@ export default function TelaReunioes({
                   </label>
                   <select
                     id="reuniao-obra"
-                    className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] font-bold bg-gray-50 max-w-full ${errosCampos.obra ? "border-red-500" : ""}`}
+                    className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo font-bold bg-gray-50 max-w-full ${errosCampos.obra ? "border-red-500" : ""}`}
                     value={reuniaoForm.id_obra}
                     disabled={!!ataEmEdicao}
                     aria-required="true"
@@ -1286,7 +1287,7 @@ export default function TelaReunioes({
                         (ob: any) => ob.id_obra === reuniaoForm.id_obra,
                       ))
                   }
-                  className="bg-[#2A6377]/10 text-[#2A6377] px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 disabled:opacity-50 flex-1 w-full sm:w-auto max-w-full"
+                  className="bg-petroleo/10 text-petroleo px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 disabled:opacity-50 flex-1 w-full sm:w-auto max-w-full"
                 >
                   <Loader2
                     className={`animate-spin shrink-0 ${carregando ? "block" : "hidden"}`}
@@ -1301,7 +1302,7 @@ export default function TelaReunioes({
                 <button
                   onClick={gerarAtaFinal}
                   disabled={obrasNaAtaAtual.length === 0}
-                  className="bg-[#2A6377] text-white px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 shadow-md disabled:opacity-50 flex-1 w-full sm:w-auto max-w-full"
+                  className="bg-petroleo text-white px-6 py-3 rounded-lg font-bold flex justify-center items-center gap-2 shadow-md disabled:opacity-50 flex-1 w-full sm:w-auto max-w-full"
                 >
                   <Mail size={18} className="shrink-0" /> Fechar Ata & PDF
                 </button>
@@ -1463,7 +1464,7 @@ export default function TelaReunioes({
                     </label>
                     <input
                       type="date"
-                      className="border rounded-lg p-1.5 text-sm outline-none focus:border-[#2A6377]"
+                      className="border rounded-lg p-1.5 text-sm outline-none focus:border-petroleo"
                       value={reuniaoForm.data_reuniao}
                       onChange={(e) =>
                         setReuniaoForm({
@@ -1525,7 +1526,7 @@ export default function TelaReunioes({
                 <label className="block text-sm mb-1">Resumo Geral</label>
                 <textarea
                   rows={5}
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  className="w-full border rounded-lg p-3 outline-none focus:border-petroleo"
                   value={reuniaoForm.resumo_geral}
                   onChange={(e) =>
                     setReuniaoForm({
@@ -1547,7 +1548,7 @@ export default function TelaReunioes({
                         Tipo
                       </label>
                       <select
-                        className="border rounded-lg p-2 flex-1 outline-none focus:border-[#2A6377] text-sm"
+                        className="border rounded-lg p-2 flex-1 outline-none focus:border-petroleo text-sm"
                         value={novaOcorrencia.tipo}
                         onChange={(e) =>
                           setNovaOcorrencia({
@@ -1570,7 +1571,7 @@ export default function TelaReunioes({
                     <textarea
                       id="reuniao-ocorrencia-descricao"
                       ref={refDescricaoOcorrencia}
-                      className={`border rounded-lg p-3 w-full flex-1 min-h-[110px] outline-none focus:border-[#2A6377] text-sm resize-none ${errosCampos.ocorrencia ? "border-red-500" : ""}`}
+                      className={`border rounded-lg p-3 w-full flex-1 min-h-[110px] outline-none focus:border-petroleo text-sm resize-none ${errosCampos.ocorrencia ? "border-red-500" : ""}`}
                       placeholder="Descreva a ocorrência… (Ctrl+Enter para adicionar)"
                       aria-required="true"
                       aria-invalid={!!errosCampos.ocorrencia}
@@ -1609,7 +1610,7 @@ export default function TelaReunioes({
                       className="flex justify-between items-center bg-slate-50 p-2 mt-2 rounded border text-sm w-full"
                     >
                       <div className="min-w-0 whitespace-pre-wrap">
-                        <span className="font-semibold text-[#2A6377] capitalize">
+                        <span className="font-semibold text-petroleo capitalize">
                           {labelOcorrencia(oc.tipo)}:
                         </span>{" "}
                         {oc.descricao}
@@ -1637,7 +1638,7 @@ export default function TelaReunioes({
                       <input
                         ref={refTituloTarefa}
                         type="text"
-                        className={`border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm ${errosCampos.tituloTarefa ? "border-red-500" : ""}`}
+                        className={`border rounded-lg p-2 w-full outline-none focus:border-petroleo text-sm ${errosCampos.tituloTarefa ? "border-red-500" : ""}`}
                         placeholder="O que precisa ser feito… *"
                         aria-label="Título da tarefa (obrigatório)"
                         aria-required="true"
@@ -1657,7 +1658,7 @@ export default function TelaReunioes({
                     </div>
                     <input
                       type="date"
-                      className="border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm"
+                      className="border rounded-lg p-2 w-full outline-none focus:border-petroleo text-sm"
                       value={novaTarefa.data_vencimento}
                       onChange={(e) =>
                         setNovaTarefa({
@@ -1669,7 +1670,7 @@ export default function TelaReunioes({
                   </div>
                   <textarea
                     rows={2}
-                    className="border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm mb-2"
+                    className="border rounded-lg p-2 w-full outline-none focus:border-petroleo text-sm mb-2"
                     placeholder="Descrição / contexto da tarefa…"
                     value={novaTarefa.descricao}
                     onChange={(e) =>
@@ -1683,7 +1684,7 @@ export default function TelaReunioes({
                     <div className="flex-1 min-w-[140px]">
                       <select
                         ref={refResponsavelTarefa}
-                        className={`border rounded-lg p-2 w-full outline-none focus:border-[#2A6377] text-sm ${errosCampos.responsavelTarefa ? "border-red-500" : ""}`}
+                        className={`border rounded-lg p-2 w-full outline-none focus:border-petroleo text-sm ${errosCampos.responsavelTarefa ? "border-red-500" : ""}`}
                         aria-label="Responsável pela tarefa (obrigatório)"
                         aria-required="true"
                         aria-invalid={!!errosCampos.responsavelTarefa}
@@ -1708,7 +1709,7 @@ export default function TelaReunioes({
                       )}
                     </div>
                     <select
-                      className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none focus:border-[#2A6377] text-sm"
+                      className="border rounded-lg p-2 flex-1 min-w-[140px] outline-none focus:border-petroleo text-sm"
                       value={novaTarefa.prioridade}
                       onChange={(e) =>
                         setNovaTarefa({
@@ -1751,7 +1752,7 @@ export default function TelaReunioes({
                           </span>
                           {tar.id && (
                             <span
-                              className="bg-[#2A6377]/10 text-[#2A6377] rounded px-1.5 text-[11px] font-semibold"
+                              className="bg-petroleo/10 text-petroleo rounded px-1.5 text-[11px] font-semibold"
                               title="Tarefa já criada: ao salvar ela volta a ficar ligada a esta ata (não é duplicada)"
                             >
                               Já criada
@@ -1828,7 +1829,7 @@ export default function TelaReunioes({
         <Modal
           titulo={
             <span className="flex items-center gap-2">
-              <Mail className="text-[#2A6377]" aria-hidden="true" /> Enviar Ata de Reunião
+              <Mail className="text-petroleo" aria-hidden="true" /> Enviar Ata de Reunião
             </span>
           }
           rotulo="Enviar Ata de Reunião"
@@ -1850,7 +1851,7 @@ export default function TelaReunioes({
                     gravacaoAta?.resumo,
                   )
                 }
-                className="bg-white border border-[#2A6377] text-[#2A6377] hover:bg-[#2A6377] hover:text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition"
+                className="bg-white border border-petroleo text-petroleo hover:bg-petroleo hover:text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition"
               >
                 <FileText size={18} /> Baixar PDF
               </button>

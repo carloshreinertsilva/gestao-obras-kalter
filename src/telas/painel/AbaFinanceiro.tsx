@@ -107,7 +107,7 @@ export default function AbaFinanceiro({
                   descricao: e.target.value,
                 })
               }
-              className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+              className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-petroleo"
             />
             <input
               type="text"
@@ -124,7 +124,7 @@ export default function AbaFinanceiro({
                   ),
                 })
               }
-              className="border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+              className="border rounded-lg p-3 outline-none focus:border-petroleo"
             />
             <input
               type="number"
@@ -138,7 +138,7 @@ export default function AbaFinanceiro({
                   valor_previsto: e.target.value,
                 })
               }
-              className="border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+              className="border rounded-lg p-3 outline-none focus:border-petroleo"
             />
             <input
               placeholder="Observação"
@@ -149,12 +149,12 @@ export default function AbaFinanceiro({
                   observacao: e.target.value,
                 })
               }
-              className="border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+              className="border rounded-lg p-3 outline-none focus:border-petroleo"
             />
             <button
               onClick={salvarParcelaCliente}
               disabled={carregando}
-              className="bg-[#2A6377] text-white rounded-lg font-bold flex items-center justify-center gap-2"
+              className="bg-petroleo text-white rounded-lg font-bold flex items-center justify-center gap-2"
             >
               <Save size={16} /> Salvar
             </button>
@@ -207,7 +207,7 @@ export default function AbaFinanceiro({
                   ),
                 })
               }
-              className="text-xs font-bold text-[#2A6377] bg-[#2A6377]/10 px-3 py-2 rounded-lg hover:bg-[#2A6377]/20 transition"
+              className="text-xs font-bold text-petroleo bg-petroleo/10 px-3 py-2 rounded-lg hover:bg-petroleo/20 transition"
             >
               Usar saldo restante
             </button>
@@ -291,7 +291,7 @@ export default function AbaFinanceiro({
                             onClick={() =>
                               abrirLiquidacaoParcela(parcela)
                             }
-                            className="px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-xs font-bold hover:bg-[#1e4857] transition"
+                            className="px-3 py-1.5 rounded-lg bg-petroleo text-white text-xs font-bold hover:bg-petroleo-escuro transition"
                           >
                             {Number(parcela.valor_realizado || 0) > 0
                               ? "Editar"

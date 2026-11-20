@@ -239,7 +239,7 @@ export function PassoImportador({ proc, atualizar }: PropsPasso) {
             type="checkbox"
             checked={igual}
             onChange={(e) => atualizar("consignatario.igual_importador", e.target.checked)}
-            className="h-4 w-4 accent-[#2A6377]"
+            className="h-4 w-4 accent-petroleo"
           />
           O consignatário é o mesmo importador
         </label>
@@ -364,7 +364,7 @@ export function PassoCertificado({ proc, atualizar }: PropsPasso) {
       />
       <Secao titulo="Certificado">
         <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3 cursor-pointer">
-          <input type="checkbox" checked={emitir} onChange={(e) => atualizar("certificado.emitir", e.target.checked)} className="h-4 w-4 accent-[#2A6377]" />
+          <input type="checkbox" checked={emitir} onChange={(e) => atualizar("certificado.emitir", e.target.checked)} className="h-4 w-4 accent-petroleo" />
           Emitir certificado de origem neste processo
         </label>
         {emitir ? (

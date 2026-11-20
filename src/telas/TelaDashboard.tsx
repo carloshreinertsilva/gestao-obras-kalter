@@ -30,6 +30,33 @@ interface Props {
   onIrPara: (tela: string) => void;
 }
 
+// Titulo do Painel: o App coloca no topo da pagina, acima de "Minhas pendencias" e "Meus pedidos"
+// (antes ficava dentro da TelaDashboard, no meio da pagina, depois desses dois blocos).
+export function CabecalhoPainel({ isAdmin, onIrPara }: { isAdmin: boolean; onIrPara: (tela: string) => void }) {
+  return (
+    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-6">
+      <div>
+        <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
+          Painel
+        </h2>
+        <p className="text-sm text-slate-500 mt-1">
+          <span className="font-semibold text-slate-600">
+            Visão geral das obras{isAdmin ? "" : " sob sua responsabilidade"}.
+          </span>{" "}
+          Resumo executivo da saúde dos projetos, com foco em
+          financeiro, documentação, cronograma, tarefas e alertas.
+        </p>
+      </div>
+      <button
+        onClick={() => onIrPara("minhas_obras")}
+        className="bg-petroleo text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-petroleo-escuro transition"
+      >
+        <FolderOpen size={16} /> Ver Obras
+      </button>
+    </div>
+  );
+}
+
 export default function TelaDashboard({
   usuarioAtual,
   isAdmin,
@@ -427,7 +454,7 @@ export default function TelaDashboard({
   const blocoTarefas = (
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
-            <CheckSquare size={20} className="text-[#2A6377]" /> Minhas
+            <CheckSquare size={20} className="text-petroleo" /> Minhas
             Tarefas Críticas
           </h3>
           {tarefasDashboard.length === 0 ? (
@@ -442,12 +469,12 @@ export default function TelaDashboard({
                   type="button"
                   key={tarefa.id}
                   onClick={() => onAbrirTarefa(tarefa)}
-                  className="w-full text-left flex justify-between items-center bg-slate-50 p-3 rounded-lg border hover:border-[#2A6377] transition cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]"
+                  className="w-full text-left flex justify-between items-center bg-slate-50 p-3 rounded-lg border hover:border-petroleo transition cursor-pointer group focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo"
                 >
                   <div className="flex items-center gap-3 truncate">
-                    <div className="w-2 h-2 rounded-full bg-[#2A6377] shrink-0"></div>
+                    <div className="w-2 h-2 rounded-full bg-petroleo shrink-0"></div>
                     <div className="truncate">
-                      <p className="text-xs font-bold text-[#2A6377] uppercase">
+                      <p className="text-xs font-bold text-petroleo uppercase">
                         {tarefa.obras?.codigo_externo}
                       </p>
                       <p className="font-semibold text-slate-700 truncate">
@@ -465,7 +492,7 @@ export default function TelaDashboard({
               ))}
               <button
                 onClick={() => onIrPara("tarefas")}
-                className="w-full mt-2 text-xs font-bold text-center text-slate-500 hover:text-[#2A6377] p-2 transition"
+                className="w-full mt-2 text-xs font-bold text-center text-slate-500 hover:text-petroleo p-2 transition"
               >
                 Ver Kanban Completo &rarr;
               </button>
@@ -492,27 +519,6 @@ export default function TelaDashboard({
 
   return (
     <div className="animate-in fade-in h-full flex flex-col gap-6">
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
-            Painel
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">
-            <span className="font-semibold text-slate-600">
-              Visão geral das obras{isAdmin ? "" : " sob sua responsabilidade"}.
-            </span>{" "}
-            Resumo executivo da saúde dos projetos, com foco em
-            financeiro, documentação, cronograma, tarefas e alertas.
-          </p>
-        </div>
-        <button
-          onClick={() => onIrPara("minhas_obras")}
-          className="bg-[#2A6377] text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#1e4857] transition"
-        >
-          <FolderOpen size={16} /> Ver Obras
-        </button>
-      </div>
-
       {!isAdmin && blocoTarefas}
 
       {falhou && (
@@ -523,7 +529,7 @@ export default function TelaDashboard({
           <button
             type="button"
             onClick={() => setTentativa((t) => t + 1)}
-            className="bg-[#2A6377] text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#1e4857] transition"
+            className="bg-petroleo text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-petroleo-escuro transition"
           >
             <RefreshCw size={16} /> Tentar de novo
           </button>
@@ -677,11 +683,11 @@ export default function TelaDashboard({
                   type="button"
                   key={projeto.id}
                   onClick={() => abrirProjetoDashboard(projeto)}
-                  className="text-left w-full border rounded-xl p-4 hover:border-[#2A6377] hover:bg-slate-50 cursor-pointer transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]"
+                  className="text-left w-full border rounded-xl p-4 hover:border-petroleo hover:bg-slate-50 cursor-pointer transition focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo"
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0">
-                      <p className="font-bold text-[#2A6377] text-sm break-words">
+                      <p className="font-bold text-petroleo text-sm break-words">
                         {projeto.codigo} - {projeto.nome}
                       </p>
                       <p className="text-xs text-slate-500">
@@ -734,9 +740,9 @@ export default function TelaDashboard({
                   <button
                     type="button"
                     onClick={() => onAbrirObra(f.obraOriginal)}
-                    className="w-full text-left border rounded-lg p-3 hover:border-[#2A6377] hover:bg-slate-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]"
+                    className="w-full text-left border rounded-lg p-3 hover:border-petroleo hover:bg-slate-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo"
                   >
-                    <p className="font-bold text-[#2A6377] text-sm break-words">
+                    <p className="font-bold text-petroleo text-sm break-words">
                       {f.codigo} - {f.nome}
                     </p>
                     <p className="text-sm text-slate-700">{labelFase(f.fase)}</p>
@@ -772,7 +778,7 @@ export default function TelaDashboard({
       <div className={`grid grid-cols-1 ${isAdmin ? "xl:grid-cols-3" : "xl:grid-cols-2"} gap-6 items-start`}>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
-            <Activity size={20} className="text-[#2A6377]" /> Obras por
+            <Activity size={20} className="text-petroleo" /> Obras por
             Fase
           </h3>
           <div className="h-72 w-full">
@@ -820,7 +826,7 @@ export default function TelaDashboard({
                   <p className="text-xs font-bold text-slate-500 mb-0.5">
                     {formatarDataHora(item.created_at)}
                   </p>
-                  <p className="text-xs font-bold text-[#2A6377] uppercase mb-1">
+                  <p className="text-xs font-bold text-petroleo uppercase mb-1">
                     {item.obras?.codigo_externo} - {item.usuarios?.nome}
                   </p>
                   <p className="text-sm text-slate-700 bg-slate-50 p-2 rounded border border-slate-100 leading-snug line-clamp-3">

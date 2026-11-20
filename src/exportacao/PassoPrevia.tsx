@@ -473,7 +473,7 @@ export function PassoPrevia({ idObra, proc, revisao, aprovado, aprovacao, podeAp
               key={a.id}
               type="button"
               onClick={() => setAba(a.id)}
-              className={`px-3 py-2 text-sm rounded-t-lg border border-b-0 ${abaAtual === a.id ? "bg-white font-bold text-[#2A6377] border-slate-300" : "bg-slate-50 text-slate-500 border-transparent hover:bg-slate-100"}`}
+              className={`px-3 py-2 text-sm rounded-t-lg border border-b-0 ${abaAtual === a.id ? "bg-white font-bold text-petroleo border-slate-300" : "bg-slate-50 text-slate-500 border-transparent hover:bg-slate-100"}`}
             >
               {a.nome}
               {n > 0 && <span className="ml-1.5 align-middle"><Falta /></span>}

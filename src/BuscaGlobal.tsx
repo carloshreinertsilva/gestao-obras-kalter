@@ -254,9 +254,9 @@ export function BuscaGlobal({
                   aria-selected={i === ativo}
                   onMouseEnter={() => setAtivo(i)}
                   onClick={() => abrir(r)}
-                  className={`w-full text-left px-4 py-3 flex items-start gap-3 border-b last:border-b-0 ${i === ativo ? "bg-[#2A6377]/10" : "hover:bg-slate-50"}`}
+                  className={`w-full text-left px-4 py-3 flex items-start gap-3 border-b last:border-b-0 ${i === ativo ? "bg-petroleo/10" : "hover:bg-slate-50"}`}
                 >
-                  <I size={18} className="text-[#2A6377] shrink-0 mt-0.5" aria-hidden="true" />
+                  <I size={18} className="text-petroleo shrink-0 mt-0.5" aria-hidden="true" />
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold text-slate-800 truncate">{r.titulo}</span>
                     <span className="block text-xs text-slate-500 truncate">

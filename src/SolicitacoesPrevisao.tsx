@@ -332,7 +332,7 @@ export function ModalSolicitarPrevisao({
     <Modal
       titulo={
         <span className="flex items-center gap-2">
-          <Wallet className="text-[#2A6377] shrink-0" size={20} aria-hidden="true" /> Solicitar previsão · Obra{" "}
+          <Wallet className="text-petroleo shrink-0" size={20} aria-hidden="true" /> Solicitar previsão · Obra{" "}
           {obra.codigo_externo}
         </span>
       }
@@ -359,7 +359,7 @@ export function ModalSolicitarPrevisao({
                   ? "Corrija as origens sem saldo suficiente para enviar"
                   : undefined
             }
-            className="px-4 py-2.5 md:py-2 rounded-lg text-sm font-bold bg-[#2A6377] text-white hover:bg-[#1e4857] flex items-center justify-center gap-2 disabled:opacity-60"
+            className="px-4 py-2.5 md:py-2 rounded-lg text-sm font-bold bg-petroleo text-white hover:bg-petroleo-escuro flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {enviando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}{" "}
             {enviando && progresso ? progresso : "Enviar solicitação"}
@@ -383,7 +383,7 @@ export function ModalSolicitarPrevisao({
                   setTipo(valor);
                   setErro("");
                 }}
-                className={`px-4 py-2 font-semibold transition ${tipo === valor ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                className={`px-4 py-2 font-semibold transition ${tipo === valor ? "bg-petroleo text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
               >
                 {rotulo}
               </button>
@@ -509,7 +509,7 @@ export function ModalSolicitarPrevisao({
                     setSujo(true);
                     setOrigens((prev) => [...prev, { familia: "", valor: "" }]);
                   }}
-                  className="text-xs font-semibold text-[#2A6377] flex items-center gap-1"
+                  className="text-xs font-semibold text-petroleo flex items-center gap-1"
                 >
                   <Plus size={14} /> Adicionar origem
                 </button>
@@ -733,7 +733,7 @@ export function CartaoSolicitacao({
         <div className="min-w-0">
           <p className="font-bold text-slate-800 flex flex-wrap items-center gap-x-2">
             <span>{s.tipo === "aumento" ? "Aumento" : "Transferência"}</span>
-            <span className="text-[#2A6377]">{formatarMoeda(s.valor)}</span>
+            <span className="text-petroleo">{formatarMoeda(s.valor)}</span>
             <ArrowRight size={14} className="text-slate-400" />
             <span>{s.familia_destino}</span>
           </p>
@@ -764,7 +764,7 @@ export function CartaoSolicitacao({
                 if (error || !data?.signedUrl) return setErro("Não foi possível abrir o anexo.");
                 window.open(data.signedUrl, "_blank");
               }}
-              className="text-xs px-2.5 py-1.5 rounded-lg border bg-slate-50 hover:bg-slate-100 text-[#2A6377] font-semibold flex items-center gap-1.5"
+              className="text-xs px-2.5 py-1.5 rounded-lg border bg-slate-50 hover:bg-slate-100 text-petroleo font-semibold flex items-center gap-1.5"
               title="Abrir anexo"
             >
               <Paperclip size={13} /> {a.nome}
@@ -899,7 +899,7 @@ export function CartaoSolicitacao({
           botao(
             "Simular de novo",
             () => acao("reenviar_solicitacao_previsao", { p_id: s.id }, "Solicitação enviada para simular de novo no ERP."),
-            "border text-[#2A6377] hover:bg-slate-50",
+            "border text-petroleo hover:bg-slate-50",
             RotateCcw,
           )}
         {aprovador && s.status === "executada" && (!s.desfazer_status || s.desfazer_status === "erro") &&
@@ -1078,11 +1078,11 @@ export function PainelSolicitacoes({
   return (
     <div className="space-y-3">
       {destaque && !carregando && (
-        <div className="rounded-2xl border-2 border-[#2A6377]/40 bg-[#2A6377]/5 p-3 space-y-2 max-w-3xl">
+        <div className="rounded-2xl border-2 border-petroleo/40 bg-petroleo/5 p-3 space-y-2 max-w-3xl">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#2A6377]">Solicitação aberta pelo link</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-petroleo">Solicitação aberta pelo link</p>
             {onLimparDestaque && (
-              <button onClick={onLimparDestaque} className="text-xs font-semibold text-slate-500 hover:text-[#2A6377]">
+              <button onClick={onLimparDestaque} className="text-xs font-semibold text-slate-500 hover:text-petroleo">
                 Fechar
               </button>
             )}
@@ -1106,7 +1106,7 @@ export function PainelSolicitacoes({
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar obra, família, solicitante…"
-            className="w-full border rounded-lg pl-8 pr-3 py-2 md:py-1.5 text-sm outline-none focus:border-[#2A6377] bg-white"
+            className="w-full border rounded-lg pl-8 pr-3 py-2 md:py-1.5 text-sm outline-none focus:border-petroleo bg-white"
           />
         </div>
         </div>
@@ -1116,7 +1116,7 @@ export function PainelSolicitacoes({
           <button
             key={id}
             onClick={() => setFiltro(id)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${filtro === id ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${filtro === id ? "bg-petroleo text-white border-petroleo" : "bg-white text-slate-600 hover:bg-slate-50"}`}
           >
             {rotulo} ({contagem(sts)})
           </button>
@@ -1191,7 +1191,7 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
           {pode && (
             <button
               onClick={() => setModal({ aberto: true })}
-              className="shrink-0 bg-[#2A6377] text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-[#1e4857]"
+              className="shrink-0 bg-petroleo text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-petroleo-escuro"
             >
               <Plus size={16} /> Solicitar previsão
             </button>
@@ -1243,7 +1243,7 @@ export function AbaPrevisoes({ obra, usuario }: { obra: ObraBasica; usuario: Usu
                         ) : (
                           <button
                             onClick={() => setModal({ aberto: true, familia: f.codigo_projeto })}
-                            className="text-xs font-semibold text-[#2A6377] hover:underline whitespace-nowrap"
+                            className="text-xs font-semibold text-petroleo hover:underline whitespace-nowrap"
                           >
                             Solicitar
                           </button>

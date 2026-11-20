@@ -250,7 +250,7 @@ function ListaSimilares({
               </span>
               <span className="text-xs text-slate-500 whitespace-nowrap">{pct(s.semelhanca)}</span>
               {onUsar && s.origem === "erp" && (
-                <button onClick={() => onUsar(s)} className="text-xs font-bold text-[#2A6377] hover:underline whitespace-nowrap">
+                <button onClick={() => onUsar(s)} className="text-xs font-bold text-petroleo hover:underline whitespace-nowrap">
                   Usar este
                 </button>
               )}
@@ -309,7 +309,7 @@ function SelecaoOrigem({ valor, onChange }: { valor: string; onChange: (v: Orige
           role="radio"
           aria-checked={valor === k}
           onClick={() => onChange(k)}
-          className={`px-3 py-1.5 rounded-lg border text-sm font-semibold ${valor === k ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+          className={`px-3 py-1.5 rounded-lg border text-sm font-semibold ${valor === k ? "bg-petroleo text-white border-petroleo" : "bg-white text-slate-600 hover:bg-slate-50"}`}
         >
           {t}
         </button>
@@ -415,7 +415,7 @@ function ModalSolicitar({ devolvida, onFechar, onFeito }: { devolvida?: Solicita
             type="button"
             disabled={enviando}
             onClick={enviar}
-            className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-1 text-sm disabled:opacity-60"
+            className="px-4 py-2 rounded-lg bg-petroleo text-white font-bold flex items-center justify-center gap-1 text-sm disabled:opacity-60"
           >
             {enviando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}{" "}
             {enviando && progresso ? `Anexando: ${progresso}` : devolvida ? "Reenviar" : "Enviar para o cadastro"}
@@ -735,7 +735,7 @@ function DetalheMaterial({
               </button>
             )}
             {s.status === "devolvida" && (ehSolicitante || admin) && (
-              <button onClick={() => onCorrigir(s)} className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-1 text-sm">
+              <button onClick={() => onCorrigir(s)} className="px-3 py-2 rounded-lg bg-petroleo text-white font-bold flex items-center gap-1 text-sm">
                 <Send size={14} /> Corrigir e reenviar
               </button>
             )}
@@ -1234,7 +1234,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
           <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Materiais</h2>
           <p className="text-sm text-slate-500">Solicitações de cadastro de material novo no ERP: o cadastro revisa, o fiscal completa e o item é criado.</p>
         </div>
-        <button onClick={() => setNova(true)} className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-1 text-sm">
+        <button onClick={() => setNova(true)} className="px-4 py-2 rounded-lg bg-petroleo text-white font-bold flex items-center gap-1 text-sm">
           <Plus size={16} /> Solicitar material novo
         </button>
       </div>
@@ -1289,7 +1289,7 @@ export function TelaMateriais({ usuario, idAberto, onAbrir }: { usuario: Usuario
                   </p>
                   <div className="flex items-center justify-between gap-2 pt-0.5">
                     <SeloDiasParados desde={desdeEtapa(s)} aberto={ABERTAS.includes(s.status)} />
-                    <span className={`ml-auto text-sm font-bold ${meu ? "text-[#2A6377]" : "text-slate-600"}`}>{meu ? "Revisar ›" : "Ver detalhes ›"}</span>
+                    <span className={`ml-auto text-sm font-bold ${meu ? "text-petroleo" : "text-slate-600"}`}>{meu ? "Revisar ›" : "Ver detalhes ›"}</span>
                   </div>
                 </button>
               </li>

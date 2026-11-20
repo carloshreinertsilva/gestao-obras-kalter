@@ -5,7 +5,7 @@
 @layer base {
   /* Foco visivel ao navegar pelo teclado (Tab) - nao aparece no clique do mouse */
   :focus-visible {
-    outline: 2px solid #2a6377;
+    outline: 2px solid theme('colors.petroleo.DEFAULT');
     outline-offset: 2px;
     border-radius: 6px;
   }

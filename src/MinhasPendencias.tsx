@@ -58,7 +58,7 @@ export function MinhasPendencias({ pendencias, onIr }: { pendencias: Pendencias 
                 type="button"
                 onClick={() => onIr(i.tela)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition hover:shadow-sm ${
-                  urgente ? "bg-red-50 border-red-200 text-red-800 hover:bg-red-100" : "bg-[#2A6377]/5 border-[#2A6377]/20 text-[#1e4857] hover:bg-[#2A6377]/10"
+                  urgente ? "bg-red-50 border-red-200 text-red-800 hover:bg-red-100" : "bg-petroleo/5 border-petroleo/20 text-petroleo-escuro hover:bg-petroleo/10"
                 }`}
               >
                 <I size={16} className="shrink-0" /> {i.texto(n, pendencias)}

@@ -68,7 +68,7 @@ function CampoCodigo({ valor, onMudar, id }: { valor: string; onMudar: (v: strin
           maxLength={7}
           value={valor}
           onChange={(e) => onMudar(limparCodigo(e.target.value))}
-          className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-[#2A6377] tracking-[0.4em] font-mono text-lg"
+          className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-petroleo tracking-[0.4em] font-mono text-lg"
         />
       </div>
     </div>
@@ -80,7 +80,7 @@ function CartaoEntrada({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-slate-100 items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
-        <div className="bg-[#2A6377] p-6 md:p-8 text-center flex flex-col items-center justify-center border-b border-[#1e4857]">
+        <div className="bg-petroleo p-6 md:p-8 text-center flex flex-col items-center justify-center border-b border-petroleo-escuro">
           <img src="/logo.png" alt="Kalter Logo" className="max-h-16 w-auto object-contain" />
           <p className="text-white/80 font-medium tracking-wide uppercase text-xs mt-2">Gestão de Obras</p>
         </div>
@@ -133,7 +133,7 @@ export function TelaCodigoLogin({ email, onSair }: { email?: string; onSair: () 
       <form onSubmit={confirmar} className="space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <ShieldCheck size={20} className="text-[#2A6377]" aria-hidden="true" /> Digite o código do aplicativo
+            <ShieldCheck size={20} className="text-petroleo" aria-hidden="true" /> Digite o código do aplicativo
           </h2>
           <p className="text-sm text-slate-500 mt-1">
             {email ? <>A conta <b>{email}</b> usa verificação em duas etapas. </> : null}
@@ -145,7 +145,7 @@ export function TelaCodigoLogin({ email, onSair }: { email?: string; onSair: () 
         <button
           type="submit"
           disabled={enviando || !idFator}
-          className="w-full bg-[#2A6377] hover:bg-[#1e4857] text-white p-3 rounded-lg font-bold flex justify-center items-center disabled:opacity-50"
+          className="w-full bg-petroleo hover:bg-petroleo-escuro text-white p-3 rounded-lg font-bold flex justify-center items-center disabled:opacity-50"
         >
           {enviando || !idFator ? <Loader2 className="animate-spin" size={18} aria-label="Aguarde" /> : "Confirmar"}
         </button>
@@ -164,7 +164,7 @@ export function TelaAtivarObrigatoria({ onSair }: { onSair: () => void }) {
     <CartaoEntrada>
       <div>
         <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-          <ShieldCheck size={20} className="text-[#2A6377]" aria-hidden="true" /> Ative a verificação em duas etapas
+          <ShieldCheck size={20} className="text-petroleo" aria-hidden="true" /> Ative a verificação em duas etapas
         </h2>
         <p className="text-sm text-slate-500 mt-1">
           Para o seu perfil, a verificação em duas etapas é obrigatória. Ative agora para continuar usando o sistema.
@@ -274,7 +274,7 @@ function AtivarDuasEtapas({
                 <span className="block mt-1 font-mono text-sm text-slate-800 break-all select-all">{formatarChave(fator.chave)}</span>
               </p>
             ) : (
-              <button type="button" onClick={() => setVerChave(true)} className="text-xs text-[#2A6377] font-medium underline">
+              <button type="button" onClick={() => setVerChave(true)} className="text-xs text-petroleo font-medium underline">
                 Não consegue ler o QR code? Mostrar a chave para digitar
               </button>
             )}
@@ -294,7 +294,7 @@ function AtivarDuasEtapas({
         <button
           type="submit"
           disabled={!fator || enviando}
-          className="px-4 py-2 rounded-lg bg-[#2A6377] hover:bg-[#1e4857] text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2"
+          className="px-4 py-2 rounded-lg bg-petroleo hover:bg-petroleo-escuro text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {enviando && <Loader2 className="animate-spin" size={16} aria-hidden="true" />} Ativar
         </button>
@@ -388,7 +388,7 @@ export function JanelaDuasEtapas({ onFechar }: { onFechar: () => void }) {
               <button
                 type="button"
                 onClick={() => setModo("ativar")}
-                className="px-4 py-2 rounded-lg bg-[#2A6377] hover:bg-[#1e4857] text-white font-bold"
+                className="px-4 py-2 rounded-lg bg-petroleo hover:bg-petroleo-escuro text-white font-bold"
               >
                 Ativar
               </button>

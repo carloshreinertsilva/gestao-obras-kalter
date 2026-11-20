@@ -189,7 +189,7 @@ export default function EntradaArquivos({
 
   const estiloBotao =
     "inline-flex items-center gap-2 px-3 py-2 rounded-lg border bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 " +
-    "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377] disabled:opacity-50 disabled:cursor-not-allowed";
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo disabled:opacity-50 disabled:cursor-not-allowed";
 
   return (
     <div
@@ -198,7 +198,7 @@ export default function EntradaArquivos({
       onDragLeave={aoSairArraste}
       onDragOver={aoArrastarSobre}
       onDrop={aoSoltar}
-      className={`rounded-lg border border-dashed px-3 py-2 transition ${arrastando ? "border-[#2A6377] bg-[#2A6377]/5" : "border-slate-300"} ${className}`}
+      className={`rounded-lg border border-dashed px-3 py-2 transition ${arrastando ? "border-petroleo bg-petroleo/5" : "border-slate-300"} ${className}`}
     >
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -219,7 +219,7 @@ export default function EntradaArquivos({
         )}
       </div>
       {arrastando ? (
-        <p className="mt-1 text-xs font-semibold text-[#2A6377]">Solte para anexar.</p>
+        <p className="mt-1 text-xs font-semibold text-petroleo">Solte para anexar.</p>
       ) : (
         ajuda && (
           <p id={idAjuda} className="mt-1 text-xs text-slate-500">

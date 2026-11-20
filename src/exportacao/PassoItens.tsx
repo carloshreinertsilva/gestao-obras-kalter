@@ -205,7 +205,7 @@ function PainelPesos({
     </>
   );
   return (
-    <section className="rounded-xl border border-[#2A6377]/30 bg-white p-4 space-y-3" aria-label="Pesos do Packing List">
+    <section className="rounded-xl border border-petroleo/30 bg-white p-4 space-y-3" aria-label="Pesos do Packing List">
       <div>
         <h4 className="text-sm font-bold text-slate-800">Pesos dos itens pela Packing List</h4>
         <p className="text-xs text-slate-500 mt-0.5">

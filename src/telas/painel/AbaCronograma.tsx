@@ -92,7 +92,7 @@ export default function AbaCronograma({
     <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
       <div className="p-4 border-b flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-bold text-lg flex items-center gap-2">
-          <Calendar size={18} className="text-[#2A6377]" /> Cronograma
+          <Calendar size={18} className="text-petroleo" /> Cronograma
           Resumo
         </h3>
         <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs" role="group" aria-label="Forma de ver o cronograma">
@@ -107,7 +107,7 @@ export default function AbaCronograma({
               type="button"
               onClick={() => escolherVisao(v)}
               aria-pressed={visao === v}
-              className={`px-3 py-1.5 font-semibold inline-flex items-center gap-1.5 ${visao === v ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+              className={`px-3 py-1.5 font-semibold inline-flex items-center gap-1.5 ${visao === v ? "bg-petroleo text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
             >
               <Icone size={14} aria-hidden="true" /> {rotulo}
             </button>
@@ -128,7 +128,7 @@ export default function AbaCronograma({
           {podeEditarObraSelecionada && cronogramaObra.length > 0 && (
             <p className="text-xs text-slate-500 mt-2">
               Para editar prazos, iniciar ou finalizar uma fase, use a visão{" "}
-              <button type="button" onClick={() => escolherVisao("tabela")} className="font-semibold text-[#2A6377] hover:underline">
+              <button type="button" onClick={() => escolherVisao("tabela")} className="font-semibold text-petroleo hover:underline">
                 Tabela
               </button>
               .
@@ -173,7 +173,7 @@ export default function AbaCronograma({
                     key={fase.id}
                     className="border-t hover:bg-slate-50"
                   >
-                    <td className="p-3 font-bold text-[#2A6377]">
+                    <td className="p-3 font-bold text-petroleo">
                       {labelFase(fase.fase ?? "")}
                     </td>
                     <td className="p-3 text-center text-slate-700">
@@ -418,7 +418,7 @@ function BlocoAvanco({ obra, podeEditar }: { obra: Obra; podeEditar: boolean }) 
       <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
           <h3 className="font-bold text-lg flex items-center gap-2">
-            <Activity size={18} className="text-[#2A6377]" aria-hidden="true" /> Avanço físico
+            <Activity size={18} className="text-petroleo" aria-hidden="true" /> Avanço físico
           </h3>
           {dados && (
             <p className="text-sm text-slate-600 mt-1">
@@ -439,7 +439,7 @@ function BlocoAvanco({ obra, podeEditar }: { obra: Obra; podeEditar: boolean }) 
             type="button"
             onClick={() => setModalAberto(true)}
             disabled={!dados}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#2A6377] text-white text-sm font-bold hover:bg-[#1f4b5a] transition disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-petroleo text-white text-sm font-bold hover:bg-petroleo-escuro transition disabled:opacity-50"
           >
             <Plus size={16} aria-hidden="true" /> Informar avanço
           </button>
@@ -465,7 +465,7 @@ function BlocoAvanco({ obra, podeEditar }: { obra: Obra; podeEditar: boolean }) 
       ) : (
         <>
           {!curva.temFisico && (
-            <p className="text-sm text-[#2A6377] bg-[#2A6377]/5 border border-[#2A6377]/20 rounded-lg px-3 py-2 mb-3">
+            <p className="text-sm text-petroleo bg-petroleo/5 border border-petroleo/20 rounded-lg px-3 py-2 mb-3">
               Informe o avanço físico para comparar com o faturado e o recebido.
             </p>
           )}
@@ -487,7 +487,7 @@ function BlocoAvanco({ obra, podeEditar }: { obra: Obra; podeEditar: boolean }) 
                 type="button"
                 onClick={() => setVerHistorico((v) => !v)}
                 aria-expanded={verHistorico}
-                className="text-xs font-semibold text-[#2A6377] hover:underline"
+                className="text-xs font-semibold text-petroleo hover:underline"
               >
                 {verHistorico ? "Esconder histórico" : `Ver histórico (${dados.avancos.length})`}
               </button>
@@ -589,7 +589,7 @@ function ModalAvanco({
             type="button"
             onClick={enviar}
             disabled={salvando || !texto.trim()}
-            className="px-4 py-2.5 md:py-2 rounded-lg text-sm font-bold text-white bg-[#2A6377] hover:bg-[#1f4b5a] transition disabled:opacity-50"
+            className="px-4 py-2.5 md:py-2 rounded-lg text-sm font-bold text-white bg-petroleo hover:bg-petroleo-escuro transition disabled:opacity-50"
           >
             {salvando ? "Gravando..." : "Gravar avanço"}
           </button>
@@ -617,7 +617,7 @@ function ModalAvanco({
             placeholder="Ex.: 45"
             aria-describedby="avanco-ajuda"
             aria-invalid={lido?.erro ? true : undefined}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6377]/40 focus:border-[#2A6377]"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-petroleo/40 focus:border-petroleo"
           />
           <p id="avanco-ajuda" className="text-xs text-slate-500 mt-1">
             {anterior
@@ -636,7 +636,7 @@ function ModalAvanco({
             value={data}
             max={hojeISO}
             onChange={(e) => setData(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6377]/40 focus:border-[#2A6377]"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-petroleo/40 focus:border-petroleo"
           />
           {mesmaData && (
             <p className="text-xs text-amber-700 mt-1">
@@ -654,7 +654,7 @@ function ModalAvanco({
             onChange={(e) => setObs(e.target.value)}
             rows={3}
             placeholder="Ex.: medição com o cliente"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6377]/40 focus:border-[#2A6377]"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-petroleo/40 focus:border-petroleo"
           />
         </div>
       </form>

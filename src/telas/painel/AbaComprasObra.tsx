@@ -61,7 +61,7 @@ export default function AbaComprasObra({
   const botao = (id: "material" | "servicos", rotulo: string, Icone: typeof Package) => (
     <button
       onClick={() => setSecao(id)}
-      className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 border ${secao === id ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+      className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 border ${secao === id ? "bg-petroleo text-white border-petroleo" : "bg-white text-slate-600 hover:bg-slate-50"}`}
     >
       <Icone size={15} /> {rotulo}
     </button>

@@ -159,7 +159,7 @@ export default function MargemCarteira({
       <button
         type="button"
         onClick={() => alternar(coluna)}
-        className={`hover:text-[#2A6377] transition ${ordem.coluna === coluna ? "text-[#2A6377]" : ""}`}
+        className={`hover:text-petroleo transition ${ordem.coluna === coluna ? "text-petroleo" : ""}`}
       >
         {rotulo}
         {ordem.coluna === coluna ? (ordem.direcao === "asc" ? " ▲" : " ▼") : ""}
@@ -224,7 +224,7 @@ export default function MargemCarteira({
           <button
             type="button"
             onClick={() => setTentativa((t) => t + 1)}
-            className="inline-flex items-center gap-2 bg-[#2A6377] text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-[#1e4857]"
+            className="inline-flex items-center gap-2 bg-petroleo text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-petroleo-escuro"
           >
             <RefreshCw size={14} /> Tentar de novo
           </button>
@@ -275,7 +275,7 @@ export default function MargemCarteira({
                   type="button"
                   onClick={() => alternar(coluna)}
                   aria-pressed={ordem.coluna === coluna}
-                  className={`px-2.5 py-1 rounded-lg border font-semibold ${ordem.coluna === coluna ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-600"}`}
+                  className={`px-2.5 py-1 rounded-lg border font-semibold ${ordem.coluna === coluna ? "bg-petroleo text-white border-petroleo" : "bg-white text-slate-600"}`}
                 >
                   {rotulo}
                   {ordem.coluna === coluna ? (ordem.direcao === "asc" ? " ▲" : " ▼") : ""}
@@ -343,7 +343,7 @@ export default function MargemCarteira({
                           e.stopPropagation();
                           onAbrirObra(l.id);
                         }}
-                        className="text-left font-semibold hover:text-[#2A6377] hover:underline truncate max-w-full block"
+                        className="text-left font-semibold hover:text-petroleo hover:underline truncate max-w-full block"
                         title={`Abrir a obra ${nomeObra(l)}`}
                       >
                         {nomeObra(l)}

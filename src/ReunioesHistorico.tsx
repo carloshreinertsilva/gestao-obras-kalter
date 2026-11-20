@@ -362,7 +362,7 @@ export default function ReunioesHistorico({
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar obra, gestor ou palavra…"
               aria-label="Buscar reunião"
-              className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377]"
+              className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-petroleo"
             />
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -388,7 +388,7 @@ export default function ReunioesHistorico({
               type="button"
               onClick={exportar}
               disabled={carregando || filtradas.length === 0}
-              className="flex items-center gap-1 text-xs font-semibold text-[#2A6377] border border-[#2A6377]/40 rounded-lg px-2 py-1 hover:bg-[#2A6377]/5 disabled:opacity-50"
+              className="flex items-center gap-1 text-xs font-semibold text-petroleo border border-petroleo/40 rounded-lg px-2 py-1 hover:bg-petroleo/5 disabled:opacity-50"
               title="Baixar reuniões, ocorrências e tarefas das reuniões filtradas em planilha (abre no Excel)"
             >
               <Download size={13} /> Exportar Excel
@@ -416,10 +416,10 @@ export default function ReunioesHistorico({
                     setAba("resumos");
                     onSelecionar?.(m.data);
                   }}
-                  className={`w-full text-left px-4 py-3 border-b transition ${ativa ? "bg-[#2A6377]/10 border-l-4 border-l-[#2A6377]" : "hover:bg-slate-50 border-l-4 border-l-transparent"}`}
+                  className={`w-full text-left px-4 py-3 border-b transition ${ativa ? "bg-petroleo/10 border-l-4 border-l-petroleo" : "hover:bg-slate-50 border-l-4 border-l-transparent"}`}
                 >
                   <p className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                    <CalendarDays size={14} className="text-[#2A6377]" /> {titulo(m)}
+                    <CalendarDays size={14} className="text-petroleo" /> {titulo(m)}
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
                     {obras} obra(s)
@@ -453,14 +453,14 @@ export default function ReunioesHistorico({
                 <div className="flex gap-2">
                   <button
                     onClick={() => onBaixarPdf(listaParaAta(atual), formatarDataSegura(atual.data), atual.sessao?.resumo_gravacao || null)}
-                    className="px-3 py-1.5 rounded-lg border border-[#2A6377] text-[#2A6377] text-sm font-bold hover:bg-[#2A6377] hover:text-white transition flex items-center gap-2"
+                    className="px-3 py-1.5 rounded-lg border border-petroleo text-petroleo text-sm font-bold hover:bg-petroleo hover:text-white transition flex items-center gap-2"
                   >
                     <FileText size={15} /> Baixar ata (PDF)
                   </button>
                   <button
                     onClick={() => reenviar(atual)}
                     disabled={enviando}
-                    className="px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-sm font-bold hover:bg-[#1e4857] transition flex items-center gap-2 disabled:opacity-50"
+                    className="px-3 py-1.5 rounded-lg bg-petroleo text-white text-sm font-bold hover:bg-petroleo-escuro transition flex items-center gap-2 disabled:opacity-50"
                   >
                     {enviando ? <Loader2 className="animate-spin" size={15} /> : <Mail size={15} />} Reenviar por e-mail
                   </button>
@@ -487,7 +487,7 @@ export default function ReunioesHistorico({
                 <button
                   key={valor}
                   onClick={() => setAba(valor)}
-                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 -mb-px transition ${aba === valor ? "border-[#2A6377] text-[#2A6377]" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+                  className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 -mb-px transition ${aba === valor ? "border-petroleo text-petroleo" : "border-transparent text-slate-500 hover:text-slate-700"}`}
                 >
                   {rotulo}
                 </button>
@@ -498,12 +498,12 @@ export default function ReunioesHistorico({
               {aba === "resumos" &&
                 obrasDaReuniao(atual).map(({ gestor, obras }) => (
                   <div key={gestor} className="mb-6 last:mb-0">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#2A6377] border-b-2 border-[#2A6377] pb-1 mb-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-petroleo border-b-2 border-petroleo pb-1 mb-3">
                       Gestor: {gestor}
                     </p>
                     {obras.map((o: any) => (
                       <div key={o.idObra} className="mb-4 border rounded-lg overflow-hidden">
-                        <p className="bg-[#2A6377] text-white text-sm font-bold px-3 py-2">{o.nomeObra}</p>
+                        <p className="bg-petroleo text-white text-sm font-bold px-3 py-2">{o.nomeObra}</p>
                         <div className="p-3 space-y-3 text-sm">
                           {o.reuniao && (
                             <p className="whitespace-pre-wrap text-slate-700">
@@ -516,7 +516,7 @@ export default function ReunioesHistorico({
                               <p className="font-bold text-slate-800 mb-1">Ocorrências</p>
                               {o.reuniao.ocorrencias.map((oc: any) => (
                                 <p key={oc.id} className="whitespace-pre-wrap text-slate-700">
-                                  <span className="font-semibold text-[#2A6377] uppercase text-xs">{labelOcorrencia(oc.tipo)}: </span>
+                                  <span className="font-semibold text-petroleo uppercase text-xs">{labelOcorrencia(oc.tipo)}: </span>
                                   {oc.descricao}
                                 </p>
                               ))}

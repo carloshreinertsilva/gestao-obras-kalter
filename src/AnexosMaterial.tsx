@@ -238,7 +238,7 @@ export function SecaoAnexosMaterial({
                   <button
                     type="button"
                     onClick={() => abrirAnexo(a)}
-                    className="font-semibold text-[#2A6377] hover:underline text-left break-all"
+                    className="font-semibold text-petroleo hover:underline text-left break-all"
                     title="Abrir o arquivo"
                   >
                     {a.nome_arquivo}

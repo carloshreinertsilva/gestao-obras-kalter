@@ -70,7 +70,7 @@ export function useAviso(): ApiAviso {
 const ESTILO: Record<TipoAviso, { caixa: string; icone: string; Icone: typeof Info; rotulo: string }> = {
   sucesso: { caixa: "border-emerald-200 bg-emerald-50 text-emerald-900", icone: "text-emerald-600", Icone: CheckCircle2, rotulo: "Sucesso" },
   erro: { caixa: "border-red-200 bg-red-50 text-red-900", icone: "text-red-600", Icone: AlertTriangle, rotulo: "Erro" },
-  info: { caixa: "border-[#2A6377]/30 bg-white text-slate-800", icone: "text-[#2A6377]", Icone: Info, rotulo: "Aviso" },
+  info: { caixa: "border-petroleo/30 bg-white text-slate-800", icone: "text-petroleo", Icone: Info, rotulo: "Aviso" },
 };
 
 function Toast({ item, onFechar }: { item: ItemAviso; onFechar: (id: number) => void }) {

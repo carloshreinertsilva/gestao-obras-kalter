@@ -259,7 +259,7 @@ export default function TimelineObra({
                 placeholder="Houve alguma alteração no projeto hoje? Registre aqui…"
                 value={novoDiarioTexto}
                 onChange={(e) => setNovoDiarioTexto(e.target.value)}
-                className="w-full border rounded-lg p-2 outline-none focus:border-[#2A6377] text-sm mb-2"
+                className="w-full border rounded-lg p-2 outline-none focus:border-petroleo text-sm mb-2"
               ></textarea>
               <div className="flex gap-2">
                 <button
@@ -293,7 +293,7 @@ export default function TimelineObra({
               </h4>
               <div className="flex gap-2 mb-2">
                 <select
-                  className="border rounded-lg p-2 text-sm outline-none focus:border-[#2A6377]"
+                  className="border rounded-lg p-2 text-sm outline-none focus:border-petroleo"
                   value={novaOcorrenciaTipo}
                   onChange={(e) => setNovaOcorrenciaTipo(e.target.value)}
                 >
@@ -308,7 +308,7 @@ export default function TimelineObra({
                   placeholder="Descrição…"
                   value={novaOcorrenciaDescricao}
                   onChange={(e) => setNovaOcorrenciaDescricao(e.target.value)}
-                  className="flex-1 border rounded-lg p-2 text-sm outline-none focus:border-[#2A6377]"
+                  className="flex-1 border rounded-lg p-2 text-sm outline-none focus:border-petroleo"
                   onKeyDown={(e) => e.key === "Enter" && salvarOcorrencia()}
                 />
               </div>
@@ -342,7 +342,7 @@ export default function TimelineObra({
               key={idx}
               className="w-full border-l-2 border-slate-200 pl-4 pb-5"
             >
-              <h5 className="font-bold text-[#2A6377] mb-2 text-sm">
+              <h5 className="font-bold text-petroleo mb-2 text-sm">
                 {hist.dataFormatada}
               </h5>
               <div className="space-y-2">
@@ -378,7 +378,7 @@ export default function TimelineObra({
                     className="bg-white p-3 rounded border text-sm"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-bold text-[#2A6377]">
+                      <span className="font-bold text-petroleo">
                         {labelOcorrencia(oc.tipo)}:
                       </span>
                       <span

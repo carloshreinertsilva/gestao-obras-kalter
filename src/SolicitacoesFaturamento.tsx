@@ -468,7 +468,7 @@ function ModalSolicitarFaturamento({
           <button
             disabled={enviando}
             onClick={() => salvar(true)}
-            className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+            className="px-4 py-2 rounded-lg bg-petroleo text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {enviando ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}{" "}
             {enviando && progresso ? progresso : "Enviar para a logística"}
@@ -696,7 +696,7 @@ function FragmentoFamilia({
         <td colSpan={7} className="px-3 py-1.5 text-xs font-bold text-slate-600">
           Família {familia}
           {descricao ? ` – ${descricao}` : ""}
-          <button onClick={onSaldo} className="ml-3 text-xs font-bold text-[#2A6377] hover:underline">
+          <button onClick={onSaldo} className="ml-3 text-xs font-bold text-petroleo hover:underline">
             faturar saldo da família
           </button>
         </td>
@@ -1020,7 +1020,7 @@ function ModalConferencia({
               <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:justify-between">
                 <div className="min-w-0 space-y-0.5">
                   <p className="font-bold text-slate-700 flex items-center gap-1.5">
-                    <Lightbulb size={15} className="shrink-0 text-[#2A6377]" aria-hidden="true" /> Sugestão
+                    <Lightbulb size={15} className="shrink-0 text-petroleo" aria-hidden="true" /> Sugestão
                   </p>
                   {sugestao.peso && (
                     <>
@@ -1052,7 +1052,7 @@ function ModalConferencia({
                   <button
                     type="button"
                     onClick={usarSugestao}
-                    className="px-3 py-1.5 rounded-lg border border-[#2A6377] text-[#2A6377] font-semibold text-sm hover:bg-white shrink-0"
+                    className="px-3 py-1.5 rounded-lg border border-petroleo text-petroleo font-semibold text-sm hover:bg-white shrink-0"
                   >
                     Usar sugestão
                   </button>
@@ -1318,7 +1318,7 @@ export function DetalheSolicitacaoFaturamento({
               </button>
             )}
             {podeEditar && (
-              <button onClick={() => setEditando(true)} className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold text-sm flex items-center justify-center gap-1.5">
+              <button onClick={() => setEditando(true)} className="px-4 py-2 rounded-lg bg-petroleo text-white font-bold text-sm flex items-center justify-center gap-1.5">
                 <FileText size={15} /> {sol.status === "devolvida" ? "Corrigir e reenviar" : "Editar e enviar"}
               </button>
             )}
@@ -1367,7 +1367,7 @@ export function DetalheSolicitacaoFaturamento({
         <div>
           <p className="text-sm text-slate-500">
             Obra{" "}
-            <a href={`/obras/${sol.codigo_obra}/faturamento`} className="text-[#2A6377] font-semibold hover:underline">
+            <a href={`/obras/${sol.codigo_obra}/faturamento`} className="text-petroleo font-semibold hover:underline">
               {sol.codigo_obra}
             </a>{" "}
             · solicitado por {sol.nome_solicitante} {sol.enviado_em ? `em ${fmtDataHora(sol.enviado_em)}` : "(rascunho)"}
@@ -1522,7 +1522,7 @@ export function DetalheSolicitacaoFaturamento({
             <Bloco titulo="Anexos" icone={<Paperclip size={14} />}>
               <div className="flex flex-wrap gap-2">
                 {sol.anexos.map((a) => (
-                  <button key={a.caminho} onClick={() => abrirAnexo(a.caminho)} className="text-xs px-2 py-1 rounded border bg-slate-50 text-[#2A6377] font-semibold">
+                  <button key={a.caminho} onClick={() => abrirAnexo(a.caminho)} className="text-xs px-2 py-1 rounded border bg-slate-50 text-petroleo font-semibold">
                     {a.nome}
                   </button>
                 ))}
@@ -1599,7 +1599,7 @@ function TabelaSolicitacoes({
           <li key={s.id}>
             <button type="button" onClick={() => onAbrir(s.id)} className="w-full text-left px-3 py-3 hover:bg-slate-50 active:bg-slate-100">
               <div className="flex items-start justify-between gap-2">
-                <p className="font-bold text-[#2A6377]">
+                <p className="font-bold text-petroleo">
                   SF {s.numero}
                   {mostrarObra && <span className="text-slate-700 font-semibold"> · obra {s.codigo_obra}</span>}
                   <span className="text-slate-500 font-normal"> · {tipoTexto(s.tipo)}</span>
@@ -1616,7 +1616,7 @@ function TabelaSolicitacoes({
                 <BadgeStatusFaturamento status={s.status} />
                 <RomaneioResumo romaneios={s.romaneios} grande />
                 <SeloDiasParados desde={desdeEtapaSf(s)} aberto={SF_ABERTA.includes(s.status)} />
-                <span className="ml-auto text-xs font-semibold text-[#2A6377] flex items-center">
+                <span className="ml-auto text-xs font-semibold text-petroleo flex items-center">
                   Abrir <ChevronRight size={14} aria-hidden="true" />
                 </span>
               </div>
@@ -1646,7 +1646,7 @@ function TabelaSolicitacoes({
             const atrasada = ["aguardando_logistica", "aguardando_fiscal"].includes(s.status) && s.data_desejada && s.data_desejada < hoje;
             return (
               <tr key={s.id} {...linhaClicavel(() => onAbrir(s.id))} className="border-t hover:bg-slate-50 cursor-pointer">
-                <td className="px-3 py-2 font-bold text-[#2A6377]">SF {s.numero}</td>
+                <td className="px-3 py-2 font-bold text-petroleo">SF {s.numero}</td>
                 {mostrarObra && <td className="px-3 py-2">{s.codigo_obra}</td>}
                 <td className="px-3 py-2">{tipoTexto(s.tipo)}</td>
                 <td className="px-3 py-2 text-slate-600">{s.nome_solicitante}</td>
@@ -1716,16 +1716,16 @@ export function SolicitacoesFaturamentoObra({
       <div className="p-4 border-b flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <h3 className="font-bold text-lg flex items-center gap-2">
-            <Receipt size={18} className="text-[#2A6377]" /> Solicitações de faturamento
+            <Receipt size={18} className="text-petroleo" /> Solicitações de faturamento
           </h3>
           <p className="text-xs text-slate-500">Pedido do gestor → conferência da logística → emissão da NF pelo fiscal → NF ligada automaticamente.</p>
         </div>
         {podeSolicitar && (
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setNovo("produto")} className="px-3 py-2 rounded-lg bg-[#2A6377] text-white text-sm font-bold flex items-center gap-1.5">
+            <button onClick={() => setNovo("produto")} className="px-3 py-2 rounded-lg bg-petroleo text-white text-sm font-bold flex items-center gap-1.5">
               <Plus size={15} /> Faturar produto
             </button>
-            <button onClick={() => setNovo("servico")} className="px-3 py-2 rounded-lg border border-[#2A6377] text-[#2A6377] text-sm font-bold flex items-center gap-1.5">
+            <button onClick={() => setNovo("servico")} className="px-3 py-2 rounded-lg border border-petroleo text-petroleo text-sm font-bold flex items-center gap-1.5">
               <Plus size={15} /> Faturar serviço
             </button>
           </div>
@@ -1746,7 +1746,7 @@ export function SolicitacoesFaturamentoObra({
         <TabelaSolicitacoes lista={mostradas} mostrarObra={false} onAbrir={setAberto} />
       )}
       {lista && lista.length > ativas.length && (
-        <button onClick={() => setVerTodas((v) => !v)} className="w-full text-xs font-bold text-[#2A6377] py-2 border-t hover:bg-slate-50">
+        <button onClick={() => setVerTodas((v) => !v)} className="w-full text-xs font-bold text-petroleo py-2 border-t hover:bg-slate-50">
           {verTodas ? "Mostrar só as em andamento" : `Ver histórico completo (${lista.length})`}
         </button>
       )}
@@ -1877,7 +1877,7 @@ export function TelaFaturamento({
               <button
                 key={v}
                 onClick={() => setFiltro(v)}
-                className={`px-3 py-1.5 font-semibold ${filtro === v ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                className={`px-3 py-1.5 font-semibold ${filtro === v ? "bg-petroleo text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
               >
                 {rot}
               </button>

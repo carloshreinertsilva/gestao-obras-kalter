@@ -1,9 +1,10 @@
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatarMoeda } from "../utils";
+import { COR_PETROLEO } from "../cores";
 
 // Grafico da Previsao de faturamento e recebimento. Arquivo proprio para o recharts
 // (a biblioteca mais pesada do app) ser baixado so depois do Painel aparecer.
-export const COR_FATURAR = "#2A6377";
+export const COR_FATURAR = COR_PETROLEO;
 export const COR_RECEBER = "#D97706";
 
 const eixoCompacto = (v: number) => {

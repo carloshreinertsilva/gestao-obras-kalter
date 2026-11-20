@@ -105,7 +105,7 @@ export default function PrevisaoMensal({
   const cabecalho = (
     <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
       <h3 className="font-bold text-slate-800 flex items-center gap-2">
-        <CalendarRange size={18} className="text-[#2A6377]" aria-hidden="true" />
+        <CalendarRange size={18} className="text-petroleo" aria-hidden="true" />
         Previsão de faturamento e recebimento
       </h3>
       {resultado && !resultado.vazio && (
@@ -116,7 +116,7 @@ export default function PrevisaoMensal({
               type="button"
               onClick={() => setQuantidadeMeses(q)}
               aria-pressed={quantidadeMeses === q}
-              className={`px-3 py-1.5 font-semibold ${quantidadeMeses === q ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+              className={`px-3 py-1.5 font-semibold ${quantidadeMeses === q ? "bg-petroleo text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
             >
               {q} meses
             </button>

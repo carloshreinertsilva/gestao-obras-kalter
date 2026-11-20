@@ -20,12 +20,12 @@ const iconePorTipo: Record<string, { Icone: any; cor: string }> = {
   tarefa_atribuida: { Icone: CheckSquare, cor: "text-blue-600 bg-blue-50" },
   tarefa_comentario: { Icone: MessageSquare, cor: "text-indigo-600 bg-indigo-50" },
   obra_nova: { Icone: HardHat, cor: "text-emerald-600 bg-emerald-50" },
-  fase_alterada: { Icone: Activity, cor: "text-[#2A6377] bg-[#2A6377]/10" },
+  fase_alterada: { Icone: Activity, cor: "text-petroleo bg-petroleo/10" },
   ocorrencia_nova: { Icone: AlertTriangle, cor: "text-amber-600 bg-amber-50" },
   nf_nova: { Icone: Receipt, cor: "text-violet-600 bg-violet-50" },
   recebimento_novo: { Icone: DollarSign, cor: "text-green-600 bg-green-50" },
   previsao_aprovacao: { Icone: Wallet, cor: "text-amber-600 bg-amber-50" },
-  previsao_resultado: { Icone: Wallet, cor: "text-[#2A6377] bg-[#2A6377]/10" },
+  previsao_resultado: { Icone: Wallet, cor: "text-petroleo bg-petroleo/10" },
   familia_alerta: { Icone: AlertTriangle, cor: "text-red-600 bg-red-50" },
   faturamento: { Icone: Receipt, cor: "text-blue-700 bg-blue-50" },
   nf_terceiros: { Icone: Receipt, cor: "text-teal-700 bg-teal-50" },
@@ -91,9 +91,9 @@ export function AtivarPush() {
 
   if (estado === "inativo") {
     return (
-      <div className="mb-4 p-3 rounded-xl bg-[#2A6377]/5 border border-[#2A6377]/20">
+      <div className="mb-4 p-3 rounded-xl bg-petroleo/5 border border-petroleo/20">
         <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-          <BellRing size={16} className="text-[#2A6377]" /> Receber avisos neste dispositivo
+          <BellRing size={16} className="text-petroleo" /> Receber avisos neste dispositivo
         </p>
         <p className="text-xs text-slate-500 mt-1">
           As novidades aparecem na tela mesmo com o app fechado.
@@ -101,7 +101,7 @@ export function AtivarPush() {
         <button
           disabled={ocupado}
           onClick={() => executar(ativarPush)}
-          className="mt-2 px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-xs font-semibold hover:bg-[#1e4857] disabled:opacity-50"
+          className="mt-2 px-3 py-1.5 rounded-lg bg-petroleo text-white text-xs font-semibold hover:bg-petroleo-escuro disabled:opacity-50"
         >
           {ocupado ? "Ativando…" : "Ativar avisos"}
         </button>
@@ -140,7 +140,7 @@ export function ItemNotificacao({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left flex gap-3 p-3 rounded-xl border transition hover:border-[#2A6377]/40 ${naoLida ? "bg-white border-[#2A6377]/30" : "bg-white/60 border-slate-200"}`}
+      className={`w-full text-left flex gap-3 p-3 rounded-xl border transition hover:border-petroleo/40 ${naoLida ? "bg-white border-petroleo/30" : "bg-white/60 border-slate-200"}`}
     >
       <span className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center ${cor}`}>
         <Icone size={17} />
@@ -160,7 +160,7 @@ export function ItemNotificacao({
           {tempoRelativo(notificacao.created_at)}
         </span>
       </span>
-      {naoLida && <span className="shrink-0 mt-1.5 w-2 h-2 rounded-full bg-[#2A6377]" />}
+      {naoLida && <span className="shrink-0 mt-1.5 w-2 h-2 rounded-full bg-petroleo" />}
     </button>
   );
 }

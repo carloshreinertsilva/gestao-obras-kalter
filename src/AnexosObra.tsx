@@ -271,12 +271,12 @@ export default function AnexosObra({
               placeholder="Legenda (opcional)…"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
-              className="border rounded-lg p-2 text-sm outline-none focus:border-[#2A6377] md:col-span-1"
+              className="border rounded-lg p-2 text-sm outline-none focus:border-petroleo md:col-span-1"
             />
             <select
               value={idOcorrenciaVinculada}
               onChange={(e) => setIdOcorrenciaVinculada(e.target.value)}
-              className="border rounded-lg p-2 text-sm outline-none focus:border-[#2A6377] md:col-span-1"
+              className="border rounded-lg p-2 text-sm outline-none focus:border-petroleo md:col-span-1"
             >
               <option value="">Sem vínculo com ocorrência</option>
               {ocorrencias.map((oc) => (
@@ -289,7 +289,7 @@ export default function AnexosObra({
           <button
             onClick={enviarAnexo}
             disabled={!arquivosSelecionados.length || enviando}
-            className="mt-3 bg-[#2A6377] hover:bg-[#1e4857] text-white px-4 py-2 rounded-lg font-bold text-sm transition flex items-center gap-2 disabled:opacity-50"
+            className="mt-3 bg-petroleo hover:bg-petroleo-escuro text-white px-4 py-2 rounded-lg font-bold text-sm transition flex items-center gap-2 disabled:opacity-50"
           >
             {enviando ? (
               <Loader2 className="animate-spin" size={14} />

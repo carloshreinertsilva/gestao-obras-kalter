@@ -1,4 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { COR_PETROLEO } from "../cores";
 
 // Grafico "Obras por Fase" do Dashboard. Fica num arquivo proprio para o recharts
 // (a biblioteca mais pesada do app) ser baixado so depois da tela inicial aparecer.
@@ -10,7 +11,7 @@ export default function GraficoObrasPorFase({ dados }: { dados: { nome: string; 
         <XAxis dataKey="nome" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
         <YAxis allowDecimals={false} axisLine={false} tickLine={false} />
         <Tooltip cursor={{ fill: "#f3f4f6" }} />
-        <Bar dataKey="total" name="Obras" fill="#2A6377" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="total" name="Obras" fill={COR_PETROLEO} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

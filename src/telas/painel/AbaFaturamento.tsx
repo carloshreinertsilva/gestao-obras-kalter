@@ -87,7 +87,7 @@ export default function AbaFaturamento({
         </div>
         <div className="bg-white p-5 rounded-xl shadow-sm border">
           <p className="text-xs text-slate-500 font-bold uppercase">
-            À Faturar
+            A Faturar
           </p>
           <ValorAjustavel className="text-2xl font-bold text-amber-700">
             {formatarMoeda(saldoFaturarFamiliasPositivo)}
@@ -97,7 +97,7 @@ export default function AbaFaturamento({
           <p className="text-xs text-slate-500 font-bold uppercase">
             Itens no Escopo
           </p>
-          <p className="text-2xl font-bold text-[#2A6377]">
+          <p className="text-2xl font-bold text-petroleo">
             {familiasFaturamentoComEscopo.length}
           </p>
         </div>
@@ -106,7 +106,7 @@ export default function AbaFaturamento({
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
         <div className="p-4 border-b">
           <h3 className="font-bold text-lg flex items-center gap-2">
-            <Receipt size={18} className="text-[#2A6377]" /> Escopo
+            <Receipt size={18} className="text-petroleo" /> Escopo
             por Grupo/Família
           </h3>
           <p className="text-xs text-slate-500 mt-1">
@@ -125,8 +125,8 @@ export default function AbaFaturamento({
                 <th className="p-3 text-right">Valor Total Escopo</th>
                 <th className="p-3 text-right">Faturado</th>
                 <th className="p-3 text-right">% Faturado</th>
-                <th className="p-3 text-right">À Faturar</th>
-                <th className="p-3 text-right">% À Faturar</th>
+                <th className="p-3 text-right">A Faturar</th>
+                <th className="p-3 text-right">% A Faturar</th>
               </tr>
             </thead>
             <tbody>
@@ -157,7 +157,7 @@ export default function AbaFaturamento({
                       key={linha.grupo.id}
                       className="border-t hover:bg-slate-50"
                     >
-                      <td className="p-3 font-bold text-[#2A6377]">
+                      <td className="p-3 font-bold text-petroleo">
                         <div>
                           {linha.grupo.codigo}
                           {linha.grupo.descricao
@@ -200,7 +200,7 @@ export default function AbaFaturamento({
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
         <div className="p-4 border-b">
           <h3 className="font-bold text-lg flex items-center gap-2">
-            <Activity size={18} className="text-[#2A6377]" />
+            <Activity size={18} className="text-petroleo" />
             Previsão x Realizado por Grupo de Faturamento
           </h3>
           <p className="text-xs text-slate-500 mt-1">
@@ -234,7 +234,7 @@ export default function AbaFaturamento({
                       className="p-0 text-center min-w-[260px] border-r"
                       colSpan={2}
                     >
-                      <div className="bg-[#2A6377] text-white p-2 font-bold">
+                      <div className="bg-petroleo text-white p-2 font-bold">
                         {formatarCompetencia(comp)}
                       </div>
                     </th>
@@ -278,7 +278,7 @@ export default function AbaFaturamento({
                     key={`grupo-matriz-${linha.grupo.codigo}`}
                     className="border-t hover:bg-slate-50"
                   >
-                    <td className="p-3 font-bold text-[#2A6377] sticky left-0 bg-white z-10 border-r min-w-[260px]">
+                    <td className="p-3 font-bold text-petroleo sticky left-0 bg-white z-10 border-r min-w-[260px]">
                       <div>
                         {linha.grupo.codigo}
                         {linha.grupo.descricao ? ` - ${linha.grupo.descricao}` : ""}
@@ -332,9 +332,9 @@ export default function AbaFaturamento({
               )}
             </tbody>
             {competenciasFaturamento.length > 0 && gruposFaturamentoResumo.length > 0 && (
-              <tfoot className="bg-slate-100 border-t-2 border-[#2A6377] text-slate-800">
+              <tfoot className="bg-slate-100 border-t-2 border-petroleo text-slate-800">
                 <tr>
-                  <td className="p-3 font-black text-[#2A6377] sticky left-0 bg-slate-100 z-20 border-r min-w-[260px]">
+                  <td className="p-3 font-black text-petroleo sticky left-0 bg-slate-100 z-20 border-r min-w-[260px]">
                     TOTAL POR COMPETÊNCIA
                   </td>
                   {competenciasFaturamento.map((comp) => {

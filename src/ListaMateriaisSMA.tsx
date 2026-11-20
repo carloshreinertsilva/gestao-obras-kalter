@@ -128,7 +128,7 @@ function FiltroColuna({
       <button
         ref={gatilhoRef}
         onClick={() => (aberto ? setAberto(false) : abrir())}
-        className={`align-middle p-0.5 rounded transition ${ativo ? "text-[#2A6377]" : "text-slate-500 hover:text-slate-600"}`}
+        className={`align-middle p-0.5 rounded transition ${ativo ? "text-petroleo" : "text-slate-500 hover:text-slate-600"}`}
         title="Filtrar"
         aria-label="Filtrar coluna"
       >
@@ -152,7 +152,7 @@ function FiltroColuna({
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar…"
-              className="w-full border rounded px-2 py-1 text-xs mb-2 outline-none focus:border-[#2A6377]"
+              className="w-full border rounded px-2 py-1 text-xs mb-2 outline-none focus:border-petroleo"
               autoFocus
             />
             <div className="flex justify-between text-xs text-violet-700 font-bold mb-1 px-0.5">
@@ -254,7 +254,7 @@ function CabecalhoOrdenavel({
   return (
     <button
       onClick={() => onClick(coluna)}
-      className={`inline-flex items-center gap-0.5 hover:text-[#2A6377] transition ${ativa ? "text-[#2A6377]" : ""}`}
+      className={`inline-flex items-center gap-0.5 hover:text-petroleo transition ${ativa ? "text-petroleo" : ""}`}
     >
       {rotulo}
       {ativa &&
@@ -528,7 +528,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
             <button
               onClick={exportarExcel}
               title="Exportar lista filtrada para Excel"
-              className="shrink-0 mt-0.5 text-xs font-semibold text-slate-500 hover:text-[#2A6377] flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 hover:border-[#2A6377]/40 transition"
+              className="shrink-0 mt-0.5 text-xs font-semibold text-slate-500 hover:text-petroleo flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 hover:border-petroleo/40 transition"
             >
               <Download size={13} /> Exportar
             </button>
@@ -542,7 +542,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Buscar material, SMA, solicitante…"
                 aria-label="Buscar material, SMA ou solicitante"
-                className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377]"
+                className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-petroleo"
               />
             </div>
             <div className="inline-flex rounded-lg border overflow-hidden text-sm">
@@ -557,7 +557,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
                 <button
                   key={valor}
                   onClick={() => setFiltroSituacao(valor)}
-                  className={`px-3 py-1.5 font-semibold transition ${filtroSituacao === valor ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                  className={`px-3 py-1.5 font-semibold transition ${filtroSituacao === valor ? "bg-petroleo text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
                 >
                   {rotulo}
                 </button>
@@ -585,7 +585,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
             filtrados.map((m) => (
               <li key={m.id} className="p-3 text-sm space-y-1.5">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-bold text-[#2A6377]">
+                  <p className="font-bold text-petroleo">
                     SMA {m.nr_sma}
                     {m.urgente && (
                       <span className="ml-1.5 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
@@ -760,7 +760,7 @@ export default function ListaMateriaisSMA({ materiais }: Props) {
               ) : (
                 filtrados.map((m) => (
                   <tr key={m.id} className="border-t hover:bg-slate-50">
-                    <td className="p-3 font-bold text-[#2A6377] whitespace-nowrap">
+                    <td className="p-3 font-bold text-petroleo whitespace-nowrap">
                       {m.nr_sma}
                       {m.urgente && (
                         <span className="ml-1.5 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">

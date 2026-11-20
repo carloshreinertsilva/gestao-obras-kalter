@@ -181,7 +181,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
               setGestor("todos");
               setObra("todas");
             }}
-            className="px-2 py-1.5 text-[#2A6377] font-semibold hover:underline"
+            className="px-2 py-1.5 text-petroleo font-semibold hover:underline"
           >
             Limpar filtro
           </button>
@@ -247,7 +247,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
               <li key={`${i.id_obra}-${i.nr_sma}-${i.sequencia}`} className="p-3 text-sm space-y-1.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <a href={`/obras/${i.codigo_obra}/lista-materiais`} className="text-[#2A6377] font-semibold hover:underline">
+                    <a href={`/obras/${i.codigo_obra}/lista-materiais`} className="text-petroleo font-semibold hover:underline">
                       {i.codigo_obra}
                     </a>
                     <span className="text-slate-500"> · SMA {i.nr_sma}</span>
@@ -315,7 +315,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
                 filtrados.map((i) => (
                   <tr key={`${i.id_obra}-${i.nr_sma}-${i.sequencia}`} className="border-t hover:bg-slate-50">
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <a href={`/obras/${i.codigo_obra}/lista-materiais`} className="text-[#2A6377] font-semibold hover:underline">
+                      <a href={`/obras/${i.codigo_obra}/lista-materiais`} className="text-petroleo font-semibold hover:underline">
                         {i.codigo_obra}
                       </a>
                       <span className="block text-xs text-slate-500">{i.gestor}</span>
@@ -379,7 +379,7 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
                     <tr key={p.id} className="border-t">
                       <td className="px-3 py-2 whitespace-nowrap">{p.executado_em ? formatarDataSegura(p.executado_em) : "-"}</td>
                       <td className="px-3 py-2">
-                        <a href={`/obras/${p.codigo_obra}/previsoes`} className="text-[#2A6377] font-semibold hover:underline">
+                        <a href={`/obras/${p.codigo_obra}/previsoes`} className="text-petroleo font-semibold hover:underline">
                           {p.codigo_obra}
                         </a>{" "}
                         · {p.familia_destino}

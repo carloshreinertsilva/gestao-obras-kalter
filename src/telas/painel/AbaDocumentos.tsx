@@ -87,7 +87,7 @@ export default function AbaDocumentos({
                     item: e.target.value,
                   });
                 }}
-                className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] ${faltaItem ? "border-red-400" : ""}`}
+                className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo ${faltaItem ? "border-red-400" : ""}`}
               />
               {faltaItem && (
                 <p id="doc-novo-item-erro" className="mt-1 text-xs font-semibold text-red-600">
@@ -104,7 +104,7 @@ export default function AbaDocumentos({
                   detalhes: e.target.value,
                 })
               }
-              className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+              className="md:col-span-2 border rounded-lg p-3 outline-none focus:border-petroleo"
             />
             <button
               onClick={() => {
@@ -112,7 +112,7 @@ export default function AbaDocumentos({
                 salvarDocumentoProjeto();
               }}
               disabled={carregando}
-              className="bg-[#2A6377] text-white rounded-lg font-bold flex items-center justify-center gap-2"
+              className="bg-petroleo text-white rounded-lg font-bold flex items-center justify-center gap-2"
             >
               <Save size={16} /> Salvar
             </button>
@@ -127,7 +127,7 @@ export default function AbaDocumentos({
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
         <div className="p-4 border-b">
           <h3 className="font-bold text-lg flex items-center gap-2">
-            <FileText size={18} className="text-[#2A6377]" />{" "}
+            <FileText size={18} className="text-petroleo" />{" "}
             Documentos do Projeto
           </h3>
         </div>
@@ -199,7 +199,7 @@ export default function AbaDocumentos({
                                   onClick={() =>
                                     abrirArquivoDocumento(arquivo)
                                   }
-                                  className="text-left flex-1 min-w-0 hover:text-[#2A6377]"
+                                  className="text-left flex-1 min-w-0 hover:text-petroleo"
                                 >
                                   <p className="font-medium text-xs truncate">
                                     {arquivo.nome_arquivo}

@@ -62,7 +62,7 @@ const VALORES_ERP_VAZIOS: ValoresErp = { contribuicao: "", rentabilidade: "", ve
 
 // ---- campos do formulario (mesmo visual em toda a tela)
 const classeCampo =
-  "w-full h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-[#2A6377] focus:ring-2 focus:ring-[#2A6377]/15 disabled:bg-slate-50";
+  "w-full h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-petroleo focus:ring-2 focus:ring-petroleo/15 disabled:bg-slate-50";
 
 // atributos de acessibilidade + texto de erro de um campo obrigatorio (erro so aparece enquanto o campo segue vazio)
 function propsErroCampo(erros: Record<string, string>, id: string, vazio: boolean) {
@@ -104,7 +104,7 @@ function Rotulo({ htmlFor, texto, obrigatorio, dica }: { htmlFor?: string; texto
 
 function Secao({ titulo, descricao, children, destaque }: { titulo: string; descricao?: string; children: any; destaque?: boolean }) {
   return (
-    <section className={`rounded-xl border p-4 md:p-5 ${destaque ? "border-[#2A6377]/25 bg-[#2A6377]/[0.03]" : "border-slate-200 bg-white"}`}>
+    <section className={`rounded-xl border p-4 md:p-5 ${destaque ? "border-petroleo/25 bg-petroleo/[0.03]" : "border-slate-200 bg-white"}`}>
       <div className="mb-4">
         <h4 className="text-sm font-bold text-slate-800">{titulo}</h4>
         {descricao && <p className="text-xs text-slate-500 mt-0.5">{descricao}</p>}
@@ -303,7 +303,7 @@ export default function TelaCadastroObras({
                 <li key={d.campo} className="rounded-lg border border-slate-200 px-3 py-2">
                   <span className="block text-xs font-semibold text-slate-500">{d.rotulo}</span>
                   <span className="block break-words">Digitado: {mostrarCampoObra(d.campo, d.digitado)}</span>
-                  <span className="block break-words text-[#2A6377] font-semibold">ERP: {mostrarCampoObra(d.campo, d.erp)}</span>
+                  <span className="block break-words text-petroleo font-semibold">ERP: {mostrarCampoObra(d.campo, d.erp)}</span>
                 </li>
               ))}
             </ul>
@@ -805,7 +805,7 @@ export default function TelaCadastroObras({
                       type="button"
                       onClick={() => void buscarProjetoErp(novaObra.codigo_externo)}
                       disabled={!normalizarCodigoErp(novaObra.codigo_externo)}
-                      className="text-xs font-semibold text-[#2A6377] hover:underline flex items-center gap-1 disabled:text-slate-400 disabled:no-underline"
+                      className="text-xs font-semibold text-petroleo hover:underline flex items-center gap-1 disabled:text-slate-400 disabled:no-underline"
                     >
                       <Search size={12} aria-hidden="true" /> Buscar no ERP
                     </button>
@@ -815,7 +815,7 @@ export default function TelaCadastroObras({
                         onClick={() => setVerListaErp((v) => !v)}
                         aria-expanded={verListaErp}
                         aria-controls="lista-projetos-erp"
-                        className="text-xs font-semibold text-[#2A6377] hover:underline flex items-center gap-1"
+                        className="text-xs font-semibold text-petroleo hover:underline flex items-center gap-1"
                       >
                         <List size={12} aria-hidden="true" /> Escolher da lista ({projetosErp.length})
                       </button>
@@ -986,7 +986,7 @@ export default function TelaCadastroObras({
                   checked={Boolean(novaObra.exportacao)}
                   disabled={!novaObra.id}
                   onChange={(e) => void marcarExportacao(e.target.checked)}
-                  className="h-4 w-4 accent-[#2A6377] disabled:opacity-50"
+                  className="h-4 w-4 accent-petroleo disabled:opacity-50"
                 />
                 Obra de exportação
               </label>
@@ -1020,7 +1020,7 @@ export default function TelaCadastroObras({
           <button
             type="submit"
             disabled={carregando}
-            className="h-10 px-6 rounded-lg bg-[#2A6377] hover:bg-[#21505f] text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+            className="h-10 px-6 rounded-lg bg-petroleo hover:bg-petroleo-escuro text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {carregando ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
             {novaObra.id ? "Salvar alterações" : "Cadastrar obra"}
@@ -1075,10 +1075,10 @@ export default function TelaCadastroObras({
                 {obrasCadastroLista.map((obra) => (
                   <tr
                     key={obra.id}
-                    className={`border-b last:border-0 hover:bg-slate-50 ${novaObra.id === obra.id ? "bg-[#2A6377]/[0.05]" : ""}`}
+                    className={`border-b last:border-0 hover:bg-slate-50 ${novaObra.id === obra.id ? "bg-petroleo/[0.05]" : ""}`}
                   >
                     <td className="px-4 py-3 font-semibold text-slate-700 tabular-nums">{obra.codigo_externo}</td>
-                    <td className="px-4 py-3 font-semibold text-[#2A6377] max-w-[420px] truncate" title={obra.nome}>
+                    <td className="px-4 py-3 font-semibold text-petroleo max-w-[420px] truncate" title={obra.nome}>
                       {obra.nome}
                     </td>
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{labelFase(obra.fase_atual || "processo_inicial")}</td>
@@ -1108,14 +1108,14 @@ export default function TelaCadastroObras({
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => abrirPainelObra(obra)}
-                          className="text-[#2A6377] bg-[#2A6377]/10 hover:bg-[#2A6377] hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                          className="text-petroleo bg-petroleo/10 hover:bg-petroleo hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1"
                         >
                           <FolderOpen size={14} /> Painel
                         </button>
                         {podeEditarObra(obra) && (
                           <button
                             onClick={() => editarObra(obra)}
-                            className="text-slate-500 hover:text-[#2A6377] p-1.5 bg-slate-100 hover:bg-[#2A6377]/10 rounded-lg transition"
+                            className="text-slate-500 hover:text-petroleo p-1.5 bg-slate-100 hover:bg-petroleo/10 rounded-lg transition"
                             title="Editar cadastro da obra"
                             aria-label={`Editar cadastro da obra ${obra.codigo_externo}`}
                           >
@@ -1171,8 +1171,8 @@ function QuadroProjetoErp({
     ["Entrega prevista", p.data_entrega_prevista ? formatarDataSegura(p.data_entrega_prevista) : "—"],
   ];
   return (
-    <div className="sm:col-span-4 rounded-lg border border-[#2A6377]/25 bg-[#2A6377]/[0.04] p-3 md:p-4" aria-live="polite">
-      <p className="text-xs font-bold uppercase tracking-wide text-[#2A6377] mb-2">Dados do ERP · projeto {p.codigo}</p>
+    <div className="sm:col-span-4 rounded-lg border border-petroleo/25 bg-petroleo/[0.04] p-3 md:p-4" aria-live="polite">
+      <p className="text-xs font-bold uppercase tracking-wide text-petroleo mb-2">Dados do ERP · projeto {p.codigo}</p>
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
         {linhas.map(([rotulo, valor]) => (
           <div key={rotulo} className="flex justify-between gap-3 min-w-0">
@@ -1185,7 +1185,7 @@ function QuadroProjetoErp({
         <button
           type="button"
           onClick={() => onPreencher(p)}
-          className="h-9 px-4 rounded-lg bg-[#2A6377] hover:bg-[#21505f] text-white text-sm font-bold"
+          className="h-9 px-4 rounded-lg bg-petroleo hover:bg-petroleo-escuro text-white text-sm font-bold"
         >
           Preencher com os dados do ERP
         </button>
@@ -1246,11 +1246,11 @@ function ListaProjetosErp({
               <button
                 type="button"
                 onClick={() => onEscolher(p)}
-                className="w-full text-left px-3 py-2 hover:bg-[#2A6377]/[0.05] focus:bg-[#2A6377]/[0.05] outline-none"
+                className="w-full text-left px-3 py-2 hover:bg-petroleo/[0.05] focus:bg-petroleo/[0.05] outline-none"
               >
                 <span className="flex justify-between gap-3">
                   <span className="min-w-0 font-semibold text-slate-800 truncate">
-                    <span className="tabular-nums text-[#2A6377]">{p.codigo}</span> · {p.nome}
+                    <span className="tabular-nums text-petroleo">{p.codigo}</span> · {p.nome}
                   </span>
                   <span className="shrink-0 text-sm font-semibold text-slate-700 tabular-nums">{valorProjeto(totalProjetoErp(p))}</span>
                 </span>
@@ -1290,7 +1290,7 @@ function ResumoGravacaoErp({ linhas }: { linhas: LinhaResumoErp[] }) {
               <td className="text-right py-1.5 px-2 tabular-nums text-slate-500 whitespace-nowrap">
                 {l.atual === null ? "não informado" : formatarMoeda(l.atual)}
               </td>
-              <td className={`text-right py-1.5 pl-2 tabular-nums whitespace-nowrap ${l.muda ? "font-bold text-[#2A6377]" : "text-slate-500"}`}>
+              <td className={`text-right py-1.5 pl-2 tabular-nums whitespace-nowrap ${l.muda ? "font-bold text-petroleo" : "text-slate-500"}`}>
                 {formatarMoeda(l.novo)}
                 {!l.muda && <span className="block text-xs font-normal">sem mudança</span>}
               </td>
@@ -1350,7 +1350,7 @@ function ValoresErpObra({
         </div>
         <div className="text-right">
           <p className="text-lg font-bold text-slate-800 tabular-nums">{formatarMoeda(margem)}</p>
-          <p className="text-sm font-bold text-[#2A6377] tabular-nums">{pct(margem)}</p>
+          <p className="text-sm font-bold text-petroleo tabular-nums">{pct(margem)}</p>
         </div>
       </div>
 

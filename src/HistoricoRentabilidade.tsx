@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { supabase } from "./supabase";
 import { formatarMoeda } from "./utils";
+import { COR_PETROLEO } from "./cores";
 
 // Evolucao mensal da rentabilidade da obra: uma foto por mes (tirada pelo robo no 1o dia,
 // tabela obra_rentabilidade_historico) + o ponto "Hoje" com o valor atual da tela.
@@ -19,7 +20,7 @@ interface Ponto {
   resultado: number;
 }
 
-const COR_LINHA = "#2A6377";
+const COR_LINHA = COR_PETROLEO;
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const pct = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 

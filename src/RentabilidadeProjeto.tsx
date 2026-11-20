@@ -203,7 +203,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
     <th className={`px-2 py-3 align-bottom leading-tight ${alinhar === "left" ? "text-left" : alinhar === "center" ? "text-center" : "text-right"}`}>
       <button
         onClick={() => alternarOrdenacao(coluna)}
-        className={`hover:text-[#2A6377] transition ${ordenacao.coluna === coluna ? "text-[#2A6377]" : ""}`}
+        className={`hover:text-petroleo transition ${ordenacao.coluna === coluna ? "text-petroleo" : ""}`}
       >
         {rotulo}
         {ordenacao.coluna === coluna ? (ordenacao.direcao === "asc" ? " ▲" : " ▼") : ""}
@@ -308,7 +308,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
             <button
               key={valor}
               onClick={() => setAba(valor)}
-              className={`px-4 py-1.5 font-semibold transition ${aba === valor ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+              className={`px-4 py-1.5 font-semibold transition ${aba === valor ? "bg-petroleo text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
             >
               {rotulo}
             </button>
@@ -320,7 +320,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
               setFamiliaSolicitar(undefined);
               setSolicitando(true);
             }}
-            className="bg-[#2A6377] text-white px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-[#1e4857]"
+            className="bg-petroleo text-white px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-petroleo-escuro"
           >
             <Plus size={16} /> Solicitar previsão
           </button>
@@ -374,7 +374,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
             <button
               onClick={exportarExcel}
               title="Exportar lista filtrada para Excel"
-              className="shrink-0 mt-0.5 text-xs font-semibold text-slate-500 hover:text-[#2A6377] flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 hover:border-[#2A6377]/40 transition"
+              className="shrink-0 mt-0.5 text-xs font-semibold text-slate-500 hover:text-petroleo flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 hover:border-petroleo/40 transition"
             >
               <Download size={13} /> Exportar
             </button>
@@ -386,7 +386,7 @@ export default function RentabilidadeProjeto({ familias, valorVendido, obra, usu
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar família…"
-              className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377]"
+              className="w-full border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-petroleo"
             />
           </div>
         </div>

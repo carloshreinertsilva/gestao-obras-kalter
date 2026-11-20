@@ -45,7 +45,7 @@ export default function AbaDiarioTarefas({
           <button
             key={sub.id}
             onClick={() => setSubAbaDiario(sub.id as any)}
-            className={`px-4 py-2.5 text-sm font-bold border-b-2 transition ${subAbaDiario === sub.id ? "border-[#2A6377] text-[#2A6377]" : "border-transparent text-slate-500 hover:text-[#2A6377]"}`}
+            className={`px-4 py-2.5 text-sm font-bold border-b-2 transition ${subAbaDiario === sub.id ? "border-petroleo text-petroleo" : "border-transparent text-slate-500 hover:text-petroleo"}`}
           >
             {sub.label}
           </button>
@@ -75,7 +75,7 @@ export default function AbaDiarioTarefas({
         <div className="border-b pb-3 mb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-bold flex items-center gap-2">
-              <CheckSquare size={20} className="text-[#2A6377]" /> Tarefas da Obra
+              <CheckSquare size={20} className="text-petroleo" /> Tarefas da Obra
             </h3>
             <p className="text-xs text-slate-500 mt-1">
               Crie e acompanhe tarefas avulsas da obra. Tarefas de reunião também aparecem aqui.
@@ -84,7 +84,7 @@ export default function AbaDiarioTarefas({
           {podeEditarObraSelecionada && !["finalizada", "cancelada"].includes(obraEcoSelecionada.status ?? "") && (
             <button
               onClick={abrirModalNovaTarefaObra}
-              className="bg-[#2A6377] hover:bg-[#1e4857] text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2"
+              className="bg-petroleo hover:bg-petroleo-escuro text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2"
             >
               <Plus size={16} /> Nova Tarefa
             </button>
@@ -103,7 +103,7 @@ export default function AbaDiarioTarefas({
             <button
               key={filtro.id}
               onClick={() => setFiltroTarefasObra(filtro.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${filtroTarefasObra === filtro.id ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${filtroTarefasObra === filtro.id ? "bg-petroleo text-white border-petroleo" : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"}`}
             >
               {filtro.label}
             </button>
@@ -128,7 +128,7 @@ export default function AbaDiarioTarefas({
                   <div
                     key={tarefa?.id}
                     onClick={() => setTarefaSelecionada(tarefa)}
-                    className="bg-white p-3 rounded shadow-sm border hover:border-[#2A6377] cursor-pointer"
+                    className="bg-white p-3 rounded shadow-sm border hover:border-petroleo cursor-pointer"
                   >
                     <p className="font-medium text-sm leading-tight mb-2">
                       {tarefa?.titulo}
@@ -157,12 +157,12 @@ export default function AbaDiarioTarefas({
                 ))}
             </div>
           </div>
-          <div className="flex-1 min-w-[260px] bg-[#2A6377]/5 rounded-xl p-3 border border-[#2A6377]/20">
+          <div className="flex-1 min-w-[260px] bg-petroleo/5 rounded-xl p-3 border border-petroleo/20">
             <div className="flex justify-between items-center mb-3">
-              <h4 className="font-bold text-sm text-[#2A6377]">
+              <h4 className="font-bold text-sm text-petroleo">
                 Em Andamento
               </h4>
-              <span className="bg-[#2A6377]/20 text-[#2A6377] text-[11px] px-2 py-0.5 rounded-full font-bold">
+              <span className="bg-petroleo/20 text-petroleo text-[11px] px-2 py-0.5 rounded-full font-bold">
                 {
                   tarefasPainelObra.filter(
                     (t) => t?.status === "em_andamento",
@@ -177,7 +177,7 @@ export default function AbaDiarioTarefas({
                   <div
                     key={tarefa?.id}
                     onClick={() => setTarefaSelecionada(tarefa)}
-                    className="bg-white p-3 rounded shadow-sm border hover:border-[#2A6377] cursor-pointer"
+                    className="bg-white p-3 rounded shadow-sm border hover:border-petroleo cursor-pointer"
                   >
                     <p className="font-medium text-sm leading-tight mb-2">
                       {tarefa?.titulo}

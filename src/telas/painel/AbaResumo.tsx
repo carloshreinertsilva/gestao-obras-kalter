@@ -225,14 +225,14 @@ function Bloco({
     <section className={`bg-white p-4 rounded-xl shadow-sm border min-w-0 flex flex-col ${className}`} aria-busy={estado === "carregando"}>
       <div className="flex items-center justify-between gap-2 mb-3">
         <h3 className="font-bold text-slate-800 flex items-center gap-2 min-w-0">
-          <Icone size={17} className="text-[#2A6377] shrink-0" aria-hidden="true" />
+          <Icone size={17} className="text-petroleo shrink-0" aria-hidden="true" />
           <span className="truncate">{titulo}</span>
         </h3>
         {detalhe && (
           <button
             type="button"
             onClick={detalhe.onClick}
-            className="shrink-0 text-xs font-semibold text-[#2A6377] hover:underline flex items-center gap-0.5"
+            className="shrink-0 text-xs font-semibold text-petroleo hover:underline flex items-center gap-0.5"
           >
             {detalhe.rotulo || "ver detalhes"} <ChevronRight size={14} aria-hidden="true" />
           </button>
@@ -492,7 +492,7 @@ export default function AbaResumo({
                 aria-valuemax={100}
                 aria-valuenow={Math.round(faturamento.pct)}
               >
-                <div className="h-full bg-[#2A6377]" style={{ width: `${faturamento.pct}%` }} />
+                <div className="h-full bg-petroleo" style={{ width: `${faturamento.pct}%` }} />
               </div>
               <p className="text-xs text-slate-500 mt-1">{formatarPct(faturamento.pct)} do escopo faturado</p>
             </>
@@ -628,7 +628,7 @@ export default function AbaResumo({
 
         {/* 7. Cronograma (dados do App.tsx, os mesmos da aba Cronograma) */}
         <Bloco titulo="Cronograma" icone={Calendar} estado="ok" detalhe={detalhe("cronograma")}>
-          <Linha rotulo="Fase atual" classe="text-[#2A6377]">
+          <Linha rotulo="Fase atual" classe="text-petroleo">
             {labelFase(faseAtual)}
           </Linha>
           <Linha rotulo="Próxima fase">
@@ -689,7 +689,7 @@ export default function AbaResumo({
           {diario && diario.length > 0 ? (
             <ul className="space-y-2">
               {diario.map((d) => (
-                <li key={d.id} className="border-l-2 border-[#2A6377]/40 pl-2">
+                <li key={d.id} className="border-l-2 border-petroleo/40 pl-2">
                   <p className="text-xs text-slate-500">
                     {d.data_registro ? isoParaDataBR(d.data_registro) : isoParaDataBR(d.created_at)}
                     {d.usuarios?.nome ? ` · ${d.usuarios.nome}` : ""}
@@ -716,7 +716,7 @@ export default function AbaResumo({
             </div>
           )}
           <p className="mt-3 flex items-center gap-2 text-slate-600">
-            <Activity size={15} className="text-[#2A6377]" aria-hidden="true" />
+            <Activity size={15} className="text-petroleo" aria-hidden="true" />
             Documentos concluídos:{" "}
             <span className="font-bold text-slate-800">
               {documentosConcluidos}/{documentosProjeto.length} ({percentualDocumentos}%)

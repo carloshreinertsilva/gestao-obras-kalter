@@ -127,7 +127,7 @@ const BOTAO_SECUNDARIO =
   "px-4 py-2.5 md:py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition";
 const botaoPrimario = (perigo?: boolean) =>
   `px-4 py-2.5 md:py-2 rounded-lg text-sm font-bold text-white transition disabled:opacity-50 disabled:cursor-not-allowed ${
-    perigo ? "bg-red-600 hover:bg-red-700" : "bg-[#2A6377] hover:bg-[#1f4b5a]"
+    perigo ? "bg-red-600 hover:bg-red-700" : "bg-petroleo hover:bg-petroleo-escuro"
   }`;
 
 // ---------------------------------------------------------------------------------------------
@@ -266,7 +266,7 @@ export function DialogoMotivo({
         }}
         rows={4}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A6377]/40 focus:border-[#2A6377]"
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-petroleo/40 focus:border-petroleo"
       />
       {!!motivosRapidos?.length && (
         <div className="flex flex-wrap gap-1.5 mt-2" aria-label="Motivos rápidos">
@@ -277,7 +277,7 @@ export function DialogoMotivo({
               onClick={() => setValor(m)}
               aria-pressed={valor === m}
               className={`px-2.5 py-1 rounded-full text-xs border transition ${
-                valor === m ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                valor === m ? "bg-petroleo text-white border-petroleo" : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
               }`}
             >
               {m}
@@ -318,7 +318,7 @@ export function ErroCarga({
         <button
           type="button"
           onClick={onTentar}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-[#2A6377] border border-[#2A6377]/40 hover:bg-[#2A6377]/5 transition"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-petroleo border border-petroleo/40 hover:bg-petroleo/5 transition"
         >
           <RefreshCw size={14} aria-hidden="true" />
           Tentar de novo

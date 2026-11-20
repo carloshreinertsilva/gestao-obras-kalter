@@ -392,7 +392,7 @@ export function ServicosTerceirosObra({
                 {podeEncaminhar && p.situacao_pedido !== "encerrado" && (
                   <button
                     onClick={() => setEncaminhar({ pedido: p })}
-                    className="mt-2 w-full px-3 py-2 rounded-lg bg-[#2A6377] text-white text-sm font-bold flex items-center justify-center gap-1"
+                    className="mt-2 w-full px-3 py-2 rounded-lg bg-petroleo text-white text-sm font-bold flex items-center justify-center gap-1"
                   >
                     <Send size={14} /> Encaminhar NF
                   </button>
@@ -528,7 +528,7 @@ function FragmentoPedido({
         </td>
         <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
           {podeEncaminhar && (
-            <button onClick={onEncaminhar} className="px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-xs font-bold flex items-center gap-1 whitespace-nowrap">
+            <button onClick={onEncaminhar} className="px-3 py-1.5 rounded-lg bg-petroleo text-white text-xs font-bold flex items-center gap-1 whitespace-nowrap">
               <Send size={13} /> Encaminhar NF
             </button>
           )}
@@ -589,7 +589,7 @@ function FragmentoPedido({
                 <p className="text-xs font-bold uppercase text-slate-500 mb-1">NFs encaminhadas pelo app</p>
                 <div className="flex flex-wrap gap-2">
                   {nfsApp.map((n) => (
-                    <button key={n.id} onClick={() => onAbrirNf(n.id)} className="text-left border rounded-lg px-3 py-2 bg-white hover:border-[#2A6377] text-xs">
+                    <button key={n.id} onClick={() => onAbrirNf(n.id)} className="text-left border rounded-lg px-3 py-2 bg-white hover:border-petroleo text-xs">
                       <span className="font-semibold">NF {n.numero_nf}</span> · {formatarMoeda(n.valor)} · vence {data(n.vencimento)} <BadgeStatusNf status={n.status} />
                       <span className="block text-xs text-slate-500">
                         por {n.nome_encaminhou} em {fmtDataHora(n.encaminhado_em)}
@@ -701,7 +701,7 @@ function ModalEncaminharNf({
     return (
       <p className="mt-1 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
         No XML: <b>{d.doXml}</b>{" "}
-        <button type="button" onClick={() => usarDoXml(campo)} className="font-semibold text-[#2A6377] underline">
+        <button type="button" onClick={() => usarDoXml(campo)} className="font-semibold text-petroleo underline">
           Usar o valor do XML
         </button>
       </p>
@@ -843,7 +843,7 @@ function ModalEncaminharNf({
           <button
             disabled={enviando}
             onClick={enviar}
-            className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+            className="px-4 py-2 rounded-lg bg-petroleo text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {enviando ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />} {devolvida ? "Reenviar" : "Encaminhar"}
           </button>
@@ -893,7 +893,7 @@ function ModalEncaminharNf({
                       onClick={() => (setSujo(true), setVencimento(data))}
                       title={`Vencimento em ${formatarDataSegura(data)} (hoje + ${p.dias} dias)`}
                       className={`text-xs px-2 py-1 rounded-full border transition-colors ${
-                        ativo ? "bg-[#2A6377] border-[#2A6377] text-white" : "bg-white text-slate-600 hover:border-[#2A6377] hover:text-[#2A6377]"
+                        ativo ? "bg-petroleo border-petroleo text-white" : "bg-white text-slate-600 hover:border-petroleo hover:text-petroleo"
                       }`}
                     >
                       {p.rotulo} <b className="tabular-nums">+{p.dias}</b>
@@ -952,7 +952,7 @@ function ModalEncaminharNf({
                   aria-pressed={forma === f.id}
                   onClick={() => (setSujo(true), setForma(f.id))}
                   className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                    forma === f.id ? "bg-[#2A6377] border-[#2A6377] text-white font-semibold" : "bg-white text-slate-600 hover:border-[#2A6377] hover:text-[#2A6377]"
+                    forma === f.id ? "bg-petroleo border-petroleo text-white font-semibold" : "bg-white text-slate-600 hover:border-petroleo hover:text-petroleo"
                   }`}
                 >
                   {f.rotulo}
@@ -1010,7 +1010,7 @@ function ModalEncaminharNf({
                     <FileText size={15} className="shrink-0 text-slate-400" aria-hidden="true" />
                     <span className="truncate flex-1 min-w-0">{a.nome}</span>
                     {i === 0 && (
-                      <span className="shrink-0 text-xs font-bold uppercase text-[#2A6377] bg-[#2A6377]/10 rounded px-1.5 py-0.5">NF</span>
+                      <span className="shrink-0 text-xs font-bold uppercase text-petroleo bg-petroleo/10 rounded px-1.5 py-0.5">NF</span>
                     )}
                     {a.tamanho ? <span className="shrink-0 text-xs text-slate-500 tabular-nums">{tamanhoTxt(a.tamanho)}</span> : null}
                     <button
@@ -1217,7 +1217,7 @@ export function DetalheNfTerceiros({
                   </button>
                 )}
                 {nf.status === "devolvida" && onReenviar && podeCancelar && (
-                  <button onClick={() => onReenviar(nf)} className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-1 text-sm">
+                  <button onClick={() => onReenviar(nf)} className="px-3 py-2 rounded-lg bg-petroleo text-white font-bold flex items-center gap-1 text-sm">
                     <Send size={14} /> Corrigir e reenviar
                   </button>
                 )}
@@ -1240,7 +1240,7 @@ export function DetalheNfTerceiros({
         nf ? (
           <>
             {nf.fornecedor} · obra{" "}
-            <a href={`/obras/${nf.codigo_obra}/compras`} className="text-[#2A6377] font-semibold hover:underline">
+            <a href={`/obras/${nf.codigo_obra}/compras`} className="text-petroleo font-semibold hover:underline">
               {nf.codigo_obra}
             </a>{" "}
             · pedido {nf.nr_pedido}
@@ -1299,7 +1299,7 @@ export function DetalheNfTerceiros({
                 <ul className="space-y-1">
                   {anexosDa(nf).map((a) => (
                     <li key={a.caminho}>
-                      <button onClick={() => abrirArquivo(a.caminho)} className="flex items-center gap-2 text-[#2A6377] font-semibold hover:underline text-left">
+                      <button onClick={() => abrirArquivo(a.caminho)} className="flex items-center gap-2 text-petroleo font-semibold hover:underline text-left">
                         <FileText size={15} className="shrink-0" aria-hidden="true" /> <span className="break-all">{a.nome}</span>
                         {a.tamanho ? <span className="text-xs font-normal text-slate-500">{tamanhoTxt(a.tamanho)}</span> : null}
                       </button>
@@ -1457,7 +1457,7 @@ export function TelaNfsTerceiros({ usuario, idAberto, onAbrir }: { usuario: Usua
                   <div className="flex flex-wrap items-center gap-2 mt-2">
                     <BadgeStatusNf status={n.status} />
                     <SeloDiasParados desde={desdeEtapaNf(n)} aberto={NF_ABERTA.includes(n.status)} />
-                    <span className="ml-auto text-xs font-semibold text-[#2A6377] flex items-center">
+                    <span className="ml-auto text-xs font-semibold text-petroleo flex items-center">
                       {n.status === "devolvida" ? "Corrigir" : "Ver detalhes"} <ChevronRight size={14} aria-hidden="true" />
                     </span>
                   </div>

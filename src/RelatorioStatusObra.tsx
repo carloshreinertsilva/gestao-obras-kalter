@@ -44,7 +44,7 @@ export interface PropsRelatorioStatus {
 }
 
 const Titulo = ({ children }: { children: ReactNode }) => (
-  <h3 className="text-[11px] font-bold uppercase tracking-wide text-[#2A6377] border-b border-slate-300 pb-0.5 mb-1.5">{children}</h3>
+  <h3 className="text-[11px] font-bold uppercase tracking-wide text-petroleo border-b border-slate-300 pb-0.5 mb-1.5">{children}</h3>
 );
 
 const Linha = ({ rotulo, valor, forte }: { rotulo: string; valor: ReactNode; forte?: boolean }) => (
@@ -101,7 +101,7 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
       type="button"
       aria-pressed={p.modo === m}
       onClick={() => p.onTrocarModo(m)}
-      className={`px-3 py-1.5 text-sm font-semibold ${p.modo === m ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+      className={`px-3 py-1.5 text-sm font-semibold ${p.modo === m ? "bg-petroleo text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
     >
       {rotulo}
     </button>
@@ -124,7 +124,7 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
           <button
             type="button"
             onClick={() => window.print()}
-            className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold text-sm flex items-center gap-1.5"
+            className="px-3 py-2 rounded-lg bg-petroleo text-white font-bold text-sm flex items-center gap-1.5"
           >
             <Printer size={15} aria-hidden="true" /> Imprimir / salvar PDF
           </button>
@@ -146,9 +146,9 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
       </div>
 
       <article className="rso-pagina bg-white text-slate-900 text-[12px] leading-snug w-full max-w-[210mm] mx-auto my-4 p-4 sm:p-[12mm] shadow border">
-        <header className="flex items-start justify-between gap-3 border-b-2 border-[#2A6377] pb-2 mb-3">
+        <header className="flex items-start justify-between gap-3 border-b-2 border-petroleo pb-2 mb-3">
           <div className="min-w-0">
-            <p className="text-lg font-black tracking-wide text-[#2A6377]">Kalter</p>
+            <p className="text-lg font-black tracking-wide text-petroleo">Kalter</p>
             <h2 className="text-base font-bold break-words">
               Obra {p.codigo} - {p.nome}
             </h2>
@@ -240,7 +240,7 @@ export default function RelatorioStatusObra(p: PropsRelatorioStatus) {
                 <Linha rotulo="Faturado" valor={`${formatarMoeda(p.faturamento.faturado)} (${formatarPct(p.faturamento.pct)})`} forte />
                 <Linha rotulo="A faturar" valor={formatarMoeda(p.faturamento.aFaturar)} />
                 <div className="h-2 mt-1 rounded border border-slate-400 overflow-hidden" aria-hidden="true">
-                  <div className="h-full bg-[#2A6377]" style={{ width: `${p.faturamento.pct}%` }} />
+                  <div className="h-full bg-petroleo" style={{ width: `${p.faturamento.pct}%` }} />
                 </div>
               </>
             )}

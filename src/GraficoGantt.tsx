@@ -74,7 +74,7 @@ export default function GraficoGantt({
         </li>
       )}
       <li className="flex items-center gap-1.5">
-        <span className="h-3 border-l-2 border-dashed border-[#2A6377] inline-block" aria-hidden="true" />
+        <span className="h-3 border-l-2 border-dashed border-petroleo inline-block" aria-hidden="true" />
         Hoje
       </li>
       {legendaExtra}
@@ -96,7 +96,7 @@ export default function GraficoGantt({
     <div className="min-w-0">
       {legenda}
       <div
-        className="overflow-x-auto max-w-full border border-slate-200 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]/40"
+        className="overflow-x-auto max-w-full border border-slate-200 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo/40"
         role="region"
         aria-label={`${titulo} em barras no tempo (role para o lado para ver todo o período)`}
         tabIndex={0}
@@ -112,11 +112,11 @@ export default function GraficoGantt({
             ))}
             {escala.posicaoHoje !== null && (
               <div
-                className="absolute top-0 bottom-0 border-l-2 border-dashed border-[#2A6377] z-[15]"
+                className="absolute top-0 bottom-0 border-l-2 border-dashed border-petroleo z-[15]"
                 style={{ left: `${escala.posicaoHoje}%` }}
                 title={`Hoje, ${formatarDataBR(hojeISO)}`}
               >
-                <span className="absolute -top-0 left-1 text-[10px] font-bold text-[#2A6377] bg-white/90 px-0.5 rounded">Hoje</span>
+                <span className="absolute -top-0 left-1 text-[10px] font-bold text-petroleo bg-white/90 px-0.5 rounded">Hoje</span>
               </div>
             )}
           </div>
@@ -205,7 +205,7 @@ function LinhaGrafico({
               e.stopPropagation();
               onClicar();
             }}
-            className="w-full text-left min-w-0 rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]/40"
+            className="w-full text-left min-w-0 rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo/40"
             aria-label={rotuloClicar}
           >
             {nome}

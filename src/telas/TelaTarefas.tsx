@@ -55,13 +55,13 @@ function Cartao({
   return (
     <div
       className={`bg-white rounded-lg shadow-sm border transition max-w-full ${
-        concluida ? "border-gray-200 opacity-75" : atrasada ? "border-red-300" : "border-gray-200 hover:border-[#2A6377]"
+        concluida ? "border-gray-200 opacity-75" : atrasada ? "border-red-300" : "border-gray-200 hover:border-petroleo"
       }`}
     >
       <button type="button" onClick={() => onAbrir(tarefa)} className="w-full text-left p-4 pb-2 rounded-lg">
         <div className="flex justify-between items-start gap-2">
           <span
-            className={`text-xs font-semibold px-2 py-1 rounded truncate ${concluida ? "text-gray-500 bg-gray-100" : "text-[#2A6377] bg-[#2A6377]/10"}`}
+            className={`text-xs font-semibold px-2 py-1 rounded truncate ${concluida ? "text-gray-500 bg-gray-100" : "text-petroleo bg-petroleo/10"}`}
           >
             {tarefa.obras?.codigo_externo || "Geral"}
           </span>
@@ -97,7 +97,7 @@ function Cartao({
               <button
                 type="button"
                 onClick={() => onMudarStatus(tarefa, "em_andamento")}
-                className="text-xs font-semibold px-2.5 py-1.5 rounded-md border border-[#2A6377]/30 text-[#2A6377] hover:bg-[#2A6377]/10 flex items-center gap-1"
+                className="text-xs font-semibold px-2.5 py-1.5 rounded-md border border-petroleo/30 text-petroleo hover:bg-petroleo/10 flex items-center gap-1"
                 title="Mover para Em andamento"
               >
                 <Play size={12} /> Iniciar
@@ -217,7 +217,7 @@ export default function TelaTarefas({
                 type="button"
                 aria-pressed={soMinhas === v}
                 onClick={() => setSoMinhas(v)}
-                className={`px-3 py-1.5 rounded-md text-sm font-semibold ${soMinhas === v ? "bg-[#2A6377] text-white" : "text-slate-600 hover:bg-slate-50"}`}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold ${soMinhas === v ? "bg-petroleo text-white" : "text-slate-600 hover:bg-slate-50"}`}
               >
                 {r}
               </button>
@@ -230,13 +230,13 @@ export default function TelaTarefas({
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar tarefa, obra ou pessoa"
-              className="border rounded-lg py-2 pl-8 pr-3 w-full sm:w-64 bg-white shadow-sm focus:border-[#2A6377]"
+              className="border rounded-lg py-2 pl-8 pr-3 w-full sm:w-64 bg-white shadow-sm focus:border-petroleo"
             />
           </label>
           <label className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-600 shrink-0">Obra:</span>
             <select
-              className="border rounded-lg p-2 focus:border-[#2A6377] font-medium bg-white shadow-sm w-full sm:w-auto max-w-full"
+              className="border rounded-lg p-2 focus:border-petroleo font-medium bg-white shadow-sm w-full sm:w-auto max-w-full"
               value={filtroObraKanban}
               onChange={(e) => setFiltroObraKanban(e.target.value)}
             >
@@ -252,7 +252,7 @@ export default function TelaTarefas({
             type="button"
             onClick={exportar}
             disabled={visiveis.length === 0}
-            className="flex items-center justify-center gap-1.5 border rounded-lg px-3 py-2 text-sm font-semibold bg-white shadow-sm text-[#2A6377] border-[#2A6377]/40 hover:bg-[#2A6377]/5 disabled:opacity-50"
+            className="flex items-center justify-center gap-1.5 border rounded-lg px-3 py-2 text-sm font-semibold bg-white shadow-sm text-petroleo border-petroleo/40 hover:bg-petroleo/5 disabled:opacity-50"
             title="Baixar as tarefas visíveis no quadro em planilha (abre no Excel)"
           >
             <Download size={16} /> Exportar Excel
@@ -264,7 +264,7 @@ export default function TelaTarefas({
         <Coluna
           titulo="Em andamento"
           tarefas={andamento}
-          classe="bg-[#2A6377]/5 border-[#2A6377]/20"
+          classe="bg-petroleo/5 border-petroleo/20"
           onAbrir={onAbrirTarefa}
           onMudarStatus={onMudarStatus}
         />
@@ -276,7 +276,7 @@ export default function TelaTarefas({
           rodape={
             !incluiAntigas &&
             onCarregarAntigas && (
-              <button type="button" onClick={onCarregarAntigas} className="w-full text-sm font-semibold text-[#2A6377] hover:underline py-2">
+              <button type="button" onClick={onCarregarAntigas} className="w-full text-sm font-semibold text-petroleo hover:underline py-2">
                 Ver concluídas mais antigas
               </button>
             )

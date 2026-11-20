@@ -360,7 +360,7 @@ export function PassoPacking({
         setSel(null);
       }}
       aria-pressed={filtro === f}
-      className={`h-9 px-3 rounded-lg border text-sm font-semibold transition ${filtro === f ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}`}
+      className={`h-9 px-3 rounded-lg border text-sm font-semibold transition ${filtro === f ? "bg-petroleo text-white border-petroleo" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}`}
     >
       {texto}
       <span className={`ml-1.5 tabular-nums ${filtro === f ? "text-white/80" : "text-slate-500"}`}>{n}</span>

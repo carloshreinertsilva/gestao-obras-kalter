@@ -235,7 +235,7 @@ export default function TelaAuditoria({ falhaAoCarregar }: { falhaAoCarregar: (o
             type="button"
             onClick={exportar}
             disabled={carregando || visiveis.length === 0}
-            className="ml-auto flex items-center gap-1.5 border rounded-lg px-3 py-1.5 font-semibold text-[#2A6377] border-[#2A6377]/40 hover:bg-[#2A6377]/5 disabled:opacity-50"
+            className="ml-auto flex items-center gap-1.5 border rounded-lg px-3 py-1.5 font-semibold text-petroleo border-petroleo/40 hover:bg-petroleo/5 disabled:opacity-50"
             title="Baixar os registros visíveis em planilha (abre no Excel)"
           >
             <Download size={14} /> Exportar Excel

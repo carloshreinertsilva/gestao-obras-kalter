@@ -253,7 +253,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 onChange={(e) =>
                   setNovoUsuario({ ...novoUsuario, nome: e.target.value })
                 }
-                className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full${errosCampo["eq-nome"] && (!novoUsuario.nome.trim()) ? " !border-red-500" : ""}`}
+                className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo max-w-full${errosCampo["eq-nome"] && (!novoUsuario.nome.trim()) ? " !border-red-500" : ""}`}
               />
               {erroCampo("eq-nome", !novoUsuario.nome.trim())}
             </div>
@@ -272,7 +272,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                     email: e.target.value,
                   })
                 }
-                className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full${errosCampo["eq-email"] && (!novoUsuario.email.trim() || !/^\S+@\S+\.\S+$/.test(novoUsuario.email.trim())) ? " !border-red-500" : ""}`}
+                className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo max-w-full${errosCampo["eq-email"] && (!novoUsuario.email.trim() || !/^\S+@\S+\.\S+$/.test(novoUsuario.email.trim())) ? " !border-red-500" : ""}`}
               />
               {erroCampo("eq-email", !novoUsuario.email.trim() || !/^\S+@\S+\.\S+$/.test(novoUsuario.email.trim()))}
             </div>
@@ -288,7 +288,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                     perfil: e.target.value,
                   })
                 }
-                className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full"
+                className="w-full border rounded-lg p-3 outline-none focus:border-petroleo max-w-full"
               >
                 {perfisUsuario.map((p) => (
                   <option key={p.valor} value={p.valor}>
@@ -312,7 +312,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                       id_engenheiro_vinculado: e.target.value,
                     })
                   }
-                  className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377] max-w-full${errosCampo["eq-engenheiro"] && (!novoUsuario.id_engenheiro_vinculado) ? " !border-red-500" : ""}`}
+                  className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo max-w-full${errosCampo["eq-engenheiro"] && (!novoUsuario.id_engenheiro_vinculado) ? " !border-red-500" : ""}`}
                 >
                   <option value="">Selecione…</option>
                   {listaUsuarios
@@ -337,7 +337,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 type="checkbox"
                 checked={Boolean(novoUsuario.aprova_previsao)}
                 onChange={(e) => setNovoUsuario({ ...novoUsuario, aprova_previsao: e.target.checked })}
-                className="mt-0.5 accent-[#2A6377]"
+                className="mt-0.5 accent-petroleo"
               />
               <span>
                 <b>Aprova previsões</b>
@@ -351,7 +351,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 type="checkbox"
                 checked={Boolean(novoUsuario.recebe_copia_previsao)}
                 onChange={(e) => setNovoUsuario({ ...novoUsuario, recebe_copia_previsao: e.target.checked })}
-                className="mt-0.5 accent-[#2A6377]"
+                className="mt-0.5 accent-petroleo"
               />
               <span>
                 <b>Recebe cópia das previsões</b>
@@ -395,7 +395,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 type="checkbox"
                 checked={Boolean(novoUsuario.aprova_faturamento)}
                 onChange={(e) => setNovoUsuario({ ...novoUsuario, aprova_faturamento: e.target.checked })}
-                className="mt-0.5 accent-[#2A6377]"
+                className="mt-0.5 accent-petroleo"
               />
               <span>
                 <b>Aprova faturamento (logística)</b>
@@ -409,7 +409,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 type="checkbox"
                 checked={Boolean(novoUsuario.recebe_copia_faturamento)}
                 onChange={(e) => setNovoUsuario({ ...novoUsuario, recebe_copia_faturamento: e.target.checked })}
-                className="mt-0.5 accent-[#2A6377]"
+                className="mt-0.5 accent-petroleo"
               />
               <span>
                 <b>Recebe cópia do faturamento</b>
@@ -423,7 +423,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 type="checkbox"
                 checked={Boolean(novoUsuario.recebe_nf_terceiros)}
                 onChange={(e) => setNovoUsuario({ ...novoUsuario, recebe_nf_terceiros: e.target.checked })}
-                className="mt-0.5 accent-[#2A6377]"
+                className="mt-0.5 accent-petroleo"
               />
               <span>
                 <b>Recebe NFs de terceiros</b>
@@ -437,7 +437,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 type="checkbox"
                 checked={Boolean(novoUsuario.cadastra_materiais)}
                 onChange={(e) => setNovoUsuario({ ...novoUsuario, cadastra_materiais: e.target.checked })}
-                className="mt-0.5 accent-[#2A6377]"
+                className="mt-0.5 accent-petroleo"
               />
               <span>
                 <b>Responsável pelo cadastro de materiais</b>
@@ -451,7 +451,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 type="checkbox"
                 checked={Boolean(novoUsuario.revisa_fiscal_material)}
                 onChange={(e) => setNovoUsuario({ ...novoUsuario, revisa_fiscal_material: e.target.checked })}
-                className="mt-0.5 accent-[#2A6377]"
+                className="mt-0.5 accent-petroleo"
               />
               <span>
                 <b>Revisão fiscal de materiais</b>
@@ -465,7 +465,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 type="checkbox"
                 checked={Boolean(novoUsuario.recebe_copia_material)}
                 onChange={(e) => setNovoUsuario({ ...novoUsuario, recebe_copia_material: e.target.checked })}
-                className="mt-0.5 accent-[#2A6377]"
+                className="mt-0.5 accent-petroleo"
               />
               <span>
                 <b>Recebe cópia dos avisos de material</b>
@@ -482,7 +482,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 type="checkbox"
                 checked={Boolean(novoUsuario.recebe_alerta_sistema)}
                 onChange={(e) => setNovoUsuario({ ...novoUsuario, recebe_alerta_sistema: e.target.checked })}
-                className="mt-0.5 accent-[#2A6377]"
+                className="mt-0.5 accent-petroleo"
               />
               <span>
                 <b>Recebe alertas do sistema</b>
@@ -505,7 +505,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
             <button
               type="submit"
               disabled={salvando}
-              className="bg-[#2A6377] text-white px-6 py-2 rounded-lg font-medium w-full sm:w-auto disabled:opacity-50"
+              className="bg-petroleo text-white px-6 py-2 rounded-lg font-medium w-full sm:w-auto disabled:opacity-50"
             >
               {novoUsuario.id ? (
                 <>
@@ -529,10 +529,10 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
               <div
                 key={user.id}
                 onClick={() => editarUsuario(user)}
-                className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-lg max-w-full cursor-pointer hover:border-[#2A6377] transition group"
+                className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-lg max-w-full cursor-pointer hover:border-petroleo transition group"
               >
                 <div
-                  className={`p-2 rounded-full text-white shrink-0 ${user.perfil === "admin" ? "bg-[#2A6377]" : "bg-[#2A6377]/60"}`}
+                  className={`p-2 rounded-full text-white shrink-0 ${user.perfil === "admin" ? "bg-petroleo" : "bg-petroleo/60"}`}
                 >
                   <User size={16} />
                 </div>
@@ -602,7 +602,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                     </p>
                   )}
                   {user.perfil === "assistente" && (
-                    <p className="text-xs text-[#2A6377] font-bold truncate max-w-full">
+                    <p className="text-xs text-petroleo font-bold truncate max-w-full">
                       Assistente de:{" "}
                       {nomeUsuarioPorId(user.id_engenheiro_vinculado) ||
                         "não definido"}
@@ -630,7 +630,7 @@ export default function TelaEquipe({ listaUsuarios, onAtualizar, onAviso }: Prop
                 </div>
                 <Edit2
                   size={14}
-                  className="text-slate-300 group-hover:text-[#2A6377] shrink-0 transition"
+                  className="text-slate-300 group-hover:text-petroleo shrink-0 transition"
                 />
               </div>
             ))}

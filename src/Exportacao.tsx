@@ -431,7 +431,7 @@ export default function Exportacao({
     return (
       <div className="max-w-2xl space-y-4">
         <div className="flex items-center gap-2">
-          <Ship size={20} className="text-[#2A6377]" />
+          <Ship size={20} className="text-petroleo" />
           <h3 className="text-lg font-bold text-slate-800">Exportação · obra {obra.codigo_externo}</h3>
         </div>
         {!linhaErp ? (
@@ -500,7 +500,7 @@ export default function Exportacao({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <Ship size={20} className="text-[#2A6377]" /> Exportação · pedido {proc.pedido}
+            <Ship size={20} className="text-petroleo" /> Exportação · pedido {proc.pedido}
           </h3>
           <p className="text-xs text-slate-500 truncate">{proc.importador?.razao}</p>
         </div>
@@ -517,7 +517,7 @@ export default function Exportacao({
               <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${(prontos / PASSOS_DE_PREENCHER.length) * 100}%` }} />
             </div>
             {pendente && (
-              <button type="button" onClick={() => ir(pendente)} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#2A6377] hover:underline">
+              <button type="button" onClick={() => ir(pendente)} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-petroleo hover:underline">
                 Ir para a próxima pendência <ArrowRight size={13} />
               </button>
             )}
@@ -535,9 +535,9 @@ export default function Exportacao({
                       type="button"
                       onClick={() => ir(id)}
                       aria-current={ativo ? "step" : undefined}
-                      className={`lg:w-full shrink-0 flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm whitespace-nowrap text-left transition ${ativo ? "bg-[#2A6377] text-white font-semibold" : "text-slate-600 hover:bg-slate-100"}`}
+                      className={`lg:w-full shrink-0 flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm whitespace-nowrap text-left transition ${ativo ? "bg-petroleo text-white font-semibold" : "text-slate-600 hover:bg-slate-100"}`}
                     >
-                      <span className={`h-5 w-5 shrink-0 rounded-full text-xs font-bold flex items-center justify-center ${ativo ? "bg-white text-[#2A6377]" : "bg-slate-100 text-slate-600"}`}>{n}</span>
+                      <span className={`h-5 w-5 shrink-0 rounded-full text-xs font-bold flex items-center justify-center ${ativo ? "bg-white text-petroleo" : "bg-slate-100 text-slate-600"}`}>{n}</span>
                       <span className="flex-1">{PASSOS[n - 1].nome}</span>
                       <MarcaPasso s={situacoes[id]} ativo={ativo} />
                     </button>

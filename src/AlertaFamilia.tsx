@@ -125,7 +125,7 @@ export function ModalItensSma({
             Preço: cotação (quando já cotado), senão último custo médio, senão última compra. Itens sem preço não entram na conta.
           </p>
           {onSolicitar && (
-            <button onClick={onSolicitar} className="px-4 py-2 rounded-lg text-sm font-bold bg-[#2A6377] text-white hover:bg-[#1e4857] shrink-0">
+            <button onClick={onSolicitar} className="px-4 py-2 rounded-lg text-sm font-bold bg-petroleo text-white hover:bg-petroleo-escuro shrink-0">
               Solicitar previsão
             </button>
           )}

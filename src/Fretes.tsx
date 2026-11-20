@@ -428,7 +428,7 @@ export function TelaFretes({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-            <Truck className="text-[#2A6377]" /> Fretes
+            <Truck className="text-petroleo" /> Fretes
           </h2>
           <p className="text-sm text-slate-500">
             Pedidos de frete das obras com controle da verba da família de fretes (.510). Sem verba, o frete fica bloqueado e o
@@ -442,7 +442,7 @@ export function TelaFretes({
                 <button
                   key={a}
                   onClick={() => setAba(a)}
-                  className={`px-3 py-2 font-semibold ${aba === a ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                  className={`px-3 py-2 font-semibold ${aba === a ? "bg-petroleo text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
                 >
                   {a === "fretes" ? "Fretes" : "Transportadoras"}
                 </button>
@@ -452,7 +452,7 @@ export function TelaFretes({
           {aba === "fretes" && (
             <button
               onClick={() => (setCopiaInicial(null), setEditando("novo"))}
-              className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center gap-2 text-sm"
+              className="px-4 py-2 rounded-lg bg-petroleo text-white font-bold flex items-center gap-2 text-sm"
             >
               <Plus size={16} /> Novo frete
             </button>
@@ -479,7 +479,7 @@ export function TelaFretes({
                 <button
                   key={f.id}
                   onClick={() => setFiltro(f.id)}
-                  className={`text-xs px-3 py-1.5 rounded-lg border font-semibold ${filtro === f.id ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                  className={`text-xs px-3 py-1.5 rounded-lg border font-semibold ${filtro === f.id ? "bg-petroleo text-white border-petroleo" : "bg-white text-slate-600 hover:bg-slate-50"}`}
                 >
                   {f.rotulo}
                 </button>
@@ -492,7 +492,7 @@ export function TelaFretes({
                     onChange={(e) => setBusca(e.target.value)}
                     placeholder="Obra, cidade, transportadora…"
                     aria-label="Buscar fretes"
-                    className="border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#2A6377] w-full md:w-64"
+                    className="border rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-petroleo w-full md:w-64"
                   />
                 </div>
                 <BotaoExportar onClick={exportar} disabled={!lista.length} />
@@ -517,7 +517,7 @@ export function TelaFretes({
                   <li key={f.id}>
                     <button type="button" onClick={() => onAbrir(f.id)} className="w-full text-left px-3 py-3 hover:bg-slate-50 active:bg-slate-100">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="font-bold text-[#2A6377]">
+                        <p className="font-bold text-petroleo">
                           Frete {f.numero} <span className="text-slate-700 font-semibold">· obra {f.codigo_obra}</span>
                         </p>
                         <span className="font-bold tabular-nums whitespace-nowrap">{valorFrete(f)}</span>
@@ -530,7 +530,7 @@ export function TelaFretes({
                       </p>
                       <div className="flex items-center justify-between gap-2 mt-2">
                         <BadgeStatusFrete status={f.status} />
-                        <span className="text-xs font-semibold text-[#2A6377] flex items-center">
+                        <span className="text-xs font-semibold text-petroleo flex items-center">
                           {f.status === "aguardando_cotacao" && ehLogistica ? "Cotar" : "Ver detalhes"} <ChevronRight size={14} aria-hidden="true" />
                         </span>
                       </div>
@@ -576,7 +576,7 @@ export function TelaFretes({
                   ) : (
                     lista.map((f) => (
                       <tr key={f.id} className="border-t hover:bg-slate-50 cursor-pointer" {...linhaClicavel(() => onAbrir(f.id))}>
-                        <td className="px-3 py-2 font-bold text-[#2A6377]">{f.numero}</td>
+                        <td className="px-3 py-2 font-bold text-petroleo">{f.numero}</td>
                         <td className="px-3 py-2">{f.codigo_obra}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{formatarDataSegura(f.data_frete)}</td>
                         <td className="px-3 py-2">
@@ -1061,7 +1061,7 @@ function ModalFrete({
           <button
             disabled={salvando}
             onClick={salvar}
-            className="px-4 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+            className="px-4 py-2 rounded-lg bg-petroleo text-white font-bold flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {salvando ? <Loader2 className="animate-spin" size={16} /> : <Truck size={16} />} {frete ? "Salvar" : "Pedir frete"}
           </button>
@@ -1079,7 +1079,7 @@ function ModalFrete({
               <button
                 type="button"
                 onClick={() => setCopiando(true)}
-                className="text-xs px-2.5 py-1.5 rounded-lg border text-[#2A6377] font-semibold hover:bg-slate-50 inline-flex items-center gap-1"
+                className="text-xs px-2.5 py-1.5 rounded-lg border text-petroleo font-semibold hover:bg-slate-50 inline-flex items-center gap-1"
               >
                 <Copy size={13} aria-hidden="true" /> Copiar de um frete anterior
               </button>
@@ -1219,7 +1219,7 @@ function ModalFrete({
                       </span>
                       <span className="font-bold tabular-nums">{formatarMoeda(s.preco)}</span>
                       {ehLogistica && (
-                        <button type="button" onClick={() => escolherSugestao(s)} className="text-xs px-2 py-1 rounded border text-[#2A6377] font-semibold hover:bg-slate-50">
+                        <button type="button" onClick={() => escolherSugestao(s)} className="text-xs px-2 py-1 rounded border text-petroleo font-semibold hover:bg-slate-50">
                           Usar
                         </button>
                       )}
@@ -1298,7 +1298,7 @@ function PainelCopiarFrete({ fretes, idObra, onEscolher }: { fretes: Frete[]; id
             <li key={f.id}>
               <button type="button" onClick={() => onEscolher(f)} className="w-full text-left px-3 py-2 hover:bg-slate-50">
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <b className="text-[#2A6377]">Frete {f.numero}</b>
+                  <b className="text-petroleo">Frete {f.numero}</b>
                   <span className="text-slate-700 font-semibold">obra {f.codigo_obra}</span>
                   {idObra && f.id_obra === idObra && (
                     <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">mesma obra</span>
@@ -1401,7 +1401,7 @@ function CargaLista({ linhas, onChange }: { linhas: LinhaCarga[]; onChange: (l: 
             type="button"
             onClick={() => setColando("")}
             title="Copie as células da planilha e cole aqui (ou use Ctrl+V com o cursor fora dos campos)"
-            className="text-xs px-2 py-1 rounded border text-[#2A6377] font-semibold hover:bg-slate-50 inline-flex items-center gap-1"
+            className="text-xs px-2 py-1 rounded border text-petroleo font-semibold hover:bg-slate-50 inline-flex items-center gap-1"
           >
             <ClipboardPaste size={13} aria-hidden="true" /> Colar do Excel
           </button>
@@ -1456,7 +1456,7 @@ function CargaLista({ linhas, onChange }: { linhas: LinhaCarga[]; onChange: (l: 
                 <button
                   type="button"
                   onClick={() => onChange([...linhas, { ...LINHA_VAZIA }])}
-                  className="text-xs px-2 py-1 rounded border text-[#2A6377] font-semibold hover:bg-white inline-flex items-center gap-1"
+                  className="text-xs px-2 py-1 rounded border text-petroleo font-semibold hover:bg-white inline-flex items-center gap-1"
                 >
                   <Plus size={13} /> Adicionar item
                 </button>
@@ -1591,7 +1591,7 @@ function PainelColarCarga({
           type="button"
           disabled={!r.itens.length || itensAtuais === 0}
           onClick={() => onAplicar(r.itens, "substituir")}
-          className="px-3 py-2 rounded-lg border text-[#2A6377] font-semibold text-sm disabled:opacity-50"
+          className="px-3 py-2 rounded-lg border text-petroleo font-semibold text-sm disabled:opacity-50"
           title={itensAtuais === 0 ? "Não há itens na carga para substituir" : undefined}
         >
           Substituir os itens{itensAtuais > 0 ? ` (${itensAtuais} atuais)` : ""}
@@ -1600,7 +1600,7 @@ function PainelColarCarga({
           type="button"
           disabled={!r.itens.length}
           onClick={() => onAplicar(r.itens, "acrescentar")}
-          className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold text-sm disabled:opacity-50"
+          className="px-3 py-2 rounded-lg bg-petroleo text-white font-bold text-sm disabled:opacity-50"
         >
           Acrescentar aos itens
         </button>
@@ -1738,7 +1738,7 @@ function DetalheFrete({
               type="button"
               onClick={onDuplicar}
               title="Abre um frete novo com a rota, a carga e a observação deste"
-              className="px-3 py-2 rounded-lg border text-[#2A6377] font-semibold flex items-center justify-center gap-1 text-sm"
+              className="px-3 py-2 rounded-lg border text-petroleo font-semibold flex items-center justify-center gap-1 text-sm"
             >
               <Copy size={14} /> Duplicar
             </button>
@@ -1751,7 +1751,7 @@ function DetalheFrete({
             >
               <XCircle size={14} /> Cancelar frete
             </button>
-            <button onClick={onEditar} className="px-3 py-2 rounded-lg bg-[#2A6377] text-white font-bold flex items-center justify-center gap-1 text-sm">
+            <button onClick={onEditar} className="px-3 py-2 rounded-lg bg-petroleo text-white font-bold flex items-center justify-center gap-1 text-sm">
               <Pencil size={14} /> {frete.status === "aguardando_cotacao" ? "Cotar" : "Editar"}
             </button>
               </>
@@ -1978,7 +1978,7 @@ function CadastroTransportadoras({ transportadorasErp, onMudou }: { transportado
                                   : supabase.from("fretes_transp_ufs").insert({ transportadora_codigo: t.codigo, uf, origem: "manual" }),
                               )
                             }
-                            className={`text-xs w-10 py-1 rounded border font-semibold ${tem ? "bg-[#2A6377] text-white border-[#2A6377]" : "bg-white text-slate-500 hover:border-[#2A6377]"}`}
+                            className={`text-xs w-10 py-1 rounded border font-semibold ${tem ? "bg-petroleo text-white border-petroleo" : "bg-white text-slate-500 hover:border-petroleo"}`}
                           >
                             {uf}
                           </button>
@@ -2111,7 +2111,7 @@ function TarifasTransportadora({
               setVeiculo("");
               setMinimo("");
             }}
-            className="px-3 py-1.5 rounded-lg bg-[#2A6377] text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1"
+            className="px-3 py-1.5 rounded-lg bg-petroleo text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1"
           >
             <Plus size={14} /> Tarifa
           </button>

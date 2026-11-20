@@ -100,7 +100,7 @@ function baixarCsv(conteudo: string, nome: string) {
 }
 
 const campoCls =
-  "h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]";
+  "h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo";
 
 export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarGestor, hojeLocal, onAbrir }: Props) {
   const [inicial] = useState(carregarPreferencias);
@@ -150,7 +150,7 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
         <button
           type="button"
           onClick={() => setOrdem(alternarOrdem(ordem, chave))}
-          className={`inline-flex w-full items-center gap-1 uppercase hover:text-[#2A6377] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377] rounded ${justify} ${ativa ? "text-[#2A6377] font-bold" : ""}`}
+          className={`inline-flex w-full items-center gap-1 uppercase hover:text-petroleo focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo rounded ${justify} ${ativa ? "text-petroleo font-bold" : ""}`}
         >
           {texto}
           <Seta size={12} aria-hidden="true" className={ativa ? "" : "opacity-40"} />
@@ -176,12 +176,12 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <h3 className="text-lg font-bold flex items-center gap-2">
-          <Activity size={20} className="text-[#2A6377]" /> Status Geral dos Projetos
+          <Activity size={20} className="text-petroleo" /> Status Geral dos Projetos
         </h3>
         <div className="text-xs text-slate-500 md:text-right">
           <p>Toque (ou Enter) em uma obra para abrir o painel da obra.</p>
           <details className="mt-1">
-            <summary className="cursor-pointer text-[#2A6377] font-semibold">Como é calculado?</summary>
+            <summary className="cursor-pointer text-petroleo font-semibold">Como é calculado?</summary>
             <p className="mt-1 max-w-md text-left">{EXPLICACAO_SAUDE}</p>
           </details>
         </div>
@@ -244,7 +244,7 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
             type="checkbox"
             checked={filtros.soAtrasadas}
             onChange={(e) => mudar({ soAtrasadas: e.target.checked })}
-            className="h-4 w-4 accent-[#2A6377]"
+            className="h-4 w-4 accent-petroleo"
           />
           Só atrasadas na entrega
         </label>
@@ -268,7 +268,7 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
           <button
             type="button"
             onClick={() => setOrdem({ chave: ordem.chave, sentido: ordem.sentido === "asc" ? "desc" : "asc" })}
-            className={`${campoCls} inline-flex items-center gap-1 shrink-0 font-semibold hover:border-[#2A6377]`}
+            className={`${campoCls} inline-flex items-center gap-1 shrink-0 font-semibold hover:border-petroleo`}
             aria-label={`Inverter a ordem (agora ${ordem.sentido === "asc" ? "crescente" : "decrescente"})`}
           >
             {ordem.sentido === "asc" ? <ArrowUp size={14} aria-hidden="true" /> : <ArrowDown size={14} aria-hidden="true" />}
@@ -282,7 +282,7 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
           {carregando || falhou ? "" : `${visiveis.length} de ${linhas.length} ${linhas.length === 1 ? "obra" : "obras"}`}
         </span>
         {comFiltro && (
-          <button type="button" onClick={limpar} className="font-semibold text-[#2A6377] hover:underline">
+          <button type="button" onClick={limpar} className="font-semibold text-petroleo hover:underline">
             Limpar filtros
           </button>
         )}
@@ -291,7 +291,7 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
           type="button"
           onClick={exportar}
           disabled={carregando || falhou || visiveis.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:border-[#2A6377] hover:text-[#2A6377] transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:border-petroleo hover:text-petroleo transition disabled:opacity-50 disabled:cursor-not-allowed"
           title="Baixa as obras que estão na tabela, na ordem atual, em um arquivo para abrir no Excel"
         >
           <Download size={14} aria-hidden="true" /> Exportar (Excel)
@@ -323,7 +323,7 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
                   {semResultado ? (
                     <div className="flex flex-col items-center gap-2">
                       <span>Nenhuma obra com esses filtros.</span>
-                      <button type="button" onClick={limpar} className="font-semibold text-[#2A6377] hover:underline">
+                      <button type="button" onClick={limpar} className="font-semibold text-petroleo hover:underline">
                         Limpar filtros
                       </button>
                     </div>
@@ -340,10 +340,10 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
                     key={projeto.id}
                     {...linhaClicavel(() => onAbrir(projeto.id))}
                     aria-label={`Abrir obra ${projeto.codigo} - ${projeto.nome}`}
-                    className="hover:bg-slate-50 cursor-pointer transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2A6377]"
+                    className="hover:bg-slate-50 cursor-pointer transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-petroleo"
                   >
                     <td className="px-4 py-3">
-                      <p className="font-bold text-[#2A6377]">
+                      <p className="font-bold text-petroleo">
                         {projeto.codigo} - {projeto.nome}
                       </p>
                       <p className="text-xs text-slate-500">Resp.: {projeto.responsavel}</p>
@@ -402,7 +402,7 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
             {semResultado ? (
               <>
                 <span>Nenhuma obra com esses filtros.</span>
-                <button type="button" onClick={limpar} className="font-semibold text-[#2A6377] hover:underline">
+                <button type="button" onClick={limpar} className="font-semibold text-petroleo hover:underline">
                   Limpar filtros
                 </button>
               </>
@@ -419,10 +419,10 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
                 key={projeto.id}
                 onClick={() => onAbrir(projeto.id)}
                 aria-label={`Abrir obra ${projeto.codigo} - ${projeto.nome}`}
-                className="w-full text-left border rounded-xl p-4 hover:border-[#2A6377] hover:bg-slate-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]"
+                className="w-full text-left border rounded-xl p-4 hover:border-petroleo hover:bg-slate-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <p className="font-bold text-[#2A6377] text-sm break-words min-w-0">
+                  <p className="font-bold text-petroleo text-sm break-words min-w-0">
                     {projeto.codigo} - {projeto.nome}
                   </p>
                   <span className={`shrink-0 px-2 py-1 rounded-full border text-[11px] font-bold ${estiloGeral(projeto.statusGeral)}`}>

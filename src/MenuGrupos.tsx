@@ -149,7 +149,7 @@ export function MenuGrupos({ grupos, recolhido, onIr }: { grupos: GrupoMenu[]; r
             >
               <I size={20} />
               {pendentes > 0 && (
-                <span className="absolute top-1 right-1.5 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-[#2A6377]" aria-label={`${pendentes} pendente(s)`} />
+                <span className="absolute top-1 right-1.5 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-petroleo" aria-label={`${pendentes} pendente(s)`} />
               )}
             </button>
           );
@@ -161,7 +161,7 @@ export function MenuGrupos({ grupos, recolhido, onIr }: { grupos: GrupoMenu[]; r
             onMouseEnter={cancelarFechar}
             onMouseLeave={fecharDepois}
             style={{ top: flutuante.top, left: flutuante.left }}
-            className="fixed z-[60] w-56 bg-[#23566a] text-white rounded-xl shadow-2xl ring-1 ring-black/10 p-2"
+            className="fixed z-[60] w-56 bg-petroleo-escuro text-white rounded-xl shadow-2xl ring-1 ring-black/10 p-2"
           >
             {/* ponte invisivel entre o icone e a lista: o mouse atravessa sem fechar */}
             <div className="absolute -left-3 top-0 bottom-0 w-3" />

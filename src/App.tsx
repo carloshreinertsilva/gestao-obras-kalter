@@ -1,7 +1,8 @@
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import TelaDashboard from "./telas/TelaDashboard";
+import TelaDashboard, { CabecalhoPainel } from "./telas/TelaDashboard";
+import { COR_PETROLEO } from "./cores";
 import TelaReunioes from "./telas/TelaReunioes";
 import { AbaPrevisoes, PainelSolicitacoes, podeSolicitarPrevisao } from "./SolicitacoesPrevisao";
 import { SolicitacoesFaturamentoObra, TelaFaturamento } from "./SolicitacoesFaturamento";
@@ -1778,7 +1779,7 @@ export default function App() {
       const linha = (rotulo: string, valor: string) =>
         `<tr><td style="padding:6px 12px 6px 0; color:#64748b; font-size:13px; white-space:nowrap; vertical-align:top;">${rotulo}</td><td style="padding:6px 0; font-size:15px; color:#1e293b;">${valor}</td></tr>`;
       const html = `
-        <p style="margin:0 0 18px 0; font-size:20px; font-weight:bold; color:#2A6377;">Nova tarefa atribuída a você</p>
+        <p style="margin:0 0 18px 0; font-size:20px; font-weight:bold; color:${COR_PETROLEO};">Nova tarefa atribuída a você</p>
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-top:1px solid #e5eaee; border-bottom:1px solid #e5eaee; padding:8px 0;">
           ${linha("Tarefa", `<strong>${esc(dados.titulo)}</strong>`)}
           ${dados.descricao ? linha("Descrição", esc(dados.descricao).replace(/\n/g, "<br/>")) : ""}
@@ -1786,7 +1787,7 @@ export default function App() {
           ${dados.data_vencimento ? linha("Prazo", `<strong>${formatarDataSegura(dados.data_vencimento)}</strong>`) : ""}
         </table>
         <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 4px 0;">
-          <tr><td style="border-radius:8px; background:#2A6377;">
+          <tr><td style="border-radius:8px; background:${COR_PETROLEO};">
             <a href="${window.location.origin}/tarefas?tarefa=${idTarefa}" target="_blank" style="display:inline-block; padding:12px 22px; font-family:'Segoe UI',Arial,sans-serif; font-size:14px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:8px;">Clique aqui para ver a tarefa</a>
           </td></tr>
         </table>
@@ -1893,7 +1894,7 @@ export default function App() {
     >
       <Bell size={20} />
       {totalSino > 0 && (
-        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center border-2 border-[#2A6377]">
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center border-2 border-petroleo">
           {totalSino > 99 ? "99+" : totalSino}
         </span>
       )}
@@ -2257,7 +2258,7 @@ export default function App() {
   if (carregandoAuth || (sessao && etapaMfa === "verificando"))
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="animate-spin text-[#2A6377]" size={48} />
+        <Loader2 className="animate-spin text-petroleo" size={48} />
       </div>
     );
 
@@ -2270,7 +2271,7 @@ export default function App() {
     return (
       <div className="flex h-screen bg-slate-100 items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
-          <div className="bg-[#2A6377] p-6 md:p-8 text-center flex flex-col items-center justify-center border-b border-[#1e4857]">
+          <div className="bg-petroleo p-6 md:p-8 text-center flex flex-col items-center justify-center border-b border-petroleo-escuro">
             <img src="/logo.png" alt="Kalter Logo" className="max-h-16 w-auto object-contain" />
             <p className="text-white/80 font-medium tracking-wide uppercase text-xs mt-2">Gestão de Obras</p>
           </div>
@@ -2297,7 +2298,7 @@ export default function App() {
                   autoComplete="new-password"
                   value={novaSenha}
                   onChange={(e) => setNovaSenha(e.target.value)}
-                  className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-[#2A6377]"
+                  className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-petroleo"
                 />
               </div>
               <p className="text-[11px] text-slate-400 mt-1">{REGRA_SENHA}</p>
@@ -2312,14 +2313,14 @@ export default function App() {
                   autoComplete="new-password"
                   value={confirmaSenha}
                   onChange={(e) => setConfirmaSenha(e.target.value)}
-                  className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-[#2A6377]"
+                  className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-petroleo"
                 />
               </div>
             </div>
             <button
               type="submit"
               disabled={carregandoAuth}
-              className="w-full bg-[#2A6377] hover:bg-[#1e4857] text-white p-3 rounded-lg font-bold flex justify-center items-center disabled:opacity-50"
+              className="w-full bg-petroleo hover:bg-petroleo-escuro text-white p-3 rounded-lg font-bold flex justify-center items-center disabled:opacity-50"
             >
               {carregandoAuth ? <Loader2 className="animate-spin" size={18} /> : "Salvar nova senha"}
             </button>
@@ -2346,7 +2347,7 @@ export default function App() {
     return (
       <div className="flex h-screen bg-slate-100 items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
-          <div className="bg-[#2A6377] p-6 md:p-8 text-center flex flex-col items-center justify-center border-b border-[#1e4857]">
+          <div className="bg-petroleo p-6 md:p-8 text-center flex flex-col items-center justify-center border-b border-petroleo-escuro">
             <img
               src="/logo.png"
               alt="Kalter Logo"
@@ -2376,7 +2377,7 @@ export default function App() {
                   setModoAuth("login");
                   setErroLogin("");
                 }}
-                className={`flex-1 pb-3 text-sm font-bold transition ${modoAuth === "login" ? "border-b-2 border-[#2A6377] text-[#2A6377]" : "text-slate-400"}`}
+                className={`flex-1 pb-3 text-sm font-bold transition ${modoAuth === "login" ? "border-b-2 border-petroleo text-petroleo" : "text-slate-400"}`}
               >
                 Entrar
               </button>
@@ -2385,7 +2386,7 @@ export default function App() {
                   setModoAuth("cadastro");
                   setErroLogin("");
                 }}
-                className={`flex-1 pb-3 text-sm font-bold transition ${modoAuth === "cadastro" ? "border-b-2 border-[#2A6377] text-[#2A6377]" : "text-slate-400"}`}
+                className={`flex-1 pb-3 text-sm font-bold transition ${modoAuth === "cadastro" ? "border-b-2 border-petroleo text-petroleo" : "text-slate-400"}`}
               >
                 Criar Conta
               </button>
@@ -2404,7 +2405,7 @@ export default function App() {
                       type="text"
                       value={nomeAuth}
                       onChange={(e) => setNomeAuth(e.target.value)}
-                      className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-[#2A6377]"
+                      className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-petroleo"
                     />
                   </div>
                 </div>
@@ -2421,7 +2422,7 @@ export default function App() {
                     type="email"
                     value={emailAuth}
                     onChange={(e) => setEmailAuth(e.target.value)}
-                    className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-[#2A6377]"
+                    className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-petroleo"
                   />
                 </div>
               </div>
@@ -2433,7 +2434,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setModoAuth("recuperar")}
-                        className="text-xs text-[#2A6377]"
+                        className="text-xs text-petroleo"
                       >
                         Esqueceu?
                       </button>
@@ -2449,7 +2450,7 @@ export default function App() {
                       type="password"
                       value={senhaAuth}
                       onChange={(e) => setSenhaAuth(e.target.value)}
-                      className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-[#2A6377]"
+                      className="w-full border rounded-lg py-3 pl-10 pr-3 outline-none focus:border-petroleo"
                     />
                   </div>
                   {modoAuth === "cadastro" && <p className="text-[11px] text-slate-400 mt-1">{REGRA_SENHA}</p>}
@@ -2458,7 +2459,7 @@ export default function App() {
               <button
                 type="submit"
                 disabled={carregandoAuth}
-                className="w-full bg-[#2A6377] hover:bg-[#1e4857] text-white p-3 rounded-lg font-bold flex justify-center items-center mt-6 disabled:opacity-50"
+                className="w-full bg-petroleo hover:bg-petroleo-escuro text-white p-3 rounded-lg font-bold flex justify-center items-center mt-6 disabled:opacity-50"
               >
                 {carregandoAuth ? (
                   <Loader2 className="animate-spin" size={18} />
@@ -2493,7 +2494,7 @@ export default function App() {
       <BuscaGlobal aberta={buscaAberta} onFechar={() => setBuscaAberta(false)} obras={obrasLista} onNavegar={navegarPara} />
 
       {/* HEADER MOBILE */}
-      <div className="md:hidden bg-[#2A6377] text-white p-4 flex justify-between items-center shadow-md z-30">
+      <div className="md:hidden bg-petroleo text-white p-4 flex justify-between items-center shadow-md z-30">
         <div className="flex items-center gap-2">
           <img
             src="/logo.png"
@@ -2533,7 +2534,7 @@ export default function App() {
           >
             <div className="p-5 border-b border-gray-100 flex justify-between items-start gap-4">
               <div>
-                <h2 className="font-bold text-xl text-[#2A6377] flex items-center gap-2">
+                <h2 className="font-bold text-xl text-petroleo flex items-center gap-2">
                   <CheckSquare size={20} /> Nova Tarefa da Obra
                 </h2>
                 <p className="text-sm text-slate-500 mt-1">
@@ -2561,7 +2562,7 @@ export default function App() {
                     setNovaTarefaObra({ ...novaTarefaObra, titulo: e.target.value })
                   }
                   placeholder="Ex.: Validar cronograma revisado com cliente"
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  className="w-full border rounded-lg p-3 outline-none focus:border-petroleo"
                 />
               </div>
 
@@ -2579,7 +2580,7 @@ export default function App() {
                     })
                   }
                   placeholder="Detalhe o que precisa ser feito, premissas ou alinhamentos."
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  className="w-full border rounded-lg p-3 outline-none focus:border-petroleo"
                 />
               </div>
 
@@ -2597,7 +2598,7 @@ export default function App() {
                         id_responsavel: e.target.value,
                       })
                     }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    className="w-full border rounded-lg p-3 outline-none focus:border-petroleo"
                   >
                     <option value="">Selecione</option>
                     {listaUsuarios.map((usuario) => (
@@ -2620,7 +2621,7 @@ export default function App() {
                         data_vencimento: e.target.value,
                       })
                     }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    className="w-full border rounded-lg p-3 outline-none focus:border-petroleo"
                   />
                 </div>
                 <div>
@@ -2635,7 +2636,7 @@ export default function App() {
                         prioridade: e.target.value,
                       })
                     }
-                    className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                    className="w-full border rounded-lg p-3 outline-none focus:border-petroleo"
                   >
                     <option value="baixa">Baixa</option>
                     <option value="normal">Normal</option>
@@ -2660,7 +2661,7 @@ export default function App() {
               <button
                 onClick={salvarTarefaObra}
                 disabled={carregando || !novaTarefaObra.titulo || !novaTarefaObra.id_responsavel}
-                className="px-5 py-2 bg-[#2A6377] text-white rounded-lg font-bold flex items-center gap-2 disabled:opacity-50"
+                className="px-5 py-2 bg-petroleo text-white rounded-lg font-bold flex items-center gap-2 disabled:opacity-50"
               >
                 {carregando ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                 Salvar tarefa
@@ -2682,7 +2683,7 @@ export default function App() {
           >
             <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-start gap-4">
               <div>
-                <span className="text-xs font-bold text-[#2A6377] bg-[#2A6377]/10 px-2 py-1 rounded uppercase mb-2 inline-block">
+                <span className="text-xs font-bold text-petroleo bg-petroleo/10 px-2 py-1 rounded uppercase mb-2 inline-block">
                   {tarefaSelecionada.obras?.codigo_externo} -{" "}
                   {tarefaSelecionada.obras?.nome}
                 </span>
@@ -2702,7 +2703,7 @@ export default function App() {
               <div className="w-full md:w-1/3 space-y-4">
                 <div className="flex items-center gap-3 text-sm text-slate-600 bg-slate-50 p-4 rounded-lg border">
                   <div className="p-2 bg-white rounded-full shadow-sm border">
-                    <User className="text-[#2A6377]" size={18} />
+                    <User className="text-petroleo" size={18} />
                   </div>
                   <div>
                     <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
@@ -2739,7 +2740,7 @@ export default function App() {
                     onChange={(e) =>
                       atualizarDataTarefa(tarefaSelecionada.id, e.target.value)
                     }
-                    className="font-bold bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-[#2A6377]/40 rounded cursor-pointer w-full text-slate-700 p-0 m-0"
+                    className="font-bold bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-petroleo/40 rounded cursor-pointer w-full text-slate-700 p-0 m-0"
                   />
                 </div>
               </div>
@@ -2747,7 +2748,7 @@ export default function App() {
               <div className="w-full md:w-2/3 flex flex-col">
                 <div className="mb-4 bg-slate-50 border rounded-lg p-4 text-sm">
                   <div className="flex flex-wrap gap-2 mb-3">
-                    <span className="text-xs font-bold uppercase px-2 py-1 rounded bg-[#2A6377]/10 text-[#2A6377]">
+                    <span className="text-xs font-bold uppercase px-2 py-1 rounded bg-petroleo/10 text-petroleo">
                       Origem: {tarefaSelecionada.origem === "reuniao" ? "Reunião" : "Avulsa"}
                     </span>
                     <span className={`text-xs font-bold uppercase px-2 py-1 rounded ${tarefaSelecionada.prioridade === "critica" ? "bg-red-100 text-red-700" : tarefaSelecionada.prioridade === "alta" ? "bg-amber-100 text-amber-700" : tarefaSelecionada.prioridade === "baixa" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-700"}`}>
@@ -2763,7 +2764,7 @@ export default function App() {
                 </div>
 
                 <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4">
-                  <MessageSquare size={18} className="text-[#2A6377]" />{" "}
+                  <MessageSquare size={18} className="text-petroleo" />{" "}
                   Atualizações
                 </h3>
                 <div className="flex-1 bg-slate-50 rounded-lg border p-4 space-y-4 mb-4 min-h-[200px]">
@@ -2778,7 +2779,7 @@ export default function App() {
                         className="bg-white p-3 rounded shadow-sm border text-sm"
                       >
                         <div className="flex justify-between items-center mb-1">
-                          <span className="font-bold text-[#2A6377]">
+                          <span className="font-bold text-petroleo">
                             {com.usuarios?.nome}
                           </span>
                           <span className="text-xs text-slate-400">
@@ -2801,12 +2802,12 @@ export default function App() {
                     onKeyPress={(e) =>
                       e.key === "Enter" && adicionarComentario()
                     }
-                    className="flex-1 border rounded-lg p-3 outline-none focus:border-[#2A6377] text-sm"
+                    className="flex-1 border rounded-lg p-3 outline-none focus:border-petroleo text-sm"
                   />
                   <button
                     onClick={adicionarComentario}
                     disabled={!novoComentarioTexto.trim()}
-                    className="bg-[#2A6377] text-white px-4 rounded-lg hover:bg-[#1e4857] transition disabled:opacity-50"
+                    className="bg-petroleo text-white px-4 rounded-lg hover:bg-petroleo-escuro transition disabled:opacity-50"
                   >
                     <Send size={18} />
                   </button>
@@ -2818,7 +2819,7 @@ export default function App() {
               {tarefaSelecionada.data_vencimento && (
                 <button
                   onClick={() => agendarNoOutlookWeb(tarefaSelecionada)}
-                  className="bg-white border border-[#2A6377]/30 text-[#2A6377] hover:bg-[#2A6377]/10 px-4 py-3 md:py-2 rounded-lg font-bold flex items-center gap-2 transition flex-1 sm:flex-none justify-center shadow-sm"
+                  className="bg-white border border-petroleo/30 text-petroleo hover:bg-petroleo/10 px-4 py-3 md:py-2 rounded-lg font-bold flex items-center gap-2 transition flex-1 sm:flex-none justify-center shadow-sm"
                 >
                   <CalendarPlus size={18} /> Outlook
                 </button>
@@ -2829,7 +2830,7 @@ export default function App() {
                     atualizarStatusTarefa(tarefaSelecionada.id, "em_andamento");
                     setTarefaSelecionada(null);
                   }}
-                  className="bg-[#2A6377] text-white px-6 py-3 md:py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-[#1e4857] transition shadow-md flex-1 sm:flex-none justify-center"
+                  className="bg-petroleo text-white px-6 py-3 md:py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-petroleo-escuro transition shadow-md flex-1 sm:flex-none justify-center"
                 >
                   <Play size={18} /> Iniciar Tarefa
                 </button>
@@ -2880,7 +2881,7 @@ export default function App() {
           >
             <div className="p-5 border-b border-gray-100 flex justify-between items-start gap-4">
               <div>
-                <h2 className="font-bold text-xl text-[#2A6377]">
+                <h2 className="font-bold text-xl text-petroleo">
                   {acaoCronogramaModal === "editar_previsto"
                     ? "Editar prazos previstos"
                     : acaoCronogramaModal === "finalizar"
@@ -2947,7 +2948,7 @@ export default function App() {
                           ),
                         })
                       }
-                      className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("cron-inicio", !dataBRParaISO(formCronogramaModal.inicio_previsto || ""))}`}
+                      className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo${bordaModal("cron-inicio", !dataBRParaISO(formCronogramaModal.inicio_previsto || ""))}`}
                     />
                 {textoModal("cron-inicio", !dataBRParaISO(formCronogramaModal.inicio_previsto || ""))}
                   </div>
@@ -2969,7 +2970,7 @@ export default function App() {
                           fim_previsto: formatarEntradaDataBR(e.target.value),
                         })
                       }
-                      className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("cron-fim", !dataBRParaISO(formCronogramaModal.fim_previsto || ""))}`}
+                      className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo${bordaModal("cron-fim", !dataBRParaISO(formCronogramaModal.fim_previsto || ""))}`}
                     />
                 {textoModal("cron-fim", !dataBRParaISO(formCronogramaModal.fim_previsto || ""))}
                   </div>
@@ -2996,7 +2997,7 @@ export default function App() {
                         data: formatarEntradaDataBR(e.target.value),
                       })
                     }
-                    className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("cron-data", !dataBRParaISO(formCronogramaModal.data || ""))}`}
+                    className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo${bordaModal("cron-data", !dataBRParaISO(formCronogramaModal.data || ""))}`}
                   />
                 {textoModal("cron-data", !dataBRParaISO(formCronogramaModal.data || ""))}
                 </div>
@@ -3020,7 +3021,7 @@ export default function App() {
                       observacao: e.target.value,
                     })
                   }
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  className="w-full border rounded-lg p-3 outline-none focus:border-petroleo"
                 />
               </div>
             </div>
@@ -3034,7 +3035,7 @@ export default function App() {
               </button>
               <button
                 onClick={salvarAcaoCronograma}
-                className="px-5 py-2 rounded-lg bg-[#2A6377] text-white font-bold hover:bg-[#1e4857]"
+                className="px-5 py-2 rounded-lg bg-petroleo text-white font-bold hover:bg-petroleo-escuro"
               >
                 Salvar
               </button>
@@ -3055,7 +3056,7 @@ export default function App() {
             <div className="p-5 border-b border-slate-100 flex justify-between items-start gap-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                  <DollarSign className="text-[#2A6377]" size={22} /> Liquidar
+                  <DollarSign className="text-petroleo" size={22} /> Liquidar
                   Parcela
                 </h2>
                 <p className="text-sm text-slate-500 mt-1">
@@ -3108,7 +3109,7 @@ export default function App() {
                       data_recebimento: formatarEntradaDataBR(e.target.value),
                     })
                   }
-                  className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("liq-data", !dataBRParaISO(liquidacaoParcela.data_recebimento || ""))}`}
+                  className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo${bordaModal("liq-data", !dataBRParaISO(liquidacaoParcela.data_recebimento || ""))}`}
                 />
                 {textoModal("liq-data", !dataBRParaISO(liquidacaoParcela.data_recebimento || ""))}
               </div>
@@ -3129,7 +3130,7 @@ export default function App() {
                       valor_recebido: e.target.value,
                     })
                   }
-                  className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("liq-valor", !(Number(liquidacaoParcela.valor_recebido) > 0))}`}
+                  className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo${bordaModal("liq-valor", !(Number(liquidacaoParcela.valor_recebido) > 0))}`}
                 />
                 {textoModal("liq-valor", !(Number(liquidacaoParcela.valor_recebido) > 0))}
                 <p className="text-xs text-slate-400 mt-2">
@@ -3149,7 +3150,7 @@ export default function App() {
               <button
                 onClick={confirmarLiquidacaoParcela}
                 disabled={carregando}
-                className="px-5 py-2 bg-[#2A6377] text-white rounded-lg font-bold flex items-center gap-2 hover:bg-[#1e4857] transition disabled:opacity-50"
+                className="px-5 py-2 bg-petroleo text-white rounded-lg font-bold flex items-center gap-2 hover:bg-petroleo-escuro transition disabled:opacity-50"
               >
                 {carregando ? (
                   <Loader2 className="animate-spin" size={16} />
@@ -3251,7 +3252,7 @@ export default function App() {
                         data_finalizacao: e.target.value,
                       }))
                     }
-                    className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("fin-data", !formFinalizarObra.data_finalizacao)}`}
+                    className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo${bordaModal("fin-data", !formFinalizarObra.data_finalizacao)}`}
                     disabled={!podeFinalizarObraPorFaturamento}
                   />
                 {textoModal("fin-data", !formFinalizarObra.data_finalizacao)}
@@ -3279,7 +3280,7 @@ export default function App() {
                       observacao_finalizacao: e.target.value,
                     }))
                   }
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  className="w-full border rounded-lg p-3 outline-none focus:border-petroleo"
                   placeholder="Ex.: Obra entregue e faturamento concluído. Recebimentos seguem conforme condição comercial."
                   disabled={!podeFinalizarObraPorFaturamento}
                 />
@@ -3351,7 +3352,7 @@ export default function App() {
                         data_cancelamento: e.target.value,
                       }))
                     }
-                    className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("canc-data", !formCancelarObra.data_cancelamento)}`}
+                    className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo${bordaModal("canc-data", !formCancelarObra.data_cancelamento)}`}
                   />
                 {textoModal("canc-data", !formCancelarObra.data_cancelamento)}
                 </div>
@@ -3367,7 +3368,7 @@ export default function App() {
                         motivo_cancelamento: e.target.value,
                       }))
                     }
-                    className={`w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]${bordaModal("canc-motivo", !formCancelarObra.motivo_cancelamento?.trim())}`}
+                    className={`w-full border rounded-lg p-3 outline-none focus:border-petroleo${bordaModal("canc-motivo", !formCancelarObra.motivo_cancelamento?.trim())}`}
                     placeholder="Ex.: Cancelado pelo cliente, revisão comercial, perda do projeto…"
                   />
                 {textoModal("canc-motivo", !formCancelarObra.motivo_cancelamento?.trim())}
@@ -3385,7 +3386,7 @@ export default function App() {
                       observacao_cancelamento: e.target.value,
                     }))
                   }
-                  className="w-full border rounded-lg p-3 outline-none focus:border-[#2A6377]"
+                  className="w-full border rounded-lg p-3 outline-none focus:border-petroleo"
                   placeholder="Descreva o contexto do cancelamento e próximos passos, se houver."
                 />
               </div>
@@ -3456,7 +3457,7 @@ export default function App() {
           <div className="bg-white w-full max-w-sm h-full shadow-2xl flex flex-col">
             <div className="p-4 md:p-6 border-b border-gray-100 flex justify-between items-center">
               <h2 className="text-xl font-bold flex items-center gap-2">
-                <Bell className="text-[#2A6377]" /> Notificações
+                <Bell className="text-petroleo" /> Notificações
               </h2>
               <button onClick={() => setPainelNotificacaoAberto(false)}>
                 <X size={24} />
@@ -3471,7 +3472,7 @@ export default function App() {
                 {novidadesNaoLidas > 0 && (
                   <button
                     onClick={() => marcarNotificacoesLidas()}
-                    className="text-xs font-semibold text-[#2A6377] hover:underline flex items-center gap-1"
+                    className="text-xs font-semibold text-petroleo hover:underline flex items-center gap-1"
                   >
                     <CheckCheck size={14} /> Marcar todas como lidas
                   </button>
@@ -3510,9 +3511,9 @@ export default function App() {
                   {minhasNotificacoes.map((notif) => (
                     <div
                       key={notif.id}
-                      className="bg-white p-4 rounded-xl border border-l-4 border-l-[#2A6377]"
+                      className="bg-white p-4 rounded-xl border border-l-4 border-l-petroleo"
                     >
-                      <span className="text-xs font-bold text-[#2A6377] uppercase bg-[#2A6377]/10 px-2 py-1 rounded inline-block mb-2">
+                      <span className="text-xs font-bold text-petroleo uppercase bg-petroleo/10 px-2 py-1 rounded inline-block mb-2">
                         {notif.obras?.codigo_externo || "Obra"}
                       </span>
                       <p className="font-semibold text-sm mb-3">
@@ -3529,7 +3530,7 @@ export default function App() {
                           {notif.data_vencimento && (
                             <button
                               onClick={() => agendarNoOutlookWeb(notif)}
-                              className="text-[#2A6377] bg-[#2A6377]/10 px-3 py-1.5 rounded hover:bg-[#2A6377]/20 font-medium flex items-center gap-1 transition"
+                              className="text-petroleo bg-petroleo/10 px-3 py-1.5 rounded hover:bg-petroleo/20 font-medium flex items-center gap-1 transition"
                             >
                               <CalendarPlus size={14} /> Agendar
                             </button>
@@ -3540,7 +3541,7 @@ export default function App() {
                               setPainelNotificacaoAberto(false);
                               abrirTarefaPorId(notif.id);
                             }}
-                            className="text-white bg-[#2A6377] px-3 py-1.5 rounded hover:bg-[#1e4857] font-medium transition"
+                            className="text-white bg-petroleo px-3 py-1.5 rounded hover:bg-petroleo-escuro font-medium transition"
                           >
                             Acessar
                           </button>
@@ -3558,7 +3559,7 @@ export default function App() {
 
       {/* MENU LATERAL (ARQUITETURA ERP) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[50] w-64 ${menuRecolhido ? "md:w-16 2xl:w-16" : "md:w-60 2xl:w-64"} bg-[#2A6377] text-white flex flex-col shadow-2xl transition-[transform,width] duration-300 md:relative md:translate-x-0 ${menuMobileAberto ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-[50] w-64 ${menuRecolhido ? "md:w-16 2xl:w-16" : "md:w-60 2xl:w-64"} bg-petroleo text-white flex flex-col shadow-2xl transition-[transform,width] duration-300 md:relative md:translate-x-0 ${menuMobileAberto ? "translate-x-0" : "-translate-x-full"}`}
       >
         {/* min-h-0: a lista de itens rola dentro do menu e o rodape (usuario / Sair) fica sempre visivel */}
         <div className="flex-1 min-h-0 flex flex-col">
@@ -3723,6 +3724,7 @@ export default function App() {
       {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 p-4 md:p-5 2xl:p-8 overflow-y-auto overflow-x-hidden bg-slate-50/50">
         <Suspense fallback={<CarregandoTela />}>
+        {telaAtiva === "dashboard" && <CabecalhoPainel isAdmin={veTudo} onIrPara={setTelaAtiva} />}
         {telaAtiva === "dashboard" && <MinhasPendencias pendencias={pendencias} onIr={setTelaAtiva} />}
         {/* o outro lado das pendencias: o que a pessoa pediu e esta parado com outra area */}
         {telaAtiva === "dashboard" && (
@@ -3761,7 +3763,7 @@ export default function App() {
                     value={buscaObras}
                     onChange={(e) => setBuscaObras(e.target.value)}
                     placeholder="Buscar por código, nome ou responsável"
-                    className="border rounded-lg py-2 pl-8 pr-3 text-sm bg-white w-full sm:w-72 focus:border-[#2A6377]"
+                    className="border rounded-lg py-2 pl-8 pr-3 text-sm bg-white w-full sm:w-72 focus:border-petroleo"
                   />
                 </label>
                 <label
@@ -3778,7 +3780,7 @@ export default function App() {
                       e.target.value as "codigo" | "nome",
                     )
                   }
-                  className="border rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-[#2A6377] bg-white"
+                  className="border rounded-lg px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-petroleo bg-white"
                 >
                   <option value="codigo">Número (Código)</option>
                   <option value="nome">Descrição (Nome)</option>
@@ -3810,9 +3812,9 @@ export default function App() {
                   return (
                   <div
                     key={obra.id}
-                    className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md hover:border-[#2A6377] transition flex flex-col group relative"
+                    className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md hover:border-petroleo transition flex flex-col group relative"
                   >
-                    <div className={`h-2 ${selo?.barra || "bg-[#2A6377]"}`}></div>
+                    <div className={`h-2 ${selo?.barra || "bg-petroleo"}`}></div>
                     <button
                       type="button"
                       onClick={() => alternarFavorita(obra.id)}
@@ -3828,7 +3830,7 @@ export default function App() {
                         <span className="text-xs font-bold bg-slate-100 text-slate-600 uppercase px-2 py-1 rounded">{obra.codigo_externo}</span>
                         {selo && <span title={EXPLICACAO_SAUDE} className={`text-xs font-semibold px-2 py-1 rounded border ${selo.c}`}>{selo.t}</span>}
                       </span>
-                      <h3 className="text-lg font-bold text-slate-800 leading-tight mb-3 group-hover:text-[#2A6377] transition">
+                      <h3 className="text-lg font-bold text-slate-800 leading-tight mb-3 group-hover:text-petroleo transition">
                         {obra.nome}
                       </h3>
                       {motivos.length > 0 && <p className="text-xs text-slate-600 mb-3">{motivos.join(" · ")}</p>}
@@ -3856,18 +3858,18 @@ export default function App() {
               <div>
                 <button
                   onClick={() => setTelaAtiva("minhas_obras")}
-                  className="text-slate-400 hover:text-[#2A6377] text-sm font-bold flex items-center gap-1 mb-2 transition"
+                  className="text-slate-400 hover:text-petroleo text-sm font-bold flex items-center gap-1 mb-2 transition"
                 >
                   <ChevronRight size={16} className="rotate-180" /> Voltar para
                   Minhas Obras
                 </button>
                 <h2 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
-                  <FolderOpen className="text-[#2A6377]" size={32} />{" "}
+                  <FolderOpen className="text-petroleo" size={32} />{" "}
                   {obraEcoSelecionada.codigo_externo} -{" "}
                   {obraEcoSelecionada.nome}
                 </h2>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-                  <span className="bg-[#2A6377]/10 text-[#2A6377] px-3 py-1 rounded-full">
+                  <span className="bg-petroleo/10 text-petroleo px-3 py-1 rounded-full">
                     Fase:{" "}
                     {labelFase(
                       obraEcoSelecionada.fase_atual || "processo_inicial",
@@ -3958,7 +3960,7 @@ export default function App() {
                           }
                           e.currentTarget.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
                         }}
-                        className={`shrink-0 px-4 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition ${abaPainelObra === aba.id ? "border-[#2A6377] text-[#2A6377] bg-[#2A6377]/5" : "border-transparent text-slate-500 hover:text-[#2A6377] hover:bg-slate-50"}`}
+                        className={`shrink-0 px-4 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition ${abaPainelObra === aba.id ? "border-petroleo text-petroleo bg-petroleo/5" : "border-transparent text-slate-500 hover:text-petroleo hover:bg-slate-50"}`}
                       >
                         <IconeAba size={16} /> {aba.label}
                       </button>

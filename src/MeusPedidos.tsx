@@ -69,7 +69,7 @@ export default function MeusPedidos({
     <section aria-label="Meus pedidos em andamento" className="bg-white rounded-xl border shadow-sm p-4 mb-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-3">
         <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-          <Send size={15} className="text-[#2A6377]" aria-hidden="true" /> Meus pedidos em andamento
+          <Send size={15} className="text-petroleo" aria-hidden="true" /> Meus pedidos em andamento
         </h3>
         <p className="text-xs text-slate-500">
           {pedidos.length} {pedidos.length === 1 ? "pedido" : "pedidos"}
@@ -136,7 +136,7 @@ export default function MeusPedidos({
       </div>
 
       {pedidos.length > LINHAS_INICIAIS && (
-        <button type="button" onClick={() => setTodos((v) => !v)} className="mt-3 text-sm font-semibold text-[#2A6377] hover:underline">
+        <button type="button" onClick={() => setTodos((v) => !v)} className="mt-3 text-sm font-semibold text-petroleo hover:underline">
           {todos ? "Mostrar menos" : `Ver todos (${pedidos.length})`}
         </button>
       )}

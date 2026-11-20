@@ -112,7 +112,7 @@ export default function ComprasAtrasadas({ obras, onAbrirObra }: { obras: ObraPa
     <section aria-label="Compras e entregas atrasadas" className="bg-white rounded-xl border shadow-sm p-4 mb-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 mb-3">
         <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-          <Truck size={15} className="text-[#2A6377]" aria-hidden="true" /> Compras e entregas atrasadas
+          <Truck size={15} className="text-petroleo" aria-hidden="true" /> Compras e entregas atrasadas
         </h3>
         <p className="text-xs font-semibold text-red-700 flex items-center gap-1">
           <AlertTriangle size={12} aria-hidden="true" /> {textoResumo(resumo)}
@@ -167,13 +167,13 @@ export default function ComprasAtrasadas({ obras, onAbrirObra }: { obras: ObraPa
                   </ul>
                   <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 border-t">
                     {itens.length > ITENS_POR_OBRA ? (
-                      <button type="button" onClick={() => alternar(setItensTodos, obra.id)} className="text-xs font-semibold text-[#2A6377] hover:underline">
+                      <button type="button" onClick={() => alternar(setItensTodos, obra.id)} className="text-xs font-semibold text-petroleo hover:underline">
                         {todosItens ? "Mostrar menos" : `Ver mais ${itens.length - ITENS_POR_OBRA}`}
                       </button>
                     ) : (
                       <span />
                     )}
-                    <button type="button" onClick={() => onAbrirObra(obra.id)} className="text-xs font-semibold text-[#2A6377] hover:underline">
+                    <button type="button" onClick={() => onAbrirObra(obra.id)} className="text-xs font-semibold text-petroleo hover:underline">
                       Abrir a obra
                     </button>
                   </div>
@@ -185,7 +185,7 @@ export default function ComprasAtrasadas({ obras, onAbrirObra }: { obras: ObraPa
       </div>
 
       {resumo.obras.length > OBRAS_INICIAIS && (
-        <button type="button" onClick={() => setTodas((v) => !v)} className="mt-3 text-sm font-semibold text-[#2A6377] hover:underline">
+        <button type="button" onClick={() => setTodas((v) => !v)} className="mt-3 text-sm font-semibold text-petroleo hover:underline">
           {todas ? "Mostrar menos" : `Ver todas (${resumo.obras.length})`}
         </button>
       )}

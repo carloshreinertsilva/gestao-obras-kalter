@@ -7,9 +7,9 @@ import { ler } from "./processo";
 import type { Processo } from "./tipos";
 
 export const classeCampo =
-  "w-full h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-[#2A6377] focus:ring-2 focus:ring-[#2A6377]/15 disabled:bg-slate-50 disabled:text-slate-400";
+  "w-full h-10 px-3 rounded-lg border border-slate-300 bg-white text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-petroleo focus:ring-2 focus:ring-petroleo/15 disabled:bg-slate-50 disabled:text-slate-400";
 export const classeCelula =
-  "w-full h-8 px-1.5 rounded border border-slate-300 bg-white text-[13px] text-slate-800 outline-none focus:border-[#2A6377] focus:ring-1 focus:ring-[#2A6377]/20 disabled:bg-slate-50 disabled:text-slate-400";
+  "w-full h-8 px-1.5 rounded border border-slate-300 bg-white text-[13px] text-slate-800 outline-none focus:border-petroleo focus:ring-1 focus:ring-petroleo/20 disabled:bg-slate-50 disabled:text-slate-400";
 /** Valor estimado (catalogo/calculo): azul, como no programa local e na pre-visualizacao. */
 export const classeEstimado = "!bg-[#ddebf7] !text-[#1f4e9a] italic";
 
@@ -99,7 +99,7 @@ export function Botao({
   const base = tamanho === "pequeno" ? "h-7 px-2.5 text-xs" : "h-10 px-4 text-sm";
   const cor =
     tipo === "primario"
-      ? "bg-[#2A6377] hover:bg-[#21505f] text-white border-transparent"
+      ? "bg-petroleo hover:bg-petroleo-escuro text-white border-transparent"
       : tipo === "perigo"
         ? "bg-white text-red-600 border-red-200 hover:bg-red-50"
         : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50";

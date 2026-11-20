@@ -122,10 +122,10 @@ export default function GanttCarteira({
         className="w-full flex items-center justify-between gap-2 text-left"
       >
         <span className="font-bold text-slate-800 flex items-center gap-2">
-          <CalendarRange size={18} className="text-[#2A6377]" aria-hidden="true" />
+          <CalendarRange size={18} className="text-petroleo" aria-hidden="true" />
           Cronograma da carteira
         </span>
-        <span className="inline-flex items-center gap-1 text-sm font-semibold text-[#2A6377]">
+        <span className="inline-flex items-center gap-1 text-sm font-semibold text-petroleo">
           {aberto ? "Esconder" : "Ver cronograma da carteira"}
           {aberto ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
         </span>

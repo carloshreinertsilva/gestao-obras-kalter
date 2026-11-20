@@ -64,7 +64,7 @@ function confirmarDescarte(): Promise<boolean> {
           <button type="button" data-acao="descartar"
                   class="px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition">Descartar</button>
           <button type="button" data-acao="continuar"
-                  class="px-3 py-2 rounded-lg text-sm font-bold text-white bg-[#2A6377] hover:bg-[#1f4b5a] transition">Continuar editando</button>
+                  class="px-3 py-2 rounded-lg text-sm font-bold text-white bg-petroleo hover:bg-petroleo-escuro transition">Continuar editando</button>
         </div>
       </div>`;
     const anterior = document.activeElement as HTMLElement | null;

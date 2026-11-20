@@ -1,12 +1,13 @@
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatarPercentual, type CurvaAvanco as DadosCurva, type PontoCurva } from "./calculoAvanco";
+import { COR_PETROLEO } from "./cores";
 
 // Curva de avanco fisico x financeiro (Pacote 4 / B12). Carregada de forma preguicosa pela aba Cronograma
 // (recharts so baixa quando a curva aparece). As contas ficam em calculoAvanco.ts.
 // Cada serie tem cor E traco proprios (cheio / tracejado / pontilhado) - nunca so a cor.
 
 export const SERIES = [
-  { chave: "fisico", rotulo: "Avanço físico informado", cor: "#2A6377", traco: undefined, largura: 3 },
+  { chave: "fisico", rotulo: "Avanço físico informado", cor: COR_PETROLEO, traco: undefined, largura: 3 },
   { chave: "faturado", rotulo: "% faturado acumulado", cor: "#c2410c", traco: "6 4", largura: 2 },
   { chave: "recebido", rotulo: "% recebido acumulado", cor: "#7c3aed", traco: "2 3", largura: 2 },
 ] as const;
@@ -115,7 +116,7 @@ export default function CurvaAvanco({ curva }: { curva: DadosCurva }) {
       </div>
 
       <details className="mt-2 text-sm">
-        <summary className="cursor-pointer text-[#2A6377] font-semibold text-xs">Ver os valores em tabela</summary>
+        <summary className="cursor-pointer text-petroleo font-semibold text-xs">Ver os valores em tabela</summary>
         <div className="overflow-x-auto mt-2">
           <table className="w-full text-xs">
             <caption className="sr-only">Avanço físico informado, percentual faturado e percentual recebido acumulados por data</caption>
