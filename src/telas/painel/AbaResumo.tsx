@@ -193,15 +193,16 @@ const lerAbas = () =>
   );
 
 // ---------- visual ----------
-const ESTILO_SAUDE: Record<StatusSaude, string> = {
-  critico: "bg-red-100 text-red-800 border-red-300",
-  atencao: "bg-amber-100 text-amber-900 border-amber-300",
-  em_dia: "bg-emerald-100 text-emerald-800 border-emerald-300",
+// semaforo (mesmas cores da TabelaStatusGeral): a cor fica so na bolinha, o texto e neutro
+const BOLINHA_SAUDE: Record<StatusSaude, string> = {
+  critico: "bg-red-500",
+  atencao: "bg-amber-400",
+  em_dia: "bg-green-500",
 };
-const ESTILO_AREA: Record<NivelArea, string> = {
-  vermelho: "bg-red-50 text-red-700 border-red-200",
-  amarelo: "bg-amber-50 text-amber-800 border-amber-200",
-  verde: "bg-emerald-50 text-emerald-700 border-emerald-200",
+const BOLINHA_AREA: Record<NivelArea, string> = {
+  vermelho: "bg-red-500",
+  amarelo: "bg-amber-400",
+  verde: "bg-green-500",
 };
 
 function Bloco({
@@ -224,7 +225,7 @@ function Bloco({
   return (
     <section className={`bg-white p-4 rounded-xl shadow-sm border min-w-0 flex flex-col ${className}`} aria-busy={estado === "carregando"}>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <h3 className="font-bold text-slate-800 flex items-center gap-2 min-w-0">
+        <h3 className="font-semibold text-slate-800 flex items-center gap-2 min-w-0">
           <Icone size={17} className="text-petroleo shrink-0" aria-hidden="true" />
           <span className="truncate">{titulo}</span>
         </h3>
@@ -267,7 +268,7 @@ function Bloco({
 const Linha = ({ rotulo, children, classe = "" }: { rotulo: string; children: ReactNode; classe?: string }) => (
   <div className="flex justify-between items-baseline gap-3 py-1 border-b last:border-b-0 border-slate-100">
     <span className="text-slate-600">{rotulo}</span>
-    <span className={`font-bold text-right ${classe}`}>{children}</span>
+    <span className={`font-medium text-right tabular-nums text-slate-900 ${classe}`}>{children}</span>
   </div>
 );
 
@@ -380,7 +381,7 @@ export default function AbaResumo({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-bold text-slate-800">Resumo da obra</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Resumo da obra</h2>
         <div className="relative ml-auto" ref={caixaMenu}>
           <button
             type="button"
@@ -422,10 +423,8 @@ export default function AbaResumo({
           {saude ? (
             <>
               <p className="flex flex-wrap items-center gap-2">
-                <span
-                  title={EXPLICACAO_SAUDE}
-                  className={`inline-block px-3 py-1 rounded-full border text-sm font-black ${ESTILO_SAUDE[saude.geral]}`}
-                >
+                <span title={EXPLICACAO_SAUDE} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <span className={`inline-block w-3 h-3 rounded-full shrink-0 ${BOLINHA_SAUDE[saude.geral]}`} aria-hidden="true" />
                   {saude.rotulo}
                 </span>
                 {prazo && (
@@ -448,8 +447,9 @@ export default function AbaResumo({
                   <li
                     key={a.campo}
                     title={ROTULO_NIVEL[saude.areas[a.campo]]}
-                    className={`text-xs px-2 py-0.5 rounded border font-semibold ${ESTILO_AREA[saude.areas[a.campo]]}`}
+                    className="text-xs text-slate-600 inline-flex items-center gap-1.5 mr-2"
                   >
+                    <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${BOLINHA_AREA[saude.areas[a.campo]]}`} aria-hidden="true" />
                     {a.nome}: {ROTULO_NIVEL[saude.areas[a.campo]].toLowerCase()}
                   </li>
                 ))}
@@ -478,10 +478,10 @@ export default function AbaResumo({
               <Linha rotulo="Escopo">
                 {formatarMoeda(faturamento.escopo)}
               </Linha>
-              <Linha rotulo="Faturado" classe="text-emerald-700">
+              <Linha rotulo="Faturado">
                 {formatarMoeda(faturamento.faturado)}
               </Linha>
-              <Linha rotulo="A faturar" classe="text-amber-700">
+              <Linha rotulo="A faturar">
                 {formatarMoeda(faturamento.aFaturar)}
               </Linha>
               <div
@@ -514,17 +514,17 @@ export default function AbaResumo({
               <Linha rotulo="Venda total">
                 {totalVendaGeral === null ? <span title={TITULO_SEM_ACESSO_VALOR}>—</span> : formatarMoeda(totalVendaGeral)}
               </Linha>
-              <Linha rotulo="Recebido" classe="text-emerald-700">
+              <Linha rotulo="Recebido">
                 {formatarMoeda(recebimento.recebido)}
               </Linha>
-              <Linha rotulo="A receber" classe="text-amber-700">
+              <Linha rotulo="A receber">
                 {recebimento.aReceber === null ? (
                   <span title={TITULO_SEM_ACESSO_VALOR}>—</span>
                 ) : (
                   formatarMoeda(recebimento.aReceber)
                 )}
               </Linha>
-              <Linha rotulo="Vencido" classe={recebimento.vencido > 0 ? "text-red-700" : "text-slate-500"}>
+              <Linha rotulo="Vencido" classe={recebimento.vencido > 0 ? "!text-red-700" : "!text-slate-500 !font-normal"}>
                 {recebimento.vencido > 0
                   ? `${formatarMoeda(recebimento.vencido)} (${recebimento.parcelasVencidas} parcela${recebimento.parcelasVencidas > 1 ? "s" : ""})`
                   : "nada vencido"}
@@ -559,7 +559,7 @@ export default function AbaResumo({
                     ({formatarMoeda(margem.margemPrevista)})
                   </span>
                 </Linha>
-                <Linha rotulo="Atual" classe={margem.margemAtual < margem.margemPrevista ? "text-red-700" : "text-emerald-700"}>
+                <Linha rotulo="Atual" classe={margem.margemAtual < margem.margemPrevista ? "!text-red-700" : ""}>
                   {formatarPct(margem.pctAtual)}{" "}
                   <span className="font-normal text-slate-500">
                     ({formatarMoeda(margem.margemAtual)})
@@ -611,7 +611,7 @@ export default function AbaResumo({
                     <li key={f.codigo} className="flex justify-between gap-2">
                       <span className="font-semibold">{f.codigo}</span>
                       <span
-                        className={`text-xs px-1.5 py-0.5 rounded border font-bold ${f.nivel === "atencao" ? "bg-amber-50 text-amber-700 border-amber-200" : f.nivel === "critico" ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-red-50 text-red-700 border-red-200"}`}
+                        className={`text-xs px-1.5 py-0.5 rounded border font-semibold ${f.nivel === "atencao" ? "bg-amber-50 text-amber-700 border-amber-200" : f.nivel === "critico" ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-red-50 text-red-700 border-red-200"}`}
                       >
                         {f.rotulo}
                       </span>
@@ -678,10 +678,10 @@ export default function AbaResumo({
         >
           {tarefas && (
             <p className="mb-2">
-              <span className="font-bold">{tarefas.abertas}</span> tarefa{tarefas.abertas === 1 ? "" : "s"} aberta
+              <span className="font-semibold tabular-nums">{tarefas.abertas}</span> tarefa{tarefas.abertas === 1 ? "" : "s"} aberta
               {tarefas.abertas === 1 ? "" : "s"}
               {" · "}
-              <span className={tarefas.atrasadas > 0 ? "font-bold text-red-700" : "font-bold text-slate-500"}>
+              <span className={tarefas.atrasadas > 0 ? "font-semibold text-red-700" : "text-slate-500"}>
                 {tarefas.atrasadas} atrasada{tarefas.atrasadas === 1 ? "" : "s"}
               </span>
             </p>

@@ -463,9 +463,9 @@ export default function Exportacao({
   const status = somenteLeitura ? (
     <span className="text-slate-500">Somente leitura</span>
   ) : conflito ? (
-    <span className="text-red-600 font-semibold" role="alert">NÃO SALVOU: alterado em outra janela</span>
+    <span className="text-red-600 font-semibold" role="alert">Não salvou: alterado em outra janela</span>
   ) : erroSalvar ? (
-    <span className="text-red-600 font-semibold" role="alert">NÃO SALVOU: {erroSalvar}</span>
+    <span className="text-red-600 font-semibold" role="alert">Não salvou: {erroSalvar}</span>
   ) : salvando ? (
     <span className="text-slate-500">Salvando…</span>
   ) : sujo ? (
@@ -525,7 +525,7 @@ export default function Exportacao({
           <div ref={listaPassos} className="relative flex lg:flex-col gap-1 overflow-x-auto">
             {ETAPAS.map((etapa, e) => (
               <div key={etapa.nome} className="contents lg:block">
-                <p className={`hidden lg:block px-2.5 text-xs font-bold uppercase tracking-wide text-slate-500 ${e ? "mt-3" : ""} mb-1`}>{etapa.nome}</p>
+                <p className={`hidden lg:block px-2.5 text-xs font-bold text-slate-500 ${e ? "mt-3" : ""} mb-1`}>{etapa.nome}</p>
                 {etapa.passos.map((id) => {
                   const ativo = id === passo;
                   const n = PASSOS.findIndex((p) => p.id === id) + 1;

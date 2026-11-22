@@ -165,7 +165,7 @@ export function MenuGrupos({ grupos, recolhido, onIr }: { grupos: GrupoMenu[]; r
           >
             {/* ponte invisivel entre o icone e a lista: o mouse atravessa sem fechar */}
             <div className="absolute -left-3 top-0 bottom-0 w-3" />
-            <p className="text-[11px] uppercase text-white/60 font-bold tracking-wider px-3 pt-1 pb-2">{aberto.titulo}</p>
+            <p className="text-xs text-white/60 font-semibold tracking-wider px-3 pt-1 pb-2">{aberto.titulo}</p>
             <div className="space-y-0.5">
               {aberto.itens.map((i) => (
                 <BotaoItem key={i.tela} item={i} onIr={ir} compacto />
@@ -190,7 +190,7 @@ export function MenuGrupos({ grupos, recolhido, onIr }: { grupos: GrupoMenu[]; r
               onClick={() => !temAtivo && alternar(g.id)}
               aria-expanded={aberto}
               title={temAtivo ? "Grupo da tela aberta" : aberto ? "Recolher" : "Abrir"}
-              className={`w-full flex items-center justify-between text-[11px] uppercase font-bold tracking-wider py-2.5 md:py-1 mb-1 ${
+              className={`w-full flex items-center justify-between text-xs font-semibold tracking-wider py-2.5 md:py-1 mb-1 ${
                 temAtivo ? "text-white/70 cursor-default" : "text-white/50 hover:text-white/80"
               }`}
             >

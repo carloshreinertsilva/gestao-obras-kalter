@@ -69,7 +69,7 @@ export function HistoricoProcesso({ idObra, proc, aprovado, aprovacao }: { idObr
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px] text-sm border-collapse">
                   <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="text-left text-xs text-slate-500">
                       <th className="px-2 py-1.5 border-b font-semibold">Onde</th>
                       <th className="px-2 py-1.5 border-b font-semibold">Campo</th>
                       <th className="px-2 py-1.5 border-b font-semibold">Aprovado</th>

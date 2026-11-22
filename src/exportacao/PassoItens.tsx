@@ -111,7 +111,7 @@ function CartaoItem({
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Total {moeda}</p>
+          <p className="text-xs text-slate-500">Total {moeda}</p>
           <p className="text-sm font-bold tabular-nums text-slate-800">{milhar(num(item.quantidade) * num(item.valor_unit), 2)}</p>
         </div>
         <button type="button" onClick={remover} className="p-1 text-slate-500 hover:text-red-600" aria-label={`Remover item ${n + 1}`}>
@@ -238,7 +238,7 @@ function PainelPesos({
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-sm border-collapse">
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr className="text-left text-xs text-slate-500">
               <th className="px-2 py-1.5 border-b font-semibold">Família</th>
               <th className="px-2 py-1.5 border-b font-semibold text-right">Materiais</th>
               <th className="px-2 py-1.5 border-b font-semibold text-right">Líq. (kg)</th>

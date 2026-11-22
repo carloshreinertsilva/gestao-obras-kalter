@@ -195,7 +195,7 @@ export default function PrevisaoMensal({
             Previsão de faturamento e recebimento por mês. Clique num mês para ver as obras.
           </caption>
           <thead>
-            <tr className="text-left text-xs uppercase text-slate-500 border-b border-slate-200">
+            <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
               <th scope="col" className="py-2 pr-2 font-semibold">Mês</th>
               <th scope="col" className="py-2 px-2 font-semibold text-right">A faturar</th>
               <th scope="col" className="py-2 pl-2 font-semibold text-right">A receber</th>

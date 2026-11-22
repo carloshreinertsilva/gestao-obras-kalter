@@ -150,7 +150,7 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
         <button
           type="button"
           onClick={() => setOrdem(alternarOrdem(ordem, chave))}
-          className={`inline-flex w-full items-center gap-1 uppercase hover:text-petroleo focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo rounded ${justify} ${ativa ? "text-petroleo font-bold" : ""}`}
+          className={`inline-flex w-full items-center gap-1 hover:text-petroleo focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo rounded ${justify} ${ativa ? "text-petroleo font-bold" : ""}`}
         >
           {texto}
           <Seta size={12} aria-hidden="true" className={ativa ? "" : "opacity-40"} />
@@ -176,7 +176,7 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <h3 className="text-lg font-bold flex items-center gap-2">
-          <Activity size={20} className="text-petroleo" /> Status Geral dos Projetos
+          <Activity size={20} className="text-petroleo" /> Status geral dos projetos
         </h3>
         <div className="text-xs text-slate-500 md:text-right">
           <p>Toque (ou Enter) em uma obra para abrir o painel da obra.</p>
@@ -301,7 +301,7 @@ export default function TabelaStatusGeral({ linhas, carregando, falhou, mostrarG
       {/* computador: tabela */}
       <div className="hidden md:block overflow-x-auto max-w-full">
         <table className="w-full text-sm min-w-[940px] [&_th]:px-2 [&_td]:px-2 2xl:[&_th]:px-4 2xl:[&_td]:px-4">
-          <thead className="bg-slate-50 text-slate-500 uppercase text-xs">
+          <thead className="bg-slate-50 text-slate-500 text-xs">
             <tr>
               {cabecalhoOrdenavel("codigo", "Obra", "left")}
               {cabecalhoOrdenavel("fase", "Fase", "left")}

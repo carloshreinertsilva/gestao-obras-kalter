@@ -79,7 +79,7 @@ const LinhaMaterial = memo(function LinhaMaterial({ m, aberta, onAbrir }: PropsL
 function Grupo({ titulo, dica, children }: { titulo: string; dica?: ReactNode; children: ReactNode }) {
   return (
     <div className="mt-4">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{titulo}</p>
+      <p className="text-xs font-bold text-slate-500">{titulo}</p>
       {dica && <p className="text-xs text-[#1f4e9a] mt-0.5">{dica}</p>}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-2">{children}</div>
     </div>

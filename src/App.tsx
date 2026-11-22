@@ -79,20 +79,16 @@ import {
   Menu,
   MessageSquare,
   ChevronRight,
-  FolderOpen,
-  FileText,
   LayoutDashboard,
   Settings,
   ClipboardList,
   DollarSign,
   Receipt,
   Boxes,
-  TrendingUp,
   Wallet,
   PanelLeftClose,
   PanelLeftOpen,
   Truck,
-  Ship,
   Package,
   Search,
   Star,
@@ -3858,37 +3854,39 @@ export default function App() {
               <div>
                 <button
                   onClick={() => setTelaAtiva("minhas_obras")}
-                  className="text-slate-400 hover:text-petroleo text-sm font-bold flex items-center gap-1 mb-2 transition"
+                  className="text-slate-600 hover:text-petroleo text-sm font-medium flex items-center gap-1 mb-2 transition"
                 >
-                  <ChevronRight size={16} className="rotate-180" /> Voltar para
-                  Minhas Obras
+                  <ChevronRight size={16} className="rotate-180" aria-hidden="true" /> Voltar para
+                  Minhas obras
                 </button>
-                <h2 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
-                  <FolderOpen className="text-petroleo" size={32} />{" "}
+                <h2 className="text-2xl md:text-3xl font-semibold text-slate-900">
                   {obraEcoSelecionada.codigo_externo} -{" "}
                   {obraEcoSelecionada.nome}
                 </h2>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-                  <span className="bg-petroleo/10 text-petroleo px-3 py-1 rounded-full">
-                    Fase:{" "}
-                    {labelFase(
-                      obraEcoSelecionada.fase_atual || "processo_inicial",
-                    )}
-                  </span>
-                  <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full">
-                    Responsável:{" "}
-                    {obraEcoSelecionada.usuarios?.nome || "Não informado"}
-                  </span>
-                  <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full">
-                    Previsão:{" "}
-                    {formatarDataSegura(obraEcoSelecionada.data_previsao_fim)}
-                  </span>
-                </div>
+                {/* fase, responsavel e previsao numa linha de texto (antes 3 pilulas coloridas) */}
+                <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+                  <div className="flex gap-1.5">
+                    <dt className="text-slate-500">Fase</dt>
+                    <dd className="font-medium text-slate-800">
+                      {labelFase(obraEcoSelecionada.fase_atual || "processo_inicial")}
+                    </dd>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <dt className="text-slate-500">Responsável</dt>
+                    <dd className="font-medium text-slate-800">{obraEcoSelecionada.usuarios?.nome || "Não informado"}</dd>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <dt className="text-slate-500">Previsão</dt>
+                    <dd className="font-medium text-slate-800 tabular-nums">
+                      {formatarDataSegura(obraEcoSelecionada.data_previsao_fim)}
+                    </dd>
+                  </div>
+                </dl>
               </div>
               {podeEditarObraSelecionada && !["finalizada", "cancelada"].includes(obraEcoSelecionada.status ?? "") && (
                 <details className="relative self-start md:self-auto group">
-                  <summary className="list-none cursor-pointer select-none bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition">
-                    <Settings size={18} /> Ações da Obra
+                  <summary className="list-none cursor-pointer select-none bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition">
+                    <Settings size={18} aria-hidden="true" /> Ações da obra
                     <ChevronRight size={16} className="rotate-90 transition group-open:-rotate-90" />
                   </summary>
 
@@ -3928,23 +3926,21 @@ export default function App() {
                 {/* 06/11: no celular, uma linha so com rolagem (antes 4-5 linhas fixas no topo); Diario logo depois do Resumo */}
                 <div className="flex overflow-x-auto md:flex-wrap" role="tablist" aria-label="Seções da obra">
                   {[
-                    { id: "resumo", label: "Resumo", icon: LayoutDashboard },
+                    { id: "resumo", label: "Resumo" },
                     {
                       id: "diario_tarefas",
                       label: "Diário e Tarefas",
-                      icon: ClipboardList,
                     },
-                    { id: "financeiro", label: "Financeiro", icon: DollarSign },
-                    { id: "faturamento", label: "Faturamento", icon: Receipt },
-                    { id: "lista_materiais", label: "Lista de Materiais", icon: Boxes },
-                    { id: "compras", label: "Compras", icon: ShoppingCart },
-                    { id: "cronograma", label: "Cronograma", icon: Calendar },
-                    { id: "documentos", label: "Documentos", icon: FileText },
-                    { id: "previsoes", label: "Previsões", icon: Wallet },
-                    { id: "rentabilidade", label: "Rentabilidade", icon: TrendingUp },
-                    { id: "exportacao", label: "Exportação", icon: Ship },
+                    { id: "financeiro", label: "Financeiro" },
+                    { id: "faturamento", label: "Faturamento" },
+                    { id: "lista_materiais", label: "Lista de Materiais" },
+                    { id: "compras", label: "Compras" },
+                    { id: "cronograma", label: "Cronograma" },
+                    { id: "documentos", label: "Documentos" },
+                    { id: "previsoes", label: "Previsões" },
+                    { id: "rentabilidade", label: "Rentabilidade" },
+                    { id: "exportacao", label: "Exportação" },
                   ].filter((aba) => abaObraPermitida(aba.id) && (aba.id !== "exportacao" || obraEcoSelecionada?.exportacao)).map((aba) => {
-                    const IconeAba = aba.icon;
                     return (
                       <button
                         key={aba.id}
@@ -3960,9 +3956,9 @@ export default function App() {
                           }
                           e.currentTarget.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
                         }}
-                        className={`shrink-0 px-4 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition ${abaPainelObra === aba.id ? "border-petroleo text-petroleo bg-petroleo/5" : "border-transparent text-slate-500 hover:text-petroleo hover:bg-slate-50"}`}
+                        className={`shrink-0 px-4 py-3 text-sm font-medium border-b-2 transition ${abaPainelObra === aba.id ? "border-petroleo text-petroleo font-semibold" : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50"}`}
                       >
-                        <IconeAba size={16} /> {aba.label}
+                        {aba.label}
                       </button>
                     );
                   })}

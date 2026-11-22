@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "re
 import { supabase } from "../supabase";
 import { fasesProjeto } from "../constants";
 import ValorAjustavel from "../ValorAjustavel";
+import CartaoIndicador, { CLASSE_NUMERO, CLASSE_VALOR, CLASSE_VALOR_VENCIDO } from "../CartaoIndicador";
 import { formatarDataSegura, formatarDataHora, formatarMoeda, dataHojeISO, labelFase, isAtrasada } from "../utils";
 import { CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2, FolderOpen, Activity, CalendarClock, RefreshCw } from "lucide-react";
 import type { Usuario } from "../types";
@@ -30,39 +31,13 @@ interface Props {
   onIrPara: (tela: string) => void;
 }
 
-// Cartoes de indicadores do Painel: todos no mesmo cinza neutro (sem faixa colorida nem icone);
-// a cor fica so para o que pede atencao (valor vencido > 0 ganha borda e numero vermelhos).
-const CLASSE_VALOR = "text-2xl font-semibold text-slate-900 tabular-nums";
-const CLASSE_VALOR_VENCIDO = "text-2xl font-semibold text-red-700 tabular-nums";
-const CLASSE_NUMERO = "text-3xl font-semibold text-slate-900 tabular-nums";
-
-function CartaoIndicador({
-  rotulo,
-  nota,
-  alerta = false,
-  children,
-}: {
-  rotulo: string;
-  nota?: ReactNode;
-  alerta?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <div className={`bg-white p-5 rounded-xl border ${alerta ? "border-red-300" : "border-slate-200"}`}>
-      <p className="text-sm font-medium text-slate-500 mb-2">{rotulo}</p>
-      {children}
-      {nota && <p className="text-xs text-slate-500 mt-1">{nota}</p>}
-    </div>
-  );
-}
-
 // Titulo do Painel: o App coloca no topo da pagina, acima de "Minhas pendencias" e "Meus pedidos"
 // (antes ficava dentro da TelaDashboard, no meio da pagina, depois desses dois blocos).
 export function CabecalhoPainel({ isAdmin, onIrPara }: { isAdmin: boolean; onIrPara: (tela: string) => void }) {
   return (
     <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-6">
       <div>
-        <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
+        <h2 className="text-2xl md:text-3xl font-semibold text-slate-900">
           Painel
         </h2>
         <p className="text-sm text-slate-500 mt-1">
@@ -75,9 +50,9 @@ export function CabecalhoPainel({ isAdmin, onIrPara }: { isAdmin: boolean; onIrP
       </div>
       <button
         onClick={() => onIrPara("minhas_obras")}
-        className="bg-petroleo text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-petroleo-escuro transition"
+        className="bg-petroleo text-white px-4 py-2 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 hover:bg-petroleo-escuro transition"
       >
-        <FolderOpen size={16} /> Ver Obras
+        <FolderOpen size={16} aria-hidden="true" /> Ver obras
       </button>
     </div>
   );
@@ -479,9 +454,9 @@ export default function TelaDashboard({
 
   const blocoTarefas = (
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 border-b pb-2">
             <CheckSquare size={20} className="text-petroleo" /> Minhas
-            Tarefas Críticas
+            tarefas críticas
           </h3>
           {tarefasDashboard.length === 0 ? (
             <div className="text-center p-8 text-slate-500 flex flex-col items-center">
@@ -500,7 +475,7 @@ export default function TelaDashboard({
                   <div className="flex items-center gap-3 truncate">
                     <div className="w-2 h-2 rounded-full bg-petroleo shrink-0"></div>
                     <div className="truncate">
-                      <p className="text-xs font-bold text-petroleo uppercase">
+                      <p className="text-xs font-semibold text-slate-500 uppercase">
                         {tarefa.obras?.codigo_externo}
                       </p>
                       <p className="font-semibold text-slate-700 truncate">
@@ -509,7 +484,7 @@ export default function TelaDashboard({
                     </div>
                   </div>
                   <div
-                    className={`text-xs font-bold px-2 py-1 rounded shrink-0 flex items-center gap-1 ${isAtrasada(tarefa.data_vencimento, tarefa.status) ? "bg-red-100 text-red-700" : "bg-white border text-slate-500"}`}
+                    className={`text-xs font-semibold px-2 py-1 rounded shrink-0 flex items-center gap-1 ${isAtrasada(tarefa.data_vencimento, tarefa.status) ? "bg-red-100 text-red-700" : "bg-white border text-slate-500"}`}
                   >
                     <Clock size={12} />{" "}
                     {formatarDataSegura(tarefa.data_vencimento)}
@@ -518,7 +493,7 @@ export default function TelaDashboard({
               ))}
               <button
                 onClick={() => onIrPara("tarefas")}
-                className="w-full mt-2 text-xs font-bold text-center text-slate-500 hover:text-petroleo p-2 transition"
+                className="w-full mt-2 text-xs font-semibold text-center text-slate-500 hover:text-petroleo p-2 transition"
               >
                 Ver Kanban Completo &rarr;
               </button>
@@ -555,7 +530,7 @@ export default function TelaDashboard({
           <button
             type="button"
             onClick={() => setTentativa((t) => t + 1)}
-            className="bg-petroleo text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center justify-center gap-2 hover:bg-petroleo-escuro transition"
+            className="bg-petroleo text-white px-4 py-2 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 hover:bg-petroleo-escuro transition"
           >
             <RefreshCw size={16} /> Tentar de novo
           </button>
@@ -631,9 +606,9 @@ export default function TelaDashboard({
         <div className="relative min-[1700px]:min-h-[320px]">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-[1700px]:absolute min-[1700px]:inset-0">
           <div className="p-5 border-b border-slate-100 shrink-0">
-            <h3 className="text-lg font-bold flex items-center gap-2">
-              <AlertTriangle size={20} className="text-amber-500" />{" "}
-              Projetos Críticos
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <AlertTriangle size={20} className="text-slate-400" />{" "}
+              Projetos críticos
             </h3>
           </div>
           <div className="p-5 grid gap-4 content-start md:grid-cols-2 xl:grid-cols-3 min-[1700px]:grid-cols-1 max-h-[480px] min-[1700px]:max-h-none min-[1700px]:flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
@@ -663,7 +638,7 @@ export default function TelaDashboard({
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0">
-                      <p className="font-bold text-petroleo text-sm break-words">
+                      <p className="font-semibold text-petroleo text-sm break-words">
                         {projeto.codigo} - {projeto.nome}
                       </p>
                       <p className="text-xs text-slate-500">
@@ -696,7 +671,7 @@ export default function TelaDashboard({
 
       {/* fases do cronograma que vencem de hoje ate +7 dias (mesma conta da saude da obra) */}
       <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-        <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 border-b pb-2">
           <CalendarClock size={20} className="text-amber-500" /> Fases que vencem em 7 dias
         </h3>
         {carregando ? (
@@ -718,7 +693,7 @@ export default function TelaDashboard({
                     onClick={() => onAbrirObra(f.obraOriginal)}
                     className="w-full text-left border rounded-lg p-3 hover:border-petroleo hover:bg-slate-50 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-petroleo"
                   >
-                    <p className="font-bold text-petroleo text-sm break-words">
+                    <p className="font-semibold text-petroleo text-sm break-words">
                       {f.codigo} - {f.nome}
                     </p>
                     <p className="text-sm text-slate-700">{labelFase(f.fase)}</p>
@@ -753,9 +728,9 @@ export default function TelaDashboard({
 
       <div className={`grid grid-cols-1 ${isAdmin ? "xl:grid-cols-3" : "xl:grid-cols-2"} gap-6 items-start`}>
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 border-b pb-2">
             <Activity size={20} className="text-petroleo" /> Obras por
-            Fase
+            fase
           </h3>
           <div className="h-72 w-full">
             {carregando ? (
@@ -779,9 +754,9 @@ export default function TelaDashboard({
         {isAdmin && blocoTarefas}
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col h-[410px]">
-          <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2">
-            <Activity size={20} className="text-blue-500" /> Últimas
-            Atualizações
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 border-b pb-2">
+            <Activity size={20} className="text-slate-400" /> Últimas
+            atualizações
           </h3>
           <div className="flex-1 overflow-y-auto pr-2 space-y-4">
             {carregando ? (
@@ -799,10 +774,10 @@ export default function TelaDashboard({
                   className="relative pl-4 border-l border-slate-200"
                 >
                   <div className="absolute w-2 h-2 bg-blue-400 rounded-full -left-[4.5px] top-1.5"></div>
-                  <p className="text-xs font-bold text-slate-500 mb-0.5">
+                  <p className="text-xs font-semibold text-slate-500 mb-0.5">
                     {formatarDataHora(item.created_at)}
                   </p>
-                  <p className="text-xs font-bold text-petroleo uppercase mb-1">
+                  <p className="text-xs font-semibold text-slate-500 uppercase mb-1">
                     {item.obras?.codigo_externo} - {item.usuarios?.nome}
                   </p>
                   <p className="text-sm text-slate-700 bg-slate-50 p-2 rounded border border-slate-100 leading-snug line-clamp-3">

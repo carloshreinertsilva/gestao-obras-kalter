@@ -58,7 +58,7 @@ export function PassoDocumentos({ docs, aprovado, bloqueado, ocupado, mensagem, 
       <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
         <table className="w-full text-sm min-w-[620px] border-collapse">
           <thead>
-            <tr className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr className="bg-slate-50 text-xs text-slate-500">
               <th className="text-left font-semibold px-3 py-2">Documento</th>
               <th className="text-left font-semibold px-3 py-2">Pedido por</th>
               <th className="text-left font-semibold px-3 py-2">Situação</th>

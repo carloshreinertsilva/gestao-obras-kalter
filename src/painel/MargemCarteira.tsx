@@ -239,17 +239,17 @@ export default function MargemCarteira({
         <>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 border-b">
             <div className="rounded-lg border p-3">
-              <p className="text-[11px] text-slate-400 font-bold uppercase">Prevista (carteira)</p>
+              <p className="text-[11px] text-slate-400 font-medium">Prevista (carteira)</p>
               <p className="text-xl font-bold text-slate-800">{formatarPct(resumo.pctPrevista)}</p>
               <p className="text-xs text-slate-500">{formatarMoeda(resumo.margemPrevista)}</p>
             </div>
             <div className="rounded-lg border p-3">
-              <p className="text-[11px] text-slate-400 font-bold uppercase">Atual (carteira)</p>
+              <p className="text-[11px] text-slate-400 font-medium">Atual (carteira)</p>
               <p className="text-xl font-bold text-slate-800">{formatarPct(resumo.pctAtual)}</p>
               <p className="text-xs text-slate-500">{formatarMoeda(resumo.margemAtual)}</p>
             </div>
             <div className="rounded-lg border p-3">
-              <p className="text-[11px] text-slate-400 font-bold uppercase">Variação</p>
+              <p className="text-[11px] text-slate-400 font-medium">Variação</p>
               <p className={`text-xl font-bold flex items-center gap-1.5 ${corVariacao(resumo.variacaoPp)}`}>
                 {resumo.variacaoPp < 0 ? <TrendingDown size={18} aria-hidden="true" /> : <TrendingUp size={18} aria-hidden="true" />}
                 {formatarPp(resumo.variacaoPp)}

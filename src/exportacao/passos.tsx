@@ -16,7 +16,7 @@ const dataHora = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "";
 
 const TABELA = "w-full text-sm border-collapse";
-const TH = "text-left text-xs uppercase tracking-wide text-slate-500 font-semibold px-2 py-1.5 bg-slate-50 border-b";
+const TH = "text-left text-xs text-slate-500 font-semibold px-2 py-1.5 bg-slate-50 border-b";
 const TD = "px-2 py-1.5 border-b border-slate-100 align-top";
 
 // ------------------------------------------------------------------------------------------------ 1. Dados do ERP

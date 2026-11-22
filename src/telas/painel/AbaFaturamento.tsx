@@ -1,5 +1,6 @@
 import FaturamentosRealizados from "../../FaturamentosRealizados";
 import ValorAjustavel from "../../ValorAjustavel";
+import CartaoIndicador, { CLASSE_VALOR } from "../../CartaoIndicador";
 import { formatarMoeda, formatarCompetencia, formatarPercentual } from "../../utils";
 import { Activity, Lock, Receipt } from "lucide-react";
 import type { ObraFaturamentoFamilia, ObraFaturamentoGrupo, ObraFaturamentoPrevisao, ObraFaturamentoRealizado } from "../../types";
@@ -61,53 +62,28 @@ export default function AbaFaturamento({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 2xl:grid-cols-5 gap-4">
-        <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-500 font-bold uppercase">
-            Escopo Total
-          </p>
-          <ValorAjustavel className="text-2xl font-bold text-slate-800">
-            {formatarMoeda(totalEscopoFaturamento)}
-          </ValorAjustavel>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-500 font-bold uppercase">
-            Previsto
-          </p>
-          <ValorAjustavel className="text-2xl font-bold text-blue-700">
-            {formatarMoeda(totalPrevistoFaturamento)}
-          </ValorAjustavel>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-500 font-bold uppercase">
-            Faturado
-          </p>
-          <ValorAjustavel className="text-2xl font-bold text-emerald-700">
-            {formatarMoeda(totalRealizadoFaturamento)}
-          </ValorAjustavel>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-500 font-bold uppercase">
-            A Faturar
-          </p>
-          <ValorAjustavel className="text-2xl font-bold text-amber-700">
-            {formatarMoeda(saldoFaturarFamiliasPositivo)}
-          </ValorAjustavel>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border">
-          <p className="text-xs text-slate-500 font-bold uppercase">
-            Itens no Escopo
-          </p>
-          <p className="text-2xl font-bold text-petroleo">
-            {familiasFaturamentoComEscopo.length}
-          </p>
-        </div>
+        <CartaoIndicador rotulo="Escopo total">
+          <ValorAjustavel className={CLASSE_VALOR}>{formatarMoeda(totalEscopoFaturamento)}</ValorAjustavel>
+        </CartaoIndicador>
+        <CartaoIndicador rotulo="Previsto">
+          <ValorAjustavel className={CLASSE_VALOR}>{formatarMoeda(totalPrevistoFaturamento)}</ValorAjustavel>
+        </CartaoIndicador>
+        <CartaoIndicador rotulo="Faturado">
+          <ValorAjustavel className={CLASSE_VALOR}>{formatarMoeda(totalRealizadoFaturamento)}</ValorAjustavel>
+        </CartaoIndicador>
+        <CartaoIndicador rotulo="A faturar">
+          <ValorAjustavel className={CLASSE_VALOR}>{formatarMoeda(saldoFaturarFamiliasPositivo)}</ValorAjustavel>
+        </CartaoIndicador>
+        <CartaoIndicador rotulo="Itens no escopo">
+          <p className={CLASSE_VALOR}>{familiasFaturamentoComEscopo.length}</p>
+        </CartaoIndicador>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
         <div className="p-4 border-b">
-          <h3 className="font-bold text-lg flex items-center gap-2">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
             <Receipt size={18} className="text-petroleo" /> Escopo
-            por Grupo/Família
+            por grupo/família
           </h3>
           <p className="text-xs text-slate-500 mt-1">
             Cada linha representa uma combinação de grupo de faturamento, família e valor de escopo.
@@ -116,13 +92,13 @@ export default function AbaFaturamento({
           </p>
         </div>
         <div className="overflow-x-auto max-w-full">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm tabular-nums">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="p-3 text-left">
-                  Grupo de Faturamento
+                  Grupo de faturamento
                 </th>
-                <th className="p-3 text-right">Valor Total Escopo</th>
+                <th className="p-3 text-right">Valor total escopo</th>
                 <th className="p-3 text-right">Faturado</th>
                 <th className="p-3 text-right">% Faturado</th>
                 <th className="p-3 text-right">A Faturar</th>
@@ -157,7 +133,7 @@ export default function AbaFaturamento({
                       key={linha.grupo.id}
                       className="border-t hover:bg-slate-50"
                     >
-                      <td className="p-3 font-bold text-petroleo">
+                      <td className="p-3 font-medium text-slate-800">
                         <div>
                           {linha.grupo.codigo}
                           {linha.grupo.descricao
@@ -170,22 +146,22 @@ export default function AbaFaturamento({
                           </div>
                         )}
                       </td>
-                      <td className="p-3 text-right font-bold whitespace-nowrap">
+                      <td className="p-3 text-right font-medium text-slate-900 whitespace-nowrap">
                         {formatarMoeda(linha.valorEscopo)}
                       </td>
-                      <td className="p-3 text-right font-bold text-emerald-700 whitespace-nowrap">
+                      <td className="p-3 text-right text-slate-700 whitespace-nowrap">
                         {formatarMoeda(linha.valorFaturado)}
                       </td>
-                      <td className="p-3 text-right font-semibold text-emerald-700 whitespace-nowrap">
+                      <td className="p-3 text-right text-slate-500 whitespace-nowrap">
                         {formatarPercentual(
                           linha.valorFaturado,
                           linha.valorEscopo,
                         )}
                       </td>
-                      <td className="p-3 text-right font-bold whitespace-nowrap text-amber-700">
+                      <td className="p-3 text-right text-slate-700 whitespace-nowrap">
                         {formatarMoeda(saldoGrupo)}
                       </td>
-                      <td className="p-3 text-right font-semibold whitespace-nowrap text-amber-700">
+                      <td className="p-3 text-right text-slate-500 whitespace-nowrap">
                         {formatarPercentual(saldoGrupo, linha.valorEscopo)}
                       </td>
                     </tr>
@@ -199,9 +175,9 @@ export default function AbaFaturamento({
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden max-w-full">
         <div className="p-4 border-b">
-          <h3 className="font-bold text-lg flex items-center gap-2">
+          <h3 className="font-semibold text-lg flex items-center gap-2">
             <Activity size={18} className="text-petroleo" />
-            Previsão x Realizado por Grupo de Faturamento
+            Previsão x realizado por grupo de faturamento
           </h3>
           <p className="text-xs text-slate-500 mt-1">
             Uma linha por material do pedido (grupo de faturamento),
@@ -210,7 +186,7 @@ export default function AbaFaturamento({
         </div>
         <div className="overflow-x-auto max-w-full">
           <table
-            className="text-xs"
+            className="text-xs tabular-nums"
             style={{
               minWidth: `${360 + Math.max(competenciasFaturamento.length, 1) * 260}px`,
             }}
@@ -221,7 +197,7 @@ export default function AbaFaturamento({
                   rowSpan={2}
                   className="p-3 text-left min-w-[260px] sticky left-0 bg-slate-50 z-20 border-r"
                 >
-                  Grupo de Faturamento
+                  Grupo de faturamento
                 </th>
                 {competenciasFaturamento.length === 0 ? (
                   <th className="p-3 text-center min-w-[260px]">
@@ -234,7 +210,7 @@ export default function AbaFaturamento({
                       className="p-0 text-center min-w-[260px] border-r"
                       colSpan={2}
                     >
-                      <div className="bg-petroleo text-white p-2 font-bold">
+                      <div className="bg-slate-100 text-slate-700 p-2 font-semibold border-b">
                         {formatarCompetencia(comp)}
                       </div>
                     </th>
@@ -278,7 +254,7 @@ export default function AbaFaturamento({
                     key={`grupo-matriz-${linha.grupo.codigo}`}
                     className="border-t hover:bg-slate-50"
                   >
-                    <td className="p-3 font-bold text-petroleo sticky left-0 bg-white z-10 border-r min-w-[260px]">
+                    <td className="p-3 font-medium text-slate-800 sticky left-0 bg-white z-10 border-r min-w-[260px]">
                       <div>
                         {linha.grupo.codigo}
                         {linha.grupo.descricao ? ` - ${linha.grupo.descricao}` : ""}
@@ -309,14 +285,14 @@ export default function AbaFaturamento({
                           >
                             <div className="grid grid-cols-2 min-w-[260px]">
                               <span
-                                className={`p-3 text-right border-r whitespace-nowrap ${previsto > 0 ? "font-bold text-blue-700" : "text-slate-500"}`}
+                                className={`p-3 text-right border-r whitespace-nowrap ${previsto > 0 ? "text-slate-600" : "text-slate-400"}`}
                               >
                                 {previsto > 0
                                   ? formatarMoeda(previsto)
                                   : "-"}
                               </span>
                               <span
-                                className={`p-3 text-right whitespace-nowrap ${realizado > 0 ? "font-bold text-emerald-700" : "text-slate-500"}`}
+                                className={`p-3 text-right whitespace-nowrap ${realizado > 0 ? "font-medium text-slate-900" : "text-slate-400"}`}
                               >
                                 {realizado > 0
                                   ? formatarMoeda(realizado)
@@ -334,8 +310,8 @@ export default function AbaFaturamento({
             {competenciasFaturamento.length > 0 && gruposFaturamentoResumo.length > 0 && (
               <tfoot className="bg-slate-100 border-t-2 border-petroleo text-slate-800">
                 <tr>
-                  <td className="p-3 font-black text-petroleo sticky left-0 bg-slate-100 z-20 border-r min-w-[260px]">
-                    TOTAL POR COMPETÊNCIA
+                  <td className="p-3 font-semibold text-slate-800 sticky left-0 bg-slate-100 z-20 border-r min-w-[260px]">
+                    Total por competência
                   </td>
                   {competenciasFaturamento.map((comp) => {
                     const totalPrevisto = totalPrevistoCompetencia(comp);
@@ -348,10 +324,10 @@ export default function AbaFaturamento({
                         colSpan={2}
                       >
                         <div className="grid grid-cols-2 min-w-[260px]">
-                          <span className="p-3 text-right border-r whitespace-nowrap font-black text-blue-700">
+                          <span className="p-3 text-right border-r whitespace-nowrap font-semibold text-slate-700">
                             {totalPrevisto > 0 ? formatarMoeda(totalPrevisto) : "-"}
                           </span>
-                          <span className="p-3 text-right whitespace-nowrap font-black text-emerald-700">
+                          <span className="p-3 text-right whitespace-nowrap font-semibold text-slate-900">
                             {totalRealizado > 0 ? formatarMoeda(totalRealizado) : "-"}
                           </span>
                         </div>
