@@ -3,7 +3,7 @@ import { supabase } from "../supabase";
 import { fasesProjeto } from "../constants";
 import ValorAjustavel from "../ValorAjustavel";
 import { formatarDataSegura, formatarDataHora, formatarMoeda, dataHojeISO, labelFase, isAtrasada } from "../utils";
-import { Briefcase, CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2, FolderOpen, Activity, DollarSign, CalendarClock, RefreshCw } from "lucide-react";
+import { CheckSquare, AlertCircle, Clock, AlertTriangle, CheckCircle2, FolderOpen, Activity, CalendarClock, RefreshCw } from "lucide-react";
 import type { Usuario } from "../types";
 import TabelaStatusGeral from "../painel/TabelaStatusGeral";
 import { ROTULO_SAUDE, avaliarSaude, hojeLocalISO, prazoEntrega } from "../saudeObra";
@@ -28,6 +28,32 @@ interface Props {
   onAbrirObra: (obra: any) => void;
   onAbrirTarefa: (tarefa: any) => void;
   onIrPara: (tela: string) => void;
+}
+
+// Cartoes de indicadores do Painel: todos no mesmo cinza neutro (sem faixa colorida nem icone);
+// a cor fica so para o que pede atencao (valor vencido > 0 ganha borda e numero vermelhos).
+const CLASSE_VALOR = "text-2xl font-semibold text-slate-900 tabular-nums";
+const CLASSE_VALOR_VENCIDO = "text-2xl font-semibold text-red-700 tabular-nums";
+const CLASSE_NUMERO = "text-3xl font-semibold text-slate-900 tabular-nums";
+
+function CartaoIndicador({
+  rotulo,
+  nota,
+  alerta = false,
+  children,
+}: {
+  rotulo: string;
+  nota?: ReactNode;
+  alerta?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className={`bg-white p-5 rounded-xl border ${alerta ? "border-red-300" : "border-slate-200"}`}>
+      <p className="text-sm font-medium text-slate-500 mb-2">{rotulo}</p>
+      {children}
+      {nota && <p className="text-xs text-slate-500 mt-1">{nota}</p>}
+    </div>
+  );
 }
 
 // Titulo do Painel: o App coloca no topo da pagina, acima de "Minhas pendencias" e "Meus pedidos"
@@ -538,99 +564,49 @@ export default function TelaDashboard({
 
       {!falhou && (
       <div aria-busy={carregando} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4">
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-blue-500">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Obras Ativas
-            </p>
-            <Briefcase className="text-blue-500" size={22} />
-          </div>
+        <CartaoIndicador rotulo="Obras ativas">
+          {valorOu(<p className={CLASSE_NUMERO}>{resumoPMIS.obrasAtivas}</p>)}
+        </CartaoIndicador>
+        <CartaoIndicador
+          rotulo="Carteira total"
+          nota={
+            !carregando && resumoPMIS.carteiraObrasSemValor > 0 && (
+              <span title={TITULO_SEM_ACESSO_VALOR}>
+                Parcial: sem {resumoPMIS.carteiraObrasSemValor} obra{resumoPMIS.carteiraObrasSemValor > 1 ? "s" : ""} (sem acesso ao valor)
+              </span>
+            )
+          }
+        >
+          {valorOu(<ValorAjustavel className={CLASSE_VALOR}>{formatarMoeda(resumoPMIS.carteiraTotal)}</ValorAjustavel>)}
+        </CartaoIndicador>
+        <CartaoIndicador rotulo="Recebido">
+          {valorOu(<ValorAjustavel className={CLASSE_VALOR}>{formatarMoeda(resumoPMIS.recebidoTotal)}</ValorAjustavel>)}
+        </CartaoIndicador>
+        <CartaoIndicador
+          rotulo="Saldo a receber"
+          nota={
+            !carregando && resumoPMIS.carteiraObrasSemValor > 0 && (
+              <span title={TITULO_SEM_ACESSO_VALOR}>Parcial: só obras com valor de venda visível</span>
+            )
+          }
+        >
+          {valorOu(<ValorAjustavel className={CLASSE_VALOR}>{formatarMoeda(resumoPMIS.saldoReceber)}</ValorAjustavel>)}
+        </CartaoIndicador>
+        {/* vermelho so quando ha valor vencido de fato; zerado fica neutro como os outros */}
+        <CartaoIndicador rotulo="Valor vencido" alerta={!carregando && resumoPMIS.valorVencido > 0}>
           {valorOu(
-          <p className="text-3xl font-bold text-slate-800">
-            {resumoPMIS.obrasAtivas}
-          </p>,
+            <ValorAjustavel className={resumoPMIS.valorVencido > 0 ? CLASSE_VALOR_VENCIDO : CLASSE_VALOR}>
+              {formatarMoeda(resumoPMIS.valorVencido)}
+            </ValorAjustavel>,
           )}
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-slate-500">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Carteira Total
-            </p>
-            <DollarSign className="text-slate-500" size={22} />
-          </div>
+        </CartaoIndicador>
+        <CartaoIndicador rotulo="Alertas" nota="Docs, fases e tarefas">
           {valorOu(
-          <ValorAjustavel className="text-2xl font-bold text-slate-800">
-            {formatarMoeda(resumoPMIS.carteiraTotal)}
-          </ValorAjustavel>,
+            <p className={CLASSE_NUMERO}>
+              {resumoPMIS.documentosPendentes + resumoPMIS.fasesAtrasadas + resumoPMIS.tarefasAtrasadas}
+            </p>,
           )}
-          {!carregando && resumoPMIS.carteiraObrasSemValor > 0 && (
-            <p className="text-xs text-slate-500 mt-1" title={TITULO_SEM_ACESSO_VALOR}>
-              Parcial: sem {resumoPMIS.carteiraObrasSemValor} obra{resumoPMIS.carteiraObrasSemValor > 1 ? "s" : ""} (sem acesso ao valor)
-            </p>
-          )}
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-green-500">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Recebido
-            </p>
-            <CheckCircle2 className="text-green-500" size={22} />
-          </div>
-          {valorOu(
-          <ValorAjustavel className="text-2xl font-bold text-green-700">
-            {formatarMoeda(resumoPMIS.recebidoTotal)}
-          </ValorAjustavel>,
-          )}
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-orange-500">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Saldo a Receber
-            </p>
-            <Clock className="text-orange-500" size={22} />
-          </div>
-          {valorOu(
-          <ValorAjustavel className="text-2xl font-bold text-orange-700">
-            {formatarMoeda(resumoPMIS.saldoReceber)}
-          </ValorAjustavel>,
-          )}
-          {!carregando && resumoPMIS.carteiraObrasSemValor > 0 && (
-            <p className="text-xs text-slate-500 mt-1" title={TITULO_SEM_ACESSO_VALOR}>
-              Parcial: só obras com valor de venda visível
-            </p>
-          )}
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-red-500">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Valor Vencido
-            </p>
-            <AlertCircle className="text-red-500" size={22} />
-          </div>
-          {valorOu(
-          <ValorAjustavel className="text-2xl font-bold text-red-600">
-            {formatarMoeda(resumoPMIS.valorVencido)}
-          </ValorAjustavel>,
-          )}
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 border-l-4 border-l-amber-500">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Alertas
-            </p>
-            <AlertTriangle className="text-amber-500" size={22} />
-          </div>
-          {valorOu(
-          <p className="text-3xl font-bold text-slate-800">
-            {resumoPMIS.documentosPendentes +
-              resumoPMIS.fasesAtrasadas +
-              resumoPMIS.tarefasAtrasadas}
-          </p>,
-          )}
-          <p className="text-xs text-slate-500 mt-1">
-            Docs, fases e tarefas
-          </p>
-        </div>
+        </CartaoIndicador>
       </div>
       )}
 
