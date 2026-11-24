@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   agruparPedidos,
   confiancaDaLigacao,
+  consumoDaVerba,
+  situacaoDaVerba,
+  transitoPorObra,
   diasDoCte,
   divergenciaDoErp,
   efetivo,
@@ -148,6 +151,54 @@ describe("identificacao manual", () => {
     expect(divergenciaDoErp({ ...orfao, manual: manual({}) })).toEqual([]);
     expect(divergenciaDoErp(cte({ manual: manual({ fora_de_obra: true, codigo_obra: null }) }))).toEqual(["2208"]);
     expect(divergenciaDoErp(cte({}))).toEqual([]);
+  });
+});
+
+describe("transitoPorObra", () => {
+  const r = transitoPorObra(
+    [
+      cte({ chave: "a", valor: 100, emitido_em: "2026-11-10" }), // 2208, confiavel
+      cte({ chave: "b", valor: 90, codigos_obra: ["2208", "2300", "2208"] }), // rateado em 2 (codigo repetido conta uma vez)
+      cte({ chave: "c", valor: 40, ligacao: "pedido_aberto" }), // sugestao: nao entra na obra
+      cte({ chave: "d", valor: 60, ligacao: "sem_ligacao", codigos_obra: [] }),
+      cte({ chave: "e", valor: 25, ligacao: "sem_ligacao", codigos_obra: [], manual: manual({ codigo_obra: "2300" }) }),
+      cte({ chave: "f", valor: 15, manual: manual({ fora_de_obra: true, codigo_obra: null }) }),
+      cte({ chave: "g", valor: 999, nr_ad: 1 }), // ja lancado
+      cte({ chave: "h", valor: 999, cancelado: true }),
+    ],
+    "2026-11-23",
+  );
+
+  it("soma so o que esta sem entrada, rateando em partes iguais", () => {
+    expect(r.obras).toEqual([
+      { codigo: "2208", quantidade: 2, valor: 145, rateados: 1, diasMaisAntigo: 13 },
+      { codigo: "2300", quantidade: 2, valor: 70, rateados: 1, diasMaisAntigo: 5 },
+    ]);
+  });
+  it("sugestao e sem ligacao ficam sem obra; nao e de obra fica a parte; tudo fecha com o total", () => {
+    expect(r.semObra).toEqual({ quantidade: 2, valor: 100 });
+    expect(r.foraDeObra).toEqual({ quantidade: 1, valor: 15 });
+    expect(r.total).toBe(330);
+    expect(r.obras.reduce((s, o) => s + o.valor, 0) + r.semObra.valor + r.foraDeObra.valor).toBeCloseTo(r.total);
+  });
+});
+
+describe("situacaoDaVerba", () => {
+  it("compara o transito com a verba disponivel", () => {
+    expect(situacaoDaVerba(100, 1000)).toBe("cabe");
+    expect(situacaoDaVerba(850, 1000)).toBe("atencao");
+    expect(situacaoDaVerba(1000, 1000)).toBe("atencao");
+    expect(situacaoDaVerba(1000.01, 1000)).toBe("estoura");
+    expect(situacaoDaVerba(10, 0)).toBe("estoura");
+    expect(situacaoDaVerba(10, -50)).toBe("estoura");
+    expect(situacaoDaVerba(10, null)).toBe("sem_dado");
+  });
+  it("consumo para a barra fica entre 0 e 1", () => {
+    expect(consumoDaVerba(250, 1000)).toBe(0.25);
+    expect(consumoDaVerba(5000, 1000)).toBe(1);
+    expect(consumoDaVerba(10, 0)).toBe(1);
+    expect(consumoDaVerba(0, 0)).toBe(0);
+    expect(consumoDaVerba(10, null)).toBe(0);
   });
 });
 

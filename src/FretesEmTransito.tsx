@@ -20,6 +20,7 @@ import {
   type IdentificacaoCte,
 } from "./calculoCteTransito";
 import { IdentificarCte } from "./IdentificarCte";
+import { FretesTransitoPorObra } from "./FretesTransitoPorObra";
 
 // Fretes em transito (2026-11-23): CT-es em que a Kalter e a tomadora do frete, capturados na SEFAZ pelo robo
 // (public.fretes_ctes_sefaz) no dia da emissao - antes de o CT-e ser lancado no ERP. So leitura: o robo grava.
@@ -169,6 +170,8 @@ export function FretesEmTransito({ podeIdentificar = false }: { podeIdentificar?
   const [indisponivel, setIndisponivel] = useState(false);
   const [filtro, setFiltro] = useFiltroSalvo<string>("fretes.transito.filtro", "sem_entrada", (v) => FILTROS_TRANSITO.includes(v as FiltroTransito));
   const [busca, setBusca] = useFiltroSalvo<string>("fretes.transito.busca", "", (v) => typeof v === "string" && v.length <= 100);
+  // "cte" = lista de CT-es; "obra" = soma por obra comparada com a verba de frete
+  const [visao, setVisao] = useFiltroSalvo<string>("fretes.transito.visao", "cte", (v) => v === "cte" || v === "obra");
   const hoje = hojeIso();
 
   const aplicar = (r: Awaited<ReturnType<typeof buscarCtes>>) => {
@@ -243,7 +246,43 @@ export function FretesEmTransito({ podeIdentificar = false }: { podeIdentificar?
         <Resumo rotulo="Há mais de 7 dias" valor={String(resumo.maisDe7Dias)} cor="text-red-600" />
       </div>
 
-      <div className="bg-white border rounded-xl">
+      <div className="inline-flex rounded-lg border bg-white p-0.5" role="group" aria-label="Como ver os fretes em trânsito">
+        {(
+          [
+            { id: "cte", rotulo: "Por CT-e" },
+            { id: "obra", rotulo: "Por obra" },
+          ] as const
+        ).map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            aria-pressed={visao === v.id}
+            onClick={() => setVisao(v.id)}
+            className={`text-sm px-4 py-1.5 rounded-md font-semibold ${visao === v.id ? "bg-[#2A6377] text-white" : "text-slate-600 hover:bg-slate-50"}`}
+          >
+            {v.rotulo}
+          </button>
+        ))}
+      </div>
+
+      {visao === "obra" && (
+        <FretesTransitoPorObra
+          ctes={ctes}
+          hoje={hoje}
+          onVerObra={(codigo) => {
+            setBusca(codigo);
+            setFiltro("sem_entrada");
+            setVisao("cte");
+          }}
+          onVerSemObra={() => {
+            setBusca("");
+            setFiltro("sem_obra");
+            setVisao("cte");
+          }}
+        />
+      )}
+
+      <div className={`bg-white border rounded-xl ${visao === "obra" ? "hidden" : ""}`}>
         <div className="p-3 border-b flex flex-wrap items-center gap-2">
           {filtros.map((f) => (
             <button
@@ -362,11 +401,19 @@ export function FretesEmTransito({ podeIdentificar = false }: { podeIdentificar?
         </div>
         {ctes.length >= LIMITE && <p className="px-3 py-2 text-xs text-slate-500 border-t">Mostrando os {LIMITE} CT-es mais recentes.</p>}
       </div>
-      <p className="text-xs text-slate-500">
-        CT-es em que a Kalter paga o frete, capturados na SEFAZ no dia da emissão. A obra vem da NF-e transportada; quando aparece “conferir”, é só
-        uma sugestão pelos pedidos em aberto do fornecedor.
-        {identifica && " Use “Identificar” para informar a obra do frete que ficou sem obra; isso não altera nada no ERP."}
-      </p>
+      {visao === "obra" ? (
+        <p className="text-xs text-slate-500">
+          Soma dos CT-es ainda sem entrada no ERP, por obra. Verba disponível = previsões de frete em aberto (família .510) menos os fretes já
+          liberados no app. Frete de várias obras é dividido em partes iguais. Só entram na obra os CT-es com obra confirmada; os demais ficam em
+          “Sem obra identificada”. Um frete liberado no app que já teve o CT-e emitido pode aparecer nos dois lados da conta.
+        </p>
+      ) : (
+        <p className="text-xs text-slate-500">
+          CT-es em que a Kalter paga o frete, capturados na SEFAZ no dia da emissão. A obra vem da NF-e transportada; quando aparece “conferir”, é
+          só uma sugestão pelos pedidos em aberto do fornecedor.
+          {identifica && " Use “Identificar” para informar a obra do frete que ficou sem obra; isso não altera nada no ERP."}
+        </p>
+      )}
       {identificando && (
         <IdentificarCte
           cte={identificando}

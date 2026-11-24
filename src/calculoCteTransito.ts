@@ -115,6 +115,76 @@ export function resumoTransito(lista: CteSefaz[], hoje: string) {
 }
 
 // ------------------------------------------------------------------------------------------------
+// Visao "Por obra": quanto de frete ja emitido (e ainda fora do ERP) cada obra tem, para comparar com a verba (.510)
+
+export interface TransitoDaObra {
+  codigo: string;
+  /** CT-es que tocam a obra (inteiros ou rateados). */
+  quantidade: number;
+  /** Parte do valor que cabe a obra (CT-e de varias obras e dividido em partes iguais). */
+  valor: number;
+  /** Quantos desses CT-es sao divididos com outra obra. */
+  rateados: number;
+  /** Dias do CT-e mais antigo ainda sem entrada. */
+  diasMaisAntigo: number;
+}
+export interface TransitoPorObra {
+  obras: TransitoDaObra[];
+  semObra: { quantidade: number; valor: number };
+  foraDeObra: { quantidade: number; valor: number };
+  total: number;
+}
+
+/** Soma por obra dos CT-es sem entrada no ERP. So entra na obra o que e confiavel (robo) ou identificado a mao;
+ *  sugestao e sem ligacao ficam em "semObra"; "nao e de obra" fica em "foraDeObra". obras + semObra + foraDeObra = total. */
+export function transitoPorObra(lista: CteSefaz[], hoje: string): TransitoPorObra {
+  const mapa = new Map<string, TransitoDaObra>();
+  const semObra = { quantidade: 0, valor: 0 };
+  const foraDeObra = { quantidade: 0, valor: 0 };
+  let total = 0;
+  for (const c of lista) {
+    if (!emTransito(c)) continue;
+    const valor = Number(c.valor || 0);
+    total += valor;
+    const conf = confiancaDaLigacao(c);
+    const codigos = [...new Set(efetivo(c).codigos_obra)];
+    if (conf === "fora_de_obra") {
+      foraDeObra.quantidade++;
+      foraDeObra.valor += valor;
+      continue;
+    }
+    if (conf === "nenhuma" || conf === "sugestao" || !codigos.length) {
+      semObra.quantidade++;
+      semObra.valor += valor;
+      continue;
+    }
+    const dias = diasDoCte(c, hoje);
+    for (const codigo of codigos) {
+      const o = mapa.get(codigo) || { codigo, quantidade: 0, valor: 0, rateados: 0, diasMaisAntigo: 0 };
+      o.quantidade++;
+      o.valor += valor / codigos.length;
+      if (codigos.length > 1) o.rateados++;
+      o.diasMaisAntigo = Math.max(o.diasMaisAntigo, dias);
+      mapa.set(codigo, o);
+    }
+  }
+  return { obras: [...mapa.values()].sort((a, b) => b.valor - a.valor || a.codigo.localeCompare(b.codigo)), semObra, foraDeObra, total };
+}
+
+export type SituacaoVerba = "estoura" | "atencao" | "cabe" | "sem_dado";
+
+/** O frete em transito cabe na verba disponivel? "atencao" = consome mais de 80% do que resta. */
+export function situacaoDaVerba(transito: number, saldo: number | null | undefined): SituacaoVerba {
+  if (saldo == null || !Number.isFinite(saldo)) return "sem_dado";
+  if (transito > saldo + 0.004) return "estoura";
+  return transito > saldo * 0.8 ? "atencao" : "cabe";
+}
+
+/** Fracao (0 a 1) da verba disponivel que o transito consome, para a barra. */
+export const consumoDaVerba = (transito: number, saldo: number | null | undefined) =>
+  saldo == null || !Number.isFinite(saldo) ? 0 : saldo <= 0 ? (transito > 0 ? 1 : 0) : Math.min(1, Math.max(0, transito / saldo));
+
+// ------------------------------------------------------------------------------------------------
 // Identificacao manual: pedidos de compra em aberto (obra_compras_abertas) para conferir o numero digitado e sugerir
 
 export interface PedidoAberto {
