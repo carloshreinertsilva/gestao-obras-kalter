@@ -37,6 +37,13 @@ Aplicar um por vez, com ensaio em transacao desfeita antes, e regenerar `supabas
   servidor com o certificado). `supabase/schema` ainda NAO esta com o resultado: regenerar numa maquina com o `.env` do
   robo (`src/exportar_schema_app.py`) e commitar junto. Teste: `robo-sync-erp/tests/test_cte_sefaz_banco.py` (ainda nao
   rodou; as mesmas checagens foram feitas a mao em transacao desfeita em 24/11).
+- `p21_fretes_ctes_identificacao.sql` - identificacao manual dos CT-es em transito: tabela `fretes_ctes_identificacao`
+  (tipo do frete, pedido, obra ou "nao e de obra"), funcoes `frete_cte_identificar` / `frete_cte_desfazer_identificacao`
+  (so logistica, admin e coordenador) e politica de leitura de `fretes_ctes_sefaz` passando a considerar a obra
+  identificada a mao. Depende do p20. Aditivo; o robo nao usa. **APLICADO em 24/11/2026** (migracao
+  `p21_fretes_ctes_identificacao`), antes do app novo (sem a tabela a aba "Em transito" segue funcionando, so sem o botao
+  Identificar). `supabase/schema` ainda NAO esta com o resultado (regenerar junto com o p20). Teste:
+  `robo-sync-erp/tests/test_cte_sefaz_banco.py` (ainda nao rodou; mesmas checagens feitas a mao em transacao desfeita).
 - `p9_valores_venda_final.sql` - passo final de "fechar valores por obra": `obra_valores_venda_salvar` grava direto
   em `obras_valores_venda`, sai o espelho de update (o de insert passa a criar a linha com 0), auditoria de `obras`
   volta ao normal e saem `obras.valor_produto`/`valor_servico`. So depois de: app novo publicado (grava pela funcao,

@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { confiancaDaLigacao, diasDoCte, emTransito, filtrarCtes, resumoTransito, type CteSefaz } from "./calculoCteTransito";
+import {
+  agruparPedidos,
+  confiancaDaLigacao,
+  diasDoCte,
+  divergenciaDoErp,
+  efetivo,
+  emTransito,
+  filtrarCtes,
+  pedidosDoFornecedor,
+  precisaIdentificar,
+  resumoTransito,
+  type CteSefaz,
+  type IdentificacaoCte,
+} from "./calculoCteTransito";
 
 const cte = (p: Partial<CteSefaz>): CteSefaz => ({
   chave: "1".repeat(44),
@@ -87,5 +100,84 @@ describe("resumoTransito", () => {
     );
     expect(r).toEqual({ quantidade: 2, valor: 150, semObra: 1, maisDe7Dias: 1 });
     expect(emTransito(cte({ nr_ad: 1 }))).toBe(false);
+  });
+});
+
+const manual = (p: Partial<IdentificacaoCte>): IdentificacaoCte => ({
+  chave: "1".repeat(44),
+  sentido: "compra",
+  pedido: 7001,
+  codigo_obra: "2300",
+  fora_de_obra: false,
+  observacao: null,
+  nome_usuario: "Fulano",
+  identificado_em: "2026-11-24T10:00:00Z",
+  ...p,
+});
+
+describe("identificacao manual", () => {
+  const orfao = cte({ ligacao: "sem_ligacao", codigos_obra: [], pedidos: [] });
+
+  it("vale mais que a ligacao do robo", () => {
+    const c = cte({ manual: manual({}) });
+    expect(confiancaDaLigacao(c)).toBe("manual");
+    expect(efetivo(c)).toEqual({ sentido: "compra", pedidos: [7001], codigos_obra: ["2300"] });
+    expect(efetivo(cte({}))).toEqual({ sentido: "compra", pedidos: [6148], codigos_obra: ["2208"] });
+  });
+  it("identificado deixa de precisar de identificacao, inclusive o que nao e de obra", () => {
+    expect(precisaIdentificar(orfao)).toBe(true);
+    expect(precisaIdentificar(cte({ ligacao: "pedido_aberto" }))).toBe(true);
+    expect(precisaIdentificar(cte({}))).toBe(false);
+    expect(precisaIdentificar({ ...orfao, manual: manual({}) })).toBe(false);
+    const fora = { ...orfao, manual: manual({ fora_de_obra: true, codigo_obra: null, pedido: null, sentido: "outro" }) };
+    expect(confiancaDaLigacao(fora)).toBe("fora_de_obra");
+    expect(precisaIdentificar(fora)).toBe(false);
+    expect(efetivo(fora)).toEqual({ sentido: "outro", pedidos: [], codigos_obra: [] });
+  });
+  it("sai do filtro e da contagem de sem obra, e a busca usa a obra e o pedido informados", () => {
+    const lista = [orfao, { ...orfao, chave: "b", manual: manual({}) }];
+    expect(filtrarCtes(lista, "sem_obra", "").map((c) => c.chave)).toEqual([orfao.chave]);
+    expect(resumoTransito(lista, "2026-11-23").semObra).toBe(1);
+    expect(filtrarCtes(lista, "todos", "2300").map((c) => c.chave)).toEqual(["b"]);
+    expect(filtrarCtes(lista, "todos", "7001").map((c) => c.chave)).toEqual(["b"]);
+  });
+  it("avisa quando o ERP indica outra obra, mas nao por causa de sugestao", () => {
+    expect(divergenciaDoErp(cte({ manual: manual({}) }))).toEqual(["2208"]);
+    expect(divergenciaDoErp(cte({ manual: manual({ codigo_obra: "2208" }) }))).toEqual([]);
+    expect(divergenciaDoErp(cte({ ligacao: "pedido_aberto", manual: manual({}) }))).toEqual([]);
+    expect(divergenciaDoErp({ ...orfao, manual: manual({}) })).toEqual([]);
+    expect(divergenciaDoErp(cte({ manual: manual({ fora_de_obra: true, codigo_obra: null }) }))).toEqual(["2208"]);
+    expect(divergenciaDoErp(cte({}))).toEqual([]);
+  });
+});
+
+describe("pedidos em aberto", () => {
+  const obras = new Map([
+    ["o1", "2208"],
+    ["o2", "2300"],
+  ]);
+  const pedidos = agruparPedidos(
+    [
+      { nr_pedido: 6148, fornecedor: "DELTA ENGENHARIA TERMICA LTDA", id_obra: "o1", valor: "100.50" },
+      { nr_pedido: 6148, fornecedor: "DELTA ENGENHARIA TERMICA LTDA", id_obra: "o2", valor: 50 },
+      { nr_pedido: 6148, fornecedor: "DELTA ENGENHARIA TERMICA LTDA", id_obra: "o1", valor: null },
+      { nr_pedido: 6200, fornecedor: "S&P BRASIL VENTILACAO LTDA", id_obra: "o2", valor: 10 },
+      { nr_pedido: null, fornecedor: "SEM PEDIDO", id_obra: "o1", valor: 999 },
+      { nr_pedido: 6300, fornecedor: "DELTA FRIO LTDA", id_obra: "desconhecida", valor: 1 },
+    ],
+    obras,
+  );
+
+  it("agrupa por pedido somando o valor e juntando as obras", () => {
+    expect(pedidos.map((p) => p.pedido)).toEqual([6300, 6200, 6148]);
+    expect(pedidos[2]).toEqual({ pedido: 6148, fornecedor: "DELTA ENGENHARIA TERMICA LTDA", codigos_obra: ["2208", "2300"], valor: 150.5 });
+    expect(pedidos[0].codigos_obra).toEqual([]);
+  });
+  it("sugere pelo comeco do nome, ignorando acento e pontuacao", () => {
+    expect(pedidosDoFornecedor("Delta Engenharia Térmica Ltda", pedidos).map((p) => p.pedido)).toEqual([6300, 6148]);
+    expect(pedidosDoFornecedor("S&P BRASIL VENTILAÇÃO LTDA", pedidos).map((p) => p.pedido)).toEqual([6200]);
+    expect(pedidosDoFornecedor("S", pedidos)).toEqual([]);
+    expect(pedidosDoFornecedor("YOKOGAWA", pedidos)).toEqual([]);
+    expect(pedidosDoFornecedor(null, pedidos)).toEqual([]);
   });
 });

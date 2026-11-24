@@ -466,7 +466,7 @@ export function TelaFretes({
       {aba === "transportadoras" ? (
         <CadastroTransportadoras transportadorasErp={transportadoras} onMudou={carregarCadastros} />
       ) : aba === "transito" ? (
-        <FretesEmTransito />
+        <FretesEmTransito podeIdentificar={mantemCadastros} />
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

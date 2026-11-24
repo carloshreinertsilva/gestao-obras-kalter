@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, HelpCircle, Loader2, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle2, HelpCircle, Loader2, MinusCircle, Search, UserCheck } from "lucide-react";
 import { supabase } from "./supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda } from "./utils";
 import { ErroCarga } from "./Dialogos";
@@ -8,18 +8,24 @@ import { mensagemErro } from "./erros";
 import {
   confiancaDaLigacao,
   diasDoCte,
+  divergenciaDoErp,
+  efetivo,
   FILTROS_TRANSITO,
   filtrarCtes,
+  precisaIdentificar,
   resumoTransito,
   ROTULO_LIGACAO,
   type CteSefaz,
   type FiltroTransito,
+  type IdentificacaoCte,
 } from "./calculoCteTransito";
+import { IdentificarCte } from "./IdentificarCte";
 
 // Fretes em transito (2026-11-23): CT-es em que a Kalter e a tomadora do frete, capturados na SEFAZ pelo robo
 // (public.fretes_ctes_sefaz) no dia da emissao - antes de o CT-e ser lancado no ERP. So leitura: o robo grava.
 // "Sem entrada" = ainda nao ha AD do CT-e no ERP. A obra vem da NF-e transportada (entrada ja lancada, pedido que o
 // fornecedor informou na NF-e, ou NF de saida); "sugestao" (pedidos em aberto do fornecedor) precisa de conferencia.
+// 2026-11-24: quem mantem os cadastros de frete identifica a mao o CT-e sem obra (IdentificarCte, p21).
 
 const COLUNAS =
   "chave, numero, serie, emitido_em, sentido, transportadora_cnpj, transportadora_nome, remetente_nome, destinatario_nome, origem_nome, destino_nome, valor, cancelado, nr_ad, data_entrada, ligacao, pedidos, projetos, codigos_obra";
@@ -37,10 +43,35 @@ const diasAtras = (n: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 const rota = (c: CteSefaz) => (c.origem_nome || c.destino_nome ? `${c.origem_nome || "?"} → ${c.destino_nome || "?"}` : "-");
-const contraparte = (c: CteSefaz) => (c.sentido === "compra" ? c.remetente_nome : c.sentido === "venda" ? c.destinatario_nome : null) || "";
+const contraparte = (c: CteSefaz) => {
+  const s = efetivo(c).sentido;
+  return (s === "compra" ? c.remetente_nome : s === "venda" ? c.destinatario_nome : null) || "";
+};
+const comoFoiLigado = (c: CteSefaz) =>
+  c.manual ? `Identificado por ${c.manual.nome_usuario || "usuário"}${c.manual.fora_de_obra ? " (não é de obra)" : ""}` : ROTULO_LIGACAO[c.ligacao];
 
 function Obra({ c }: { c: CteSefaz }) {
   const conf = confiancaDaLigacao(c);
+  if (c.manual) {
+    const erp = divergenciaDoErp(c);
+    const quem = `Identificado por ${c.manual.nome_usuario || "usuário"}${c.manual.observacao ? ` — ${c.manual.observacao}` : ""}`;
+    return (
+      <span className="inline-flex flex-col">
+        <span className="inline-flex items-center gap-1 text-slate-800" title={quem}>
+          {conf === "fora_de_obra" ? (
+            <>
+              <MinusCircle size={13} className="text-slate-400" aria-hidden="true" /> <span className="text-slate-500">Não é de obra</span>
+            </>
+          ) : (
+            <>
+              <UserCheck size={13} className="text-[#2A6377]" aria-hidden="true" /> <span className="font-semibold">{c.manual.codigo_obra}</span>
+            </>
+          )}
+        </span>
+        {erp.length > 0 && <span className="text-xs text-red-600">O ERP indica a obra {erp.join(", ")}</span>}
+      </span>
+    );
+  }
   if (conf === "nenhuma")
     return (
       <span className="inline-flex items-center gap-1 text-amber-700" title={ROTULO_LIGACAO[c.ligacao]}>
@@ -53,6 +84,25 @@ function Obra({ c }: { c: CteSefaz }) {
       <span className="font-semibold">{c.codigos_obra.join(", ")}</span>
       {conf === "sugestao" && <span className="text-xs">(conferir)</span>}
     </span>
+  );
+}
+
+// Botao da linha: chama a atencao enquanto falta identificar; depois vira um "Alterar" discreto.
+function BotaoIdentificar({ c, onClick }: { c: CteSefaz; onClick: () => void }) {
+  const falta = precisaIdentificar(c);
+  if (!falta && !c.manual) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        falta
+          ? "text-xs font-semibold px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 whitespace-nowrap"
+          : "text-xs text-[#2A6377] underline underline-offset-2 whitespace-nowrap"
+      }
+    >
+      {falta ? "Identificar" : "Alterar"}
+    </button>
   );
 }
 
@@ -79,7 +129,7 @@ const Resumo = ({ rotulo, valor, cor }: { rotulo: string; valor: string; cor: st
 );
 
 // tudo que ainda nao tem entrada + os lancados dos ultimos dias (para conferir o que acabou de entrar)
-async function buscarCtes(): Promise<{ ctes: CteSefaz[]; erro: string; semTabela: boolean }> {
+async function buscarCtes(): Promise<{ ctes: CteSefaz[]; erro: string; semTabela: boolean; identificacaoLigada: boolean }> {
   const { data, error } = await supabase
     .from("fretes_ctes_sefaz")
     .select(COLUNAS)
@@ -88,19 +138,33 @@ async function buscarCtes(): Promise<{ ctes: CteSefaz[]; erro: string; semTabela
     .order("emitido_em", { ascending: false })
     .limit(LIMITE);
   if (error)
-    return { ctes: [], erro: mensagemErro(error, "Tente de novo em instantes."), semTabela: error.code === "PGRST205" || error.code === "42P01" };
+    return {
+      ctes: [],
+      erro: mensagemErro(error, "Tente de novo em instantes."),
+      semTabela: error.code === "PGRST205" || error.code === "42P01",
+      identificacaoLigada: false,
+    };
+  // identificacoes feitas a mao (p21). Se a tabela ainda nao existe ou a leitura falha, a lista segue so com o robo.
+  const { data: ident, error: erroIdent } = await supabase
+    .from("fretes_ctes_identificacao")
+    .select("chave, sentido, pedido, codigo_obra, fora_de_obra, observacao, nome_usuario, identificado_em")
+    .limit(5000);
+  const manuais = new Map(((ident as unknown as IdentificacaoCte[]) || []).map((i) => [i.chave, i]));
   const ctes = ((data as unknown as CteSefaz[]) || []).map((c) => ({
     ...c,
     valor: Number(c.valor || 0),
     pedidos: c.pedidos || [],
     projetos: c.projetos || [],
     codigos_obra: c.codigos_obra || [],
+    manual: manuais.get(c.chave) || null,
   }));
-  return { ctes, erro: "", semTabela: false };
+  return { ctes, erro: "", semTabela: false, identificacaoLigada: !erroIdent };
 }
 
-export function FretesEmTransito() {
+export function FretesEmTransito({ podeIdentificar = false }: { podeIdentificar?: boolean }) {
   const [ctes, setCtes] = useState<CteSefaz[] | null>(null);
+  const [identificacaoLigada, setIdentificacaoLigada] = useState(false);
+  const [identificando, setIdentificando] = useState<CteSefaz | null>(null);
   const [erro, setErro] = useState("");
   const [indisponivel, setIndisponivel] = useState(false);
   const [filtro, setFiltro] = useFiltroSalvo<string>("fretes.transito.filtro", "sem_entrada", (v) => FILTROS_TRANSITO.includes(v as FiltroTransito));
@@ -117,6 +181,7 @@ export function FretesEmTransito() {
     }
     setErro("");
     setIndisponivel(false);
+    setIdentificacaoLigada(r.identificacaoLigada);
     setCtes(r.ctes);
   };
   const carregar = () => buscarCtes().then(aplicar);
@@ -146,6 +211,7 @@ export function FretesEmTransito() {
       </div>
     );
 
+  const identifica = podeIdentificar && identificacaoLigada;
   const filtros: { id: FiltroTransito; rotulo: string }[] = [
     { id: "sem_entrada", rotulo: `Sem entrada no ERP (${resumo.quantidade})` },
     { id: "sem_obra", rotulo: `Sem obra confirmada (${resumo.semObra})` },
@@ -159,9 +225,11 @@ export function FretesEmTransito() {
       ["Emissão", "Dias", "CT-e", "Série", "Transportadora", "Operação", "Remetente", "Destinatário", "Origem", "Destino", "Valor", "Obra(s)",
         "Pedido(s)", "Projeto(s)", "Como foi ligado", "AD do CT-e", "Entrada no ERP", "Chave"],
       lista.map((c) => [
-        formatarDataSegura(c.emitido_em), diasDoCte(c, hoje), c.numero, c.serie || "", c.transportadora_nome || "", SENTIDO[c.sentido],
-        c.remetente_nome || "", c.destinatario_nome || "", c.origem_nome || "", c.destino_nome || "", numCsv(c.valor), c.codigos_obra.join(", "),
-        c.pedidos.join(", "), c.projetos.join(", "), ROTULO_LIGACAO[c.ligacao], c.nr_ad ?? "", c.data_entrada ? formatarDataSegura(c.data_entrada) : "",
+        formatarDataSegura(c.emitido_em), diasDoCte(c, hoje), c.numero, c.serie || "", c.transportadora_nome || "", SENTIDO[efetivo(c).sentido],
+        c.remetente_nome || "", c.destinatario_nome || "", c.origem_nome || "", c.destino_nome || "", numCsv(c.valor),
+        c.manual?.fora_de_obra ? "Não é de obra" : efetivo(c).codigos_obra.join(", "),
+        efetivo(c).pedidos.join(", "), c.manual ? "" : c.projetos.join(", "), comoFoiLigado(c), c.nr_ad ?? "",
+        c.data_entrada ? formatarDataSegura(c.data_entrada) : "",
         `'${c.chave}`,
       ]),
     );
@@ -219,7 +287,7 @@ export function FretesEmTransito() {
               <li key={c.chave} className="px-3 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-bold text-[#2A6377]">
-                    CT-e {c.numero} <span className="text-slate-700 font-semibold">· {SENTIDO[c.sentido]}</span>
+                    CT-e {c.numero} <span className="text-slate-700 font-semibold">· {SENTIDO[efetivo(c).sentido]}</span>
                   </p>
                   <span className="font-bold tabular-nums whitespace-nowrap">{formatarMoeda(c.valor)}</span>
                 </div>
@@ -232,7 +300,10 @@ export function FretesEmTransito() {
                   <Obra c={c} />
                   <Situacao c={c} dias={diasDoCte(c, hoje)} />
                 </div>
-                {c.pedidos.length > 0 && <p className="text-xs text-slate-500 mt-1">Pedido {c.pedidos.join(", ")}</p>}
+                <div className="flex items-center justify-between gap-2 mt-1">
+                  <p className="text-xs text-slate-500">{efetivo(c).pedidos.length > 0 ? `Pedido ${efetivo(c).pedidos.join(", ")}` : ""}</p>
+                  {identifica && <BotaoIdentificar c={c} onClick={() => setIdentificando(c)} />}
+                </div>
               </li>
             ))
           )}
@@ -268,15 +339,18 @@ export function FretesEmTransito() {
                     <td className="px-3 py-2 font-semibold whitespace-nowrap">{c.numero}</td>
                     <td className="px-3 py-2">{c.transportadora_nome || c.transportadora_cnpj}</td>
                     <td className="px-3 py-2">
-                      {SENTIDO[c.sentido]}
+                      {SENTIDO[efetivo(c).sentido]}
                       {contraparte(c) && <span className="block text-xs text-slate-500">{contraparte(c)}</span>}
                     </td>
                     <td className="px-3 py-2">{rota(c)}</td>
                     <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatarMoeda(c.valor)}</td>
                     <td className="px-3 py-2">
-                      <Obra c={c} />
+                      <div className="flex items-start justify-between gap-2">
+                        <Obra c={c} />
+                        {identifica && <BotaoIdentificar c={c} onClick={() => setIdentificando(c)} />}
+                      </div>
                     </td>
-                    <td className="px-3 py-2">{c.pedidos.length ? c.pedidos.join(", ") : "-"}</td>
+                    <td className="px-3 py-2">{efetivo(c).pedidos.length ? efetivo(c).pedidos.join(", ") : "-"}</td>
                     <td className="px-3 py-2">
                       <Situacao c={c} dias={diasDoCte(c, hoje)} />
                     </td>
@@ -291,7 +365,18 @@ export function FretesEmTransito() {
       <p className="text-xs text-slate-500">
         CT-es em que a Kalter paga o frete, capturados na SEFAZ no dia da emissão. A obra vem da NF-e transportada; quando aparece “conferir”, é só
         uma sugestão pelos pedidos em aberto do fornecedor.
+        {identifica && " Use “Identificar” para informar a obra do frete que ficou sem obra; isso não altera nada no ERP."}
       </p>
+      {identificando && (
+        <IdentificarCte
+          cte={identificando}
+          onFechar={() => setIdentificando(null)}
+          onSalvo={() => {
+            setIdentificando(null);
+            carregar();
+          }}
+        />
+      )}
     </>
   );
 }
