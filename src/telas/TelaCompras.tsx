@@ -3,6 +3,7 @@ import { AlertTriangle, Download, Loader2, Search } from "lucide-react";
 import { supabase } from "../supabase";
 import { exportarCsv, formatarDataSegura, formatarMoeda } from "../utils";
 import { SeloAlertaFamilia } from "../AlertaFamilia";
+import PedidosCompraImportados from "../PedidosCompraImportados";
 
 // Compras (logistica e admin): material da SMA pendente em todas as obras, previsoes
 // liberadas (gravadas no ERP) recentes e saldo de previsoes por familia. So consulta:
@@ -149,6 +150,8 @@ export default function TelaCompras({ falhaAoCarregar }: { falhaAoCarregar: (oqu
           Material solicitado nas SMAs das obras em andamento, previsões liberadas e saldo por família. Atualizado pelo ERP.
         </p>
       </div>
+
+      <PedidosCompraImportados />
 
       <div className="bg-white rounded-xl shadow-sm border p-3 flex flex-wrap items-center gap-2 text-sm">
         <span className="text-xs font-bold uppercase text-slate-500 mr-1">Filtrar</span>

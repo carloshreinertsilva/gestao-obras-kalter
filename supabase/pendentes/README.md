@@ -44,6 +44,17 @@ Aplicar um por vez, com ensaio em transacao desfeita antes, e regenerar `supabas
   `p21_fretes_ctes_identificacao`), antes do app novo (sem a tabela a aba "Em transito" segue funcionando, so sem o botao
   Identificar). `supabase/schema` ainda NAO esta com o resultado (regenerar junto com o p20). Teste:
   `robo-sync-erp/tests/test_cte_sefaz_banco.py` (ainda nao rodou; mesmas checagens feitas a mao em transacao desfeita).
+- `p22_pedidos_compra_importados.sql` - pedido de compra a partir do MD da cotacao (Painel BeeStock): tabela
+  `pedidos_compra_importados`, `pc_importar` / `pc_cancelar` / `pc_reenviar` (logistica e admin), leitura para quem
+  importou, logistica, admin/coordenador e gestor/assistente das obras do pedido, e `pc_avisar_sem_previsao` (aviso
+  diario ao gestor e assistentes, chamado pelo robo `src/sync_pedidos_compra.py`). Chaves `pc_avisos_ligados()` e
+  `pc_gravacao_ligada()` nascem `false`. Aditivo. **APLICADO em 24/11/2026** (migracao `p22_pedidos_compra_importados`,
+  com OK do Carlos), antes do app e do robo novos (sem o app novo ninguem importa; sem o robo novo a cotacao fica em
+  "Conferindo no ERP"). Ensaio em transacao desfeita antes, pelo conector: tudo conferido (importar, duplicado, update
+  direto recusado, visibilidade do gestor, aviso so com a chave e 1 por dia, cancelar/reenviar). Depois de aplicado:
+  RLS ligado, authenticated so le, anon sem acesso, chaves false.
+  `supabase/schema` NAO esta com o resultado (regenerar depois de aplicar). Teste:
+  `robo-sync-erp/tests/test_pedidos_compra_banco.py` (so roda com o `.env` do servidor).
 - `p9_valores_venda_final.sql` - passo final de "fechar valores por obra": `obra_valores_venda_salvar` grava direto
   em `obras_valores_venda`, sai o espelho de update (o de insert passa a criar a linha com 0), auditoria de `obras`
   volta ao normal e saem `obras.valor_produto`/`valor_servico`. So depois de: app novo publicado (grava pela funcao,
