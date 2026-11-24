@@ -3,6 +3,10 @@ import { lerCotacao, valorItem } from "./pedidoCompraMd";
 
 const MD = `# Pedidos de compra — cotação 5 (Proposta 21977 · J7S SINALIZACAO IND. E COM. LTDA) — 2026-11-23 17:03
 
+| SC | Material | Descrição | Qtd | UN | Preço unit. | % IPI | % ICMS | Entrega | Total |
+|---|---|---|---:|---|---:|---:|---:|---|---:|
+| 25259 | 10.250.0166 | ADESIVO TUBULACAO AN1EQ 40 X 255 | 3 | UN | 2,73 | 0,00 | 12,00 | 2026-12-13 | 8,19 |
+
 ## Pedidos para processar
 
 \`\`\`
@@ -24,12 +28,24 @@ describe("lerCotacao", () => {
     const r = lerCotacao(MD);
     expect(r.problemas).toEqual([]);
     expect(r.titulo).toContain("cotação 5");
-    expect(r).toMatchObject({ intencao: "D", previsao: true, fornecedores: [1082], condicao: 2, frete: "2", observacao: "Validade: 10 dias" });
+    expect(r).toMatchObject({
+      intencao: "D",
+      previsao: true,
+      fornecedores: [1082],
+      condicao: 2,
+      frete: "2",
+      observacao: "Validade: 10 dias",
+    });
     expect(r.itens.map((i) => [i.sc, i.material, i.qtde, i.total])).toEqual([
       [25259, "10.250.0166", 3, 8.19],
       [25238, "10.250.0295", 5, 37],
     ]);
     expect(r.total).toBe(45.19);
+    // descricao vem da tabela legivel do MD; SC fora da tabela fica sem
+    expect(r.itens.map((i) => i.descricao)).toEqual([
+      "ADESIVO TUBULACAO AN1EQ 40 X 255",
+      null,
+    ]);
   });
 
   it("arredonda base e IPI separadamente como o ERP", () => {
@@ -39,8 +55,15 @@ describe("lerCotacao", () => {
 
   it("aponta os problemas sem quebrar", () => {
     expect(lerCotacao("nada").problemas[0]).toContain("Pedidos para processar");
-    const dois = MD.replace("1082|2|2|9|0|0|Validade: 10 dias", "1082|2|2|9|0|0|\n2000|2|2|9|0|0|");
-    expect(lerCotacao(dois).problemas).toContain("O arquivo tem 2 fornecedores; cada arquivo deve ter um só.");
-    expect(lerCotacao(MD.replace("# INTENCAO|D", "# INTENCAO|A")).problemas[0]).toContain("INTENCAO");
+    const dois = MD.replace(
+      "1082|2|2|9|0|0|Validade: 10 dias",
+      "1082|2|2|9|0|0|\n2000|2|2|9|0|0|",
+    );
+    expect(lerCotacao(dois).problemas).toContain(
+      "O arquivo tem 2 fornecedores; cada arquivo deve ter um só.",
+    );
+    expect(
+      lerCotacao(MD.replace("# INTENCAO|D", "# INTENCAO|A")).problemas[0],
+    ).toContain("INTENCAO");
   });
 });
