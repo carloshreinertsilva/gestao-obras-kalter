@@ -171,7 +171,31 @@ export function transitoPorObra(lista: CteSefaz[], hoje: string): TransitoPorObr
   return { obras: [...mapa.values()].sort((a, b) => b.valor - a.valor || a.codigo.localeCompare(b.codigo)), semObra, foraDeObra, total };
 }
 
-export type SituacaoVerba = "estoura" | "atencao" | "cabe" | "sem_dado";
+export interface CteDaObra {
+  cte: CteSefaz;
+  /** Parte do valor que cabe a esta obra (igual ao valor do CT-e quando ele e so dela). */
+  parte: number;
+  /** Outras obras que dividem o mesmo CT-e. */
+  outrasObras: string[];
+  dias: number;
+}
+
+/** CT-es sem entrada no ERP que contam para a obra (mesma regra de transitoPorObra), do mais antigo para o mais novo. */
+export function ctesDaObra(lista: CteSefaz[], codigo: string, hoje: string): { itens: CteDaObra[]; total: number } {
+  const itens: CteDaObra[] = [];
+  for (const c of lista) {
+    if (!emTransito(c)) continue;
+    const conf = confiancaDaLigacao(c);
+    if (conf !== "confiavel" && conf !== "manual") continue;
+    const codigos = [...new Set(efetivo(c).codigos_obra)];
+    if (!codigos.includes(codigo)) continue;
+    itens.push({ cte: c, parte: Number(c.valor || 0) / codigos.length, outrasObras: codigos.filter((x) => x !== codigo), dias: diasDoCte(c, hoje) });
+  }
+  itens.sort((a, b) => a.cte.emitido_em.localeCompare(b.cte.emitido_em) || b.parte - a.parte);
+  return { itens, total: itens.reduce((s, i) => s + i.parte, 0) };
+}
+
+export type SituacaoVerba ="estoura" | "atencao" | "cabe" | "sem_dado";
 
 /** O frete em transito cabe na verba disponivel? "atencao" = consome mais de 80% do que resta. */
 export function situacaoDaVerba(transito: number, saldo: number | null | undefined): SituacaoVerba {

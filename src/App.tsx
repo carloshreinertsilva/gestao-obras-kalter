@@ -12,6 +12,7 @@ import { MenuGrupos } from "./MenuGrupos";
 import { usePainelObra } from "./usePainelObra";
 import { BuscaGlobal } from "./BuscaGlobal";
 import { AlertasObra } from "./AlertasObra";
+import { FretesTransitoDaObra } from "./FretesTransitoDaObra";
 import { avisar } from "./aviso";
 import { confirmar as confirmarDialogo } from "./Dialogos";
 import { MinhasPendencias, contadorDoMenu, type Pendencias } from "./MinhasPendencias";
@@ -3920,6 +3921,7 @@ export default function App() {
             </header>
 
             <AlertasObra idObra={obraEcoSelecionada.id} />
+            <FretesTransitoDaObra idObra={obraEcoSelecionada.id} codigoObra={obraEcoSelecionada.codigo_externo} />
 
             <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur pb-3 mb-3">
               <div className="bg-white rounded-xl border shadow-sm overflow-visible">

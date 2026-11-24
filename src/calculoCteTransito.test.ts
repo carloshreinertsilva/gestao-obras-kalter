@@ -5,6 +5,7 @@ import {
   consumoDaVerba,
   situacaoDaVerba,
   transitoPorObra,
+  ctesDaObra,
   diasDoCte,
   divergenciaDoErp,
   efetivo,
@@ -230,5 +231,34 @@ describe("pedidos em aberto", () => {
     expect(pedidosDoFornecedor("S", pedidos)).toEqual([]);
     expect(pedidosDoFornecedor("YOKOGAWA", pedidos)).toEqual([]);
     expect(pedidosDoFornecedor(null, pedidos)).toEqual([]);
+  });
+});
+
+describe("ctesDaObra", () => {
+  const lista = [
+    cte({ chave: "a", valor: 100, emitido_em: "2026-11-20" }),
+    cte({ chave: "b", valor: 300, emitido_em: "2026-11-10", codigos_obra: ["2208", "2098", "2208"] }),
+    cte({ chave: "c", valor: 50, ligacao: "pedido_aberto" }),
+    cte({ chave: "d", valor: 70, nr_ad: 23600 }),
+    cte({ chave: "e", valor: 80, cancelado: true }),
+    cte({ chave: "f", valor: 40, codigos_obra: ["1941"] }),
+  ];
+  const r = ctesDaObra(lista, "2208", "2026-11-24");
+
+  it("traz so os CT-es sem entrada com obra confirmada, do mais antigo para o mais novo", () => {
+    expect(r.itens.map((i) => i.cte.chave)).toEqual(["b", "a"]);
+  });
+  it("divide o CT-e de varias obras e diz com quem", () => {
+    expect(r.itens[0]).toMatchObject({ parte: 150, outrasObras: ["2098"], dias: 14 });
+    expect(r.itens[1]).toMatchObject({ parte: 100, outrasObras: [] });
+    expect(r.total).toBe(250);
+  });
+  it("bate com a soma da visao por obra", () => {
+    const porObra = transitoPorObra(lista, "2026-11-24").obras.find((o) => o.codigo === "2208");
+    expect(porObra?.valor).toBe(r.total);
+    expect(porObra?.quantidade).toBe(r.itens.length);
+  });
+  it("obra sem CT-e em transito devolve vazio", () => {
+    expect(ctesDaObra(lista, "9999", "2026-11-24")).toEqual({ itens: [], total: 0 });
   });
 });
