@@ -55,6 +55,8 @@ Aplicar um por vez, com ensaio em transacao desfeita antes, e regenerar `supabas
   RLS ligado, authenticated so le, anon sem acesso, chaves false.
   `supabase/schema` NAO esta com o resultado (regenerar depois de aplicar). Teste:
   `robo-sync-erp/tests/test_pedidos_compra_banco.py` (so roda com o `.env` do servidor).
+- `p23_pc_avisos_ligados.sql` - liga `pc_avisos_ligados()` (aviso diario de pedido de compra aguardando previsao).
+  **APLICADO em 24/11/2026**, depois de o Carlos aprovar o e-mail de exemplo. `pc_gravacao_ligada()` segue false.
 - `p9_valores_venda_final.sql` - passo final de "fechar valores por obra": `obra_valores_venda_salvar` grava direto
   em `obras_valores_venda`, sai o espelho de update (o de insert passa a criar a linha com 0), auditoria de `obras`
   volta ao normal e saem `obras.valor_produto`/`valor_servico`. So depois de: app novo publicado (grava pela funcao,
