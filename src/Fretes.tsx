@@ -11,6 +11,7 @@ import type { Usuario } from "./types";
 import { lerNumero } from "./numero";
 import { CampoNumero } from "./CampoNumero";
 import { mensagemErro } from "./erros";
+import { FretesEmTransito } from "./FretesEmTransito";
 import { dadosDaCopia, fretesParaCopiar, lerCargaColada, LIMITE_LINHAS, pareceTabela, ROTULO_CAMPO, type ItemLido } from "./calculoCargaFrete";
 
 // Fretes (2026-10-20): solicitacao de frete com controle da verba da familia <obra>.510.
@@ -292,7 +293,7 @@ export function TelaFretes({
 }) {
   const ehLogistica = usuario?.perfil === "logistica";
   const mantemCadastros = ehLogistica || usuario?.perfil === "admin" || usuario?.perfil === "coordenador";
-  const [aba, setAba] = useState<"fretes" | "transportadoras">("fretes");
+  const [aba, setAba] = useState<"fretes" | "transito" | "transportadoras">("fretes");
   const [fretes, setFretes] = useState<Frete[] | null>(null);
   const [encerradosNoLimite, setEncerradosNoLimite] = useState(false);
   // so as transportadoras (poucas); os demais fornecedores sao buscados no servidor ao digitar
@@ -436,19 +437,19 @@ export function TelaFretes({
           </p>
         </div>
         <div className="flex gap-2">
-          {mantemCadastros && (
+          {
             <div className="flex rounded-lg border overflow-hidden text-sm">
-              {(["fretes", "transportadoras"] as const).map((a) => (
+              {(mantemCadastros ? (["fretes", "transito", "transportadoras"] as const) : (["fretes", "transito"] as const)).map((a) => (
                 <button
                   key={a}
                   onClick={() => setAba(a)}
                   className={`px-3 py-2 font-semibold ${aba === a ? "bg-[#2A6377] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
                 >
-                  {a === "fretes" ? "Fretes" : "Transportadoras"}
+                  {a === "fretes" ? "Fretes" : a === "transito" ? "Em trânsito" : "Transportadoras"}
                 </button>
               ))}
             </div>
-          )}
+          }
           {aba === "fretes" && (
             <button
               onClick={() => (setCopiaInicial(null), setEditando("novo"))}
@@ -464,6 +465,8 @@ export function TelaFretes({
 
       {aba === "transportadoras" ? (
         <CadastroTransportadoras transportadorasErp={transportadoras} onMudou={carregarCadastros} />
+      ) : aba === "transito" ? (
+        <FretesEmTransito />
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

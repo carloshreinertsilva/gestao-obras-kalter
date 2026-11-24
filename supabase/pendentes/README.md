@@ -30,6 +30,13 @@ Aplicar um por vez, com ensaio em transacao desfeita antes, e regenerar `supabas
   de publicar o robo novo (`src/sync_romaneios.py` sem a coluna so adia a criacao de romaneios e avisa).
   `supabase/schema` ja esta com o resultado. Teste: `robo-sync-erp/tests/test_romaneio_intencao_banco.py` (so passa
   depois de aplicado).
+- `p20_fretes_ctes_sefaz.sql` - fretes em transito: tabela `fretes_ctes_sefaz` (CT-es em que a Kalter e a tomadora, capturados
+  na SEFAZ pelo robo `src/sync_cte_sefaz.py` e ligados a pedido/projeto), so leitura para o app (logistica, admin e
+  coordenador veem tudo; gestor/assistente so os da obra que gerenciam). Aditivo (tabela nova). **APLICADO em 24/11/2026**
+  (migracao `p20_fretes_ctes_sefaz`), antes do robo novo e do app novo (a tabela fica vazia ate o robo novo rodar no
+  servidor com o certificado). `supabase/schema` ainda NAO esta com o resultado: regenerar numa maquina com o `.env` do
+  robo (`src/exportar_schema_app.py`) e commitar junto. Teste: `robo-sync-erp/tests/test_cte_sefaz_banco.py` (ainda nao
+  rodou; as mesmas checagens foram feitas a mao em transacao desfeita em 24/11).
 - `p9_valores_venda_final.sql` - passo final de "fechar valores por obra": `obra_valores_venda_salvar` grava direto
   em `obras_valores_venda`, sai o espelho de update (o de insert passa a criar a linha com 0), auditoria de `obras`
   volta ao normal e saem `obras.valor_produto`/`valor_servico`. So depois de: app novo publicado (grava pela funcao,
