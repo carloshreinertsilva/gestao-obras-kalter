@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -56,7 +56,7 @@ const STATUS: Record<
     Icone: Clock,
   },
   aguardando_previsao: {
-    rotulo: "Aguardando previsÃ£o",
+    rotulo: "Aguardando previsão",
     classe: "bg-amber-50 text-amber-700 border-amber-200",
     Icone: AlertTriangle,
   },
@@ -199,12 +199,12 @@ export default function PedidosCompraImportados() {
     setEnviando(false);
     if (error) {
       aviso.erro(
-        mensagemErro(error, "NÃ£o foi possÃ­vel importar a cotaÃ§Ã£o."),
+        mensagemErro(error, "Não foi possível importar a cotação."),
       );
       return;
     }
     aviso.sucesso(
-      "CotaÃ§Ã£o enviada. O robÃ´ confere no ERP em atÃ© 5 minutos.",
+      "Cotação enviada. O robô confere no ERP em até 5 minutos.",
     );
     setArquivo(null);
     carregar();
@@ -212,8 +212,8 @@ export default function PedidosCompraImportados() {
 
   async function cancelar(i: Importacao) {
     const motivo = await pedirMotivo({
-      titulo: "Cancelar esta importaÃ§Ã£o?",
-      rotuloConfirmar: "Cancelar importaÃ§Ã£o",
+      titulo: "Cancelar esta importação?",
+      rotuloConfirmar: "Cancelar importação",
       perigo: true,
       obrigatorio: false,
     });
@@ -230,7 +230,7 @@ export default function PedidosCompraImportados() {
     const ok = await confirmar({
       titulo: "Conferir de novo no ERP?",
       texto:
-        "Use depois de corrigir no ERP o que causou o erro (ex.: a SC foi reaberta). Se a cotaÃ§Ã£o mudou, importe o arquivo novo.",
+        "Use depois de corrigir no ERP o que causou o erro (ex.: a SC foi reaberta). Se a cotação mudou, importe o arquivo novo.",
       rotuloConfirmar: "Conferir de novo",
     });
     if (!ok) return;
@@ -250,13 +250,13 @@ export default function PedidosCompraImportados() {
       const s = scs.get(i.sc);
       if (!s) {
         alertasSc.push(
-          `SC ${i.sc}: nÃ£o estÃ¡ entre as compras em aberto das obras (pode ser de estoque, jÃ¡ ter pedido hÃ¡ mais tempo ou ainda nÃ£o ter sincronizado).`,
+          `SC ${i.sc}: não está entre as compras em aberto das obras (pode ser de estoque, já ter pedido há mais tempo ou ainda não ter sincronizado).`,
         );
         continue;
       }
       if (s.situacao !== "sem_pedido")
         alertasSc.push(
-          `SC ${i.sc}: jÃ¡ estÃ¡ no pedido ${s.nr_pedido ?? "?"} no ERP.`,
+          `SC ${i.sc}: já está no pedido ${s.nr_pedido ?? "?"} no ERP.`,
         );
       const d = destinos.get(s.codigo_obra) || {
         nome: s.nome_obra,
@@ -272,12 +272,12 @@ export default function PedidosCompraImportados() {
       <div className="p-4 border-b flex flex-col md:flex-row md:items-center gap-3 justify-between">
         <div>
           <h3 className="font-bold text-lg">
-            Pedidos de compra (cotaÃ§Ãµes aprovadas)
+            Pedidos de compra (cotações aprovadas)
           </h3>
           <p className="text-xs text-slate-500">
-            Importe o arquivo .md da cotaÃ§Ã£o do Painel. O robÃ´ confere no
-            ERP: se a previsÃ£o da famÃ­lia cobrir, o pedido fica pronto; se
-            faltar, o gestor e os assistentes da obra sÃ£o avisados todo dia.
+            Importe o arquivo .md da cotação do Painel. O robô confere no
+            ERP: se a previsão da família cobrir, o pedido fica pronto; se
+            faltar, o gestor e os assistentes da obra são avisados todo dia.
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm shrink-0">
@@ -287,7 +287,7 @@ export default function PedidosCompraImportados() {
               checked={verTodas}
               onChange={(e) => setVerTodas(e.target.checked)}
             />{" "}
-            Ver concluÃ­das
+            Ver concluídas
           </label>
           {podeImportar && !arquivo && (
             <EntradaArquivos
@@ -297,7 +297,7 @@ export default function PedidosCompraImportados() {
               camera={false}
               colar={false}
               maxMb={1}
-              rotulo="Importar cotaÃ§Ã£o (.md)â€¦"
+              rotulo="Importar cotação (.md)…"
             />
           )}
         </div>
@@ -312,14 +312,14 @@ export default function PedidosCompraImportados() {
                 {previa.titulo || arquivo.nome}
               </p>
               <p className="text-xs text-slate-500">
-                Fornecedor {previa.fornecedores.join(", ") || "-"} Â·{" "}
-                {previa.itens.length} SC(s) Â· frete{" "}
+                Fornecedor {previa.fornecedores.join(", ") || "-"} ·{" "}
+                {previa.itens.length} SC(s) · frete{" "}
                 {previa.frete === "2"
                   ? "CIF"
                   : previa.frete === "1"
                     ? "FOB"
                     : "-"}{" "}
-                Â· previsÃ£o {previa.previsao ? "sim" : "nÃ£o"} Â· total{" "}
+                · previsão {previa.previsao ? "sim" : "não"} · total{" "}
                 <strong>{formatarMoeda(previa.total)}</strong>
               </p>
             </div>
@@ -327,7 +327,7 @@ export default function PedidosCompraImportados() {
           {!scs ? (
             <p className="text-xs text-slate-500 flex items-center gap-1">
               <Loader2 size={12} className="animate-spin" /> Buscando obra e
-              famÃ­lia das SCsâ€¦
+              família das SCs…
             </p>
           ) : (
             destinos.size > 0 && (
@@ -339,7 +339,7 @@ export default function PedidosCompraImportados() {
                   >
                     Obra <strong>{cod}</strong> - {d.nome}
                     {d.familias.size > 0 && (
-                      <> Â· famÃ­lia {[...d.familias].sort().join(", ")}</>
+                      <> · família {[...d.familias].sort().join(", ")}</>
                     )}
                   </span>
                 ))}
@@ -366,9 +366,9 @@ export default function PedidosCompraImportados() {
                 <tr>
                   <th className="px-3 py-1.5 text-left">SC</th>
                   <th className="px-3 py-1.5 text-left">Material</th>
-                  <th className="px-3 py-1.5 text-left">Obra / famÃ­lia</th>
+                  <th className="px-3 py-1.5 text-left">Obra / família</th>
                   <th className="px-3 py-1.5 text-right">Qtd</th>
-                  <th className="px-3 py-1.5 text-right">PreÃ§o</th>
+                  <th className="px-3 py-1.5 text-right">Preço</th>
                   <th className="px-3 py-1.5 text-right">IPI</th>
                   <th className="px-3 py-1.5 text-center">Entrega</th>
                   <th className="px-3 py-1.5 text-right">Total</th>
@@ -393,16 +393,16 @@ export default function PedidosCompraImportados() {
                             {s.projeto || s.codigo_obra}
                             {s.situacao !== "sem_pedido" && (
                               <span className="ml-1 text-amber-700 text-xs">
-                                (jÃ¡ tem pedido)
+                                (já tem pedido)
                               </span>
                             )}
                           </>
                         ) : scs ? (
                           <span className="text-amber-700 text-xs">
-                            nÃ£o encontrada
+                            não encontrada
                           </span>
                         ) : (
-                          "â€¦"
+                          "…"
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-right">
@@ -443,7 +443,7 @@ export default function PedidosCompraImportados() {
               title={
                 previa.problemas.length
                   ? "Corrija o arquivo antes de enviar"
-                  : "A cotaÃ§Ã£o jÃ¡ Ã© a aprovada: enviar autoriza gerar o pedido"
+                  : "A cotação já é a aprovada: enviar autoriza gerar o pedido"
               }
             >
               {enviando && <Loader2 size={14} className="animate-spin" />}{" "}
@@ -455,13 +455,13 @@ export default function PedidosCompraImportados() {
 
       {carregando ? (
         <p className="p-4 text-sm text-slate-500 flex items-center gap-2">
-          <Loader2 className="animate-spin" size={14} /> Carregandoâ€¦
+          <Loader2 className="animate-spin" size={14} /> Carregando…
         </p>
       ) : lista.length === 0 ? (
         <p className="p-6 text-center text-sm text-slate-500">
           {verTodas
-            ? "Nenhuma cotaÃ§Ã£o importada."
-            : "Nenhuma cotaÃ§Ã£o em andamento."}
+            ? "Nenhuma cotação importada."
+            : "Nenhuma cotação em andamento."}
         </p>
       ) : (
         <ul className="divide-y">
@@ -477,13 +477,13 @@ export default function PedidosCompraImportados() {
                         : i.nome_arquivo}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {i.familias.length ? i.familias.join(", ") + " Â· " : ""}
-                      {i.scs.length ? `${i.scs.length} SC(s) Â· ` : ""}
-                      {i.total != null ? formatarMoeda(i.total) + " Â· " : ""}
+                      {i.familias.length ? i.familias.join(", ") + " · " : ""}
+                      {i.scs.length ? `${i.scs.length} SC(s) · ` : ""}
+                      {i.total != null ? formatarMoeda(i.total) + " · " : ""}
                       importado por {i.nome_importador || "-"} em{" "}
                       {dataHora(i.created_at)}
                       {i.simulado_em &&
-                        ` Â· conferido no ERP em ${dataHora(i.simulado_em)}`}
+                        ` · conferido no ERP em ${dataHora(i.simulado_em)}`}
                     </p>
                   </div>
                   <span
@@ -502,17 +502,17 @@ export default function PedidosCompraImportados() {
                       <li key={f.familia}>
                         <strong>{f.familia}</strong>: aberto{" "}
                         {formatarMoeda(Number(f.aberto))}, pedido{" "}
-                        {formatarMoeda(Number(f.necessario))} â€”{" "}
+                        {formatarMoeda(Number(f.necessario))} —{" "}
                         <strong>faltam {formatarMoeda(Number(f.falta))}</strong>
-                        . O gestor da obra decide o aumento ou a transferÃªncia.
+                        . O gestor da obra decide o aumento ou a transferência.
                       </li>
                     ))}
                   </ul>
                 )}
                 {i.status === "pronto" && (
                   <p className="text-xs text-blue-700">
-                    A previsÃ£o cobre. A geraÃ§Ã£o automÃ¡tica do pedido no ERP
-                    ainda nÃ£o estÃ¡ ligada.
+                    A previsão cobre. A geração automática do pedido no ERP
+                    ainda não está ligada.
                   </p>
                 )}
                 {i.status === "erro" && i.mensagem && (
