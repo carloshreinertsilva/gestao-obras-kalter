@@ -2,6 +2,7 @@
 -- (1) liga a gravacao automatica do pedido no ERP pelo robo (sync_pedidos_compra: pronto -> gerando -> gerado).
 --     Antes: teste desfeito da cotacao 5 ok e 1a gravacao acompanhada pelo Carlos (pedido 6448).
 -- (2) o coordenador (Joao) tambem importa, cancela e reenvia MD (pedido do Carlos). Select ja incluia coordenador.
+-- APLICADO em 25/11/2026 (migracao p24_pc_gravacao_e_coordenador), com OK do Carlos.
 create or replace function public.pc_gravacao_ligada() returns boolean language sql immutable as $$ select true $$;
 
 create or replace function public.pc_pode_importar()
