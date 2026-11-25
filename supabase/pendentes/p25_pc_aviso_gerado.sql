@@ -1,11 +1,14 @@
 -- p25 - aviso de PEDIDO DE COMPRA GERADO (25/11/2026): quando o robo grava o pedido no ERP (status gerado), e-mail + sino
 -- para quem importou o MD e para o gestor da obra e os assistentes dele (frete_gestores). Atras da chave
--- pc_aviso_gerado_ligado() = false ate o Carlos aprovar o exemplo. Um aviso por importacao (aviso_gerado_em).
+-- pc_aviso_gerado_ligado(). Um aviso por importacao (aviso_gerado_em).
 -- O robo (sync_pedidos_compra) chama pc_avisar_gerado(id) depois de marcar gerado.
+-- Exemplo (pedido 6448) aprovado pelo Carlos em 25/11/2026: aplicado ja ligado. A importacao da cotacao 5 (gerada a
+-- mao antes deste aviso) fica marcada como avisada, para nao mandar e-mail atrasado.
 
 alter table public.pedidos_compra_importados add column if not exists aviso_gerado_em timestamptz;
+update public.pedidos_compra_importados set aviso_gerado_em = now() where status = 'gerado' and aviso_gerado_em is null;
 
-create or replace function public.pc_aviso_gerado_ligado() returns boolean language sql immutable as $$ select false $$;
+create or replace function public.pc_aviso_gerado_ligado() returns boolean language sql immutable as $$ select true $$;
 
 -- assunto e HTML (sem a moldura: o enviar_fila_email.py aplica o layout padrao)
 create or replace function public.pc_conteudo_gerado(p_id uuid)
