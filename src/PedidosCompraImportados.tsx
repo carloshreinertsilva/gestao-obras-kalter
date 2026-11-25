@@ -19,7 +19,7 @@ import { lerCotacao, type PreviaCotacao } from "./pedidoCompraMd";
 // Pedidos de compra a partir do MD da cotacao (Painel BeeStock). Logistica e admin importam; o robo do servidor
 // (robo-sync-erp/src/sync_pedidos_compra.py) simula no ERP e devolve: pronto, aguardando previsao (o gestor e os
 // assistentes sao avisados todo dia) ou erro. Tabela pedidos_compra_importados (supabase/pendentes/p22).
-// Fase 1: o robo so simula; o pedido ainda nao e gravado no ERP.
+// Desde 25/11/2026 o robo grava o pedido no ERP sozinho (pronto -> gerando -> gerado; p24). Coordenador tambem importa.
 
 interface Falta {
   familia: string;
@@ -42,7 +42,7 @@ interface Importacao {
   familias: string[];
   faltas: Falta[] | null;
   simulado_em: string | null;
-  pedidos: { numero?: number }[] | null;
+  pedidos: { numero?: number; liberacao?: string }[] | null;
   motivo_cancelamento: string | null;
 }
 
@@ -276,7 +276,7 @@ export default function PedidosCompraImportados() {
           </h3>
           <p className="text-xs text-slate-500">
             Importe o arquivo .md da cotação do Painel. O robô confere no
-            ERP: se a previsão da família cobrir, o pedido fica pronto; se
+            ERP: se a previsão da família cobrir, gera o pedido de compra; se
             faltar, o gestor e os assistentes da obra são avisados todo dia.
           </p>
         </div>
@@ -511,8 +511,20 @@ export default function PedidosCompraImportados() {
                 )}
                 {i.status === "pronto" && (
                   <p className="text-xs text-blue-700">
-                    A previsão cobre. A geração automática do pedido no ERP
-                    ainda não está ligada.
+                    A previsão cobre. O robô gera o pedido no ERP na próxima
+                    rodada (a cada 5 minutos, em dias úteis).
+                  </p>
+                )}
+                {i.status === "gerado" && (i.pedidos?.length ?? 0) > 0 && (
+                  <p className="text-xs text-emerald-700">
+                    Pedido de compra nº{" "}
+                    <strong>
+                      {i.pedidos!.map((x) => x.numero).filter(Boolean).join(", ")}
+                    </strong>{" "}
+                    no ERP
+                    {i.pedidos!.some((x) => x.liberacao && x.liberacao !== "FAIXA LIVRE")
+                      ? " — aguardando liberação na tela do ERP (R$ 5.000,00 ou mais)."
+                      : "."}
                   </p>
                 )}
                 {i.status === "erro" && i.mensagem && (
